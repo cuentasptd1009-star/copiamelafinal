@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#090E17" />
+    <meta name="description" content="Tu Streaming de Confianza" />
+    <title>Super TV</title>
+
+    <link rel="manifest" href="/manifest.json" />
+
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Super TV" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+
+    <meta name="application-name" content="Super TV" />
+    <meta name="msapplication-TileColor" content="#090E17" />
+    <meta name="msapplication-TileImage" content="/icon-192.png" />
+
+    <meta property="og:title" content="Super TV" />
+    <meta property="og:description" content="Tu Streaming de Confianza" />
+    <meta property="og:image" content="/opengraph.jpg" />
+    <meta property="og:type" content="website" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'F12') { e.preventDefault(); return false; }
+          if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && (e.key === 'U' || e.key === 'u')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && (e.key === 'S' || e.key === 's')) { e.preventDefault(); return false; }
+        });
+
+      })();
+    </script>
+  <style>
+    #app-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #090E17;
+      color: #ffffff;
+      font-family: Inter, sans-serif;
+      gap: 24px;
+    }
+    #app-loading .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(255,255,255,0.15);
+      border-top-color: #e11d48;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #app-loading p { color: rgba(255,255,255,0.5); font-size: 14px; margin: 0; }
+    #app-error {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #090E17;
+      color: #ffffff;
+      font-family: Inter, sans-serif;
+      text-align: center;
+      padding: 32px;
+      gap: 16px;
+    }
+    #app-error h2 { font-size: 20px; margin: 0; }
+    #app-error p { color: rgba(255,255,255,0.5); font-size: 13px; margin: 0; max-width: 320px; line-height: 1.6; }
+    #app-error button {
+      margin-top: 8px;
+      padding: 10px 24px;
+      background: #e11d48;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+  </style>
+  </head>
+  <body>
+    <div id="app-loading">
+      <div class="spinner"></div>
+      <p>Cargando Super TV…</p>
+    </div>
+    <div id="app-error">
+      <h2>No se pudo cargar Super TV</h2>
+      <p>Tu navegador puede no ser compatible. Intenta actualizar la página o usar otro navegador.</p>
+      <button onclick="location.reload()">Reintentar</button>
+    </div>
+    <div id="root"></div>
+    <script>
+      window.__appStarted = false;
+      window.onerror = function() {
+        if (!window.__appStarted) {
+          document.getElementById('app-loading').style.display = 'none';
+          document.getElementById('app-error').style.display = 'flex';
+        }
+      };
+      setTimeout(function() {
+        if (!window.__appStarted) {
+          document.getElementById('app-loading').style.display = 'none';
+          document.getElementById('app-error').style.display = 'flex';
+        }
+      }, 15000);
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function(reg) { console.log('SW registered:', reg.scope); })
+            .catch(function(err) { console.log('SW registration failed:', err); });
+        });
+      }
+    </script>
+  </body>
+</html>

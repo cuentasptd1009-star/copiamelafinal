@@ -1,0 +1,1328 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: Super TV API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: admin
+    description: Admin operations
+  - name: channels
+    description: Channel management
+  - name: movies
+    description: Movie management
+  - name: codes
+    description: Access code management
+  - name: subadmins
+    description: Subadmin management
+  - name: packages
+    description: Package management
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: loginWithCode
+      tags: [auth]
+      summary: Login with access code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid code or session conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/admin-login:
+    post:
+      operationId: adminLogin
+      tags: [auth]
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginRequest"
+      responses:
+        "200":
+          description: Admin login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout current session
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current session info
+      responses:
+        "200":
+          description: Session info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionInfo"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /channels:
+    get:
+      operationId: listChannels
+      tags: [channels]
+      summary: List all channels
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Channel"
+    post:
+      operationId: createChannel
+      tags: [channels]
+      summary: Create a channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChannelBody"
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+
+  /channels/categories:
+    get:
+      operationId: listChannelCategories
+      tags: [channels]
+      summary: List channel categories
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /channels/import:
+    post:
+      operationId: importChannels
+      tags: [channels]
+      summary: Import channels from M3U/text content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportChannelsBody"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+
+  /channels/{id}:
+    get:
+      operationId: getChannel
+      tags: [channels]
+      summary: Get a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+    put:
+      operationId: updateChannel
+      tags: [channels]
+      summary: Update a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChannelBody"
+      responses:
+        "200":
+          description: Updated channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+    delete:
+      operationId: deleteChannel
+      tags: [channels]
+      summary: Delete a channel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /movies:
+    get:
+      operationId: listMovies
+      tags: [movies]
+      summary: List all movies
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of movies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Movie"
+    post:
+      operationId: createMovie
+      tags: [movies]
+      summary: Create a movie entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMovieBody"
+      responses:
+        "201":
+          description: Movie created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movie"
+
+  /movies/{id}:
+    put:
+      operationId: updateMovie
+      tags: [movies]
+      summary: Update a movie
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMovieBody"
+      responses:
+        "200":
+          description: Updated movie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movie"
+    delete:
+      operationId: deleteMovie
+      tags: [movies]
+      summary: Delete a movie
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /codes:
+    get:
+      operationId: listCodes
+      tags: [codes]
+      summary: List access codes
+      responses:
+        "200":
+          description: List of codes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccessCode"
+    post:
+      operationId: createCode
+      tags: [codes]
+      summary: Create an access code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCodeBody"
+      responses:
+        "201":
+          description: Code created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessCode"
+
+  /codes/{id}:
+    put:
+      operationId: updateCode
+      tags: [codes]
+      summary: Update an access code
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCodeBody"
+      responses:
+        "200":
+          description: Updated code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessCode"
+    delete:
+      operationId: deleteCode
+      tags: [codes]
+      summary: Delete an access code
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /codes/{id}/adjust-time:
+    post:
+      operationId: adjustCodeTime
+      tags: [codes]
+      summary: Adjust expiry time of an access code
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustTimeBody"
+      responses:
+        "200":
+          description: Time adjusted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessCode"
+
+  /subadmins:
+    get:
+      operationId: listSubadmins
+      tags: [subadmins]
+      summary: List all subadmins
+      responses:
+        "200":
+          description: List of subadmins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Subadmin"
+    post:
+      operationId: createSubadmin
+      tags: [subadmins]
+      summary: Create a subadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubadminBody"
+      responses:
+        "201":
+          description: Subadmin created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subadmin"
+
+  /subadmins/{id}:
+    put:
+      operationId: updateSubadmin
+      tags: [subadmins]
+      summary: Update a subadmin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubadminBody"
+      responses:
+        "200":
+          description: Updated subadmin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subadmin"
+    delete:
+      operationId: deleteSubadmin
+      tags: [subadmins]
+      summary: Delete a subadmin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /subadmins/{id}/add-balance:
+    post:
+      operationId: addSubadminBalance
+      tags: [subadmins]
+      summary: Add balance to a subadmin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddBalanceBody"
+      responses:
+        "200":
+          description: Balance added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subadmin"
+
+  /packages:
+    get:
+      operationId: listPackages
+      tags: [packages]
+      summary: List all packages
+      responses:
+        "200":
+          description: List of packages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Package"
+    post:
+      operationId: createPackage
+      tags: [packages]
+      summary: Create a package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePackageBody"
+      responses:
+        "201":
+          description: Package created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Package"
+
+  /packages/{id}:
+    put:
+      operationId: updatePackage
+      tags: [packages]
+      summary: Update a package
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePackageBody"
+      responses:
+        "200":
+          description: Updated package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Package"
+    delete:
+      operationId: deletePackage
+      tags: [packages]
+      summary: Delete a package
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /subadmins/buy-package:
+    post:
+      operationId: buyPackage
+      tags: [subadmins]
+      summary: Subadmin buys a package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuyPackageBody"
+      responses:
+        "200":
+          description: Package purchased
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuyPackageResponse"
+
+  /auth/profile:
+    put:
+      operationId: updateProfile
+      tags: [auth]
+      summary: Update user profile (display name and avatar)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileBody"
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /avatars:
+    get:
+      operationId: listAvatars
+      tags: [avatars]
+      summary: List all avatars
+      responses:
+        "200":
+          description: List of avatars
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvatarItem"
+    post:
+      operationId: createAvatar
+      tags: [avatars]
+      summary: Create an avatar (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAvatarBody"
+      responses:
+        "201":
+          description: Avatar created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvatarItem"
+
+  /avatars/{id}:
+    delete:
+      operationId: deleteAvatar
+      tags: [avatars]
+      summary: Delete an avatar (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Avatar deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get admin dashboard statistics
+      responses:
+        "200":
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+
+  /admin/whatsapp-alerts:
+    get:
+      operationId: getWhatsappAlerts
+      tags: [admin]
+      summary: Get pending WhatsApp alerts for expiring codes
+      responses:
+        "200":
+          description: Pending alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsappAlertsResponse"
+
+  /admin/whatsapp-alerts/dismiss:
+    post:
+      operationId: dismissWhatsappAlerts
+      tags: [admin]
+      summary: Dismiss WhatsApp alerts for a subadmin's codes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DismissWhatsappAlertsBody"
+      responses:
+        "200":
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/change-password:
+    post:
+      operationId: adminChangePassword
+      tags: [admin]
+      summary: Change admin password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordBody"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Current password incorrect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+      required: [error]
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success]
+
+    LoginRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        deviceId:
+          type: string
+      required: [code, deviceId]
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        sessionConflict:
+          type: boolean
+        message:
+          type: string
+        code:
+          $ref: "#/components/schemas/AccessCode"
+      required: [token, sessionConflict]
+
+    AdminLoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required: [username, password]
+
+    AdminLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        role:
+          type: string
+          enum: [admin, subadmin]
+        subadminId:
+          type: integer
+          nullable: true
+        username:
+          type: string
+      required: [token, role, username]
+
+    SessionInfo:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [user, admin, subadmin]
+        codeId:
+          type: integer
+          nullable: true
+        codeName:
+          type: string
+          nullable: true
+        displayName:
+          type: string
+          nullable: true
+        avatarId:
+          type: integer
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        subadminId:
+          type: integer
+          nullable: true
+        username:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          nullable: true
+        balance:
+          type: number
+          nullable: true
+        providerWhatsapp:
+          type: string
+          nullable: true
+      required: [type]
+
+    AvatarItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+        order:
+          type: integer
+        createdAt:
+          type: string
+      required: [id, imageUrl, order, createdAt]
+
+    CreateAvatarBody:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+      required: [imageUrl]
+
+    UpdateProfileBody:
+      type: object
+      properties:
+        displayName:
+          type: string
+          nullable: true
+        avatarId:
+          type: integer
+          nullable: true
+
+    Channel:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        logo:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        streamUrl:
+          type: string
+        order:
+          type: integer
+        createdAt:
+          type: string
+      required: [id, name, streamUrl, order, createdAt]
+
+    CreateChannelBody:
+      type: object
+      properties:
+        name:
+          type: string
+        logo:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        streamUrl:
+          type: string
+        order:
+          type: integer
+      required: [name, streamUrl]
+
+    ImportChannelsBody:
+      type: object
+      properties:
+        content:
+          type: string
+        format:
+          type: string
+          enum: [m3u, text, auto]
+      required: [content]
+
+    ImportResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+        failed:
+          type: integer
+        channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/Channel"
+      required: [imported, failed, channels]
+
+    Movie:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        poster:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        filePath:
+          type: string
+        duration:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, title, filePath, createdAt]
+
+    CreateMovieBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        poster:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        filePath:
+          type: string
+        duration:
+          type: integer
+          nullable: true
+      required: [title, filePath]
+
+    AccessCode:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        isExpired:
+          type: boolean
+        subadminId:
+          type: integer
+          nullable: true
+        packageId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+        activeSessionDevice:
+          type: string
+          nullable: true
+      required: [id, code, isActive, isExpired, createdAt]
+
+    CreateCodeBody:
+      type: object
+      properties:
+        code:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        packageId:
+          type: integer
+          nullable: true
+        durationMinutes:
+          type: number
+          nullable: true
+      required: []
+
+    UpdateCodeBody:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+          nullable: true
+        expiresAt:
+          type: string
+          nullable: true
+
+    AdjustTimeBody:
+      type: object
+      properties:
+        amount:
+          type: integer
+        unit:
+          type: string
+          enum: [minutes, hours, days, months, years]
+        operation:
+          type: string
+          enum: [add, subtract]
+      required: [amount, unit, operation]
+
+    Subadmin:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        balance:
+          type: number
+        totalCodesGenerated:
+          type: integer
+        createdAt:
+          type: string
+      required: [id, username, balance, totalCodesGenerated, createdAt]
+
+    CreateSubadminBody:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required: [username, password]
+
+    UpdateSubadminBody:
+      type: object
+      properties:
+        username:
+          type: string
+          nullable: true
+        password:
+          type: string
+          nullable: true
+
+    AddBalanceBody:
+      type: object
+      properties:
+        amount:
+          type: number
+      required: [amount]
+
+    Package:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        durationMinutes:
+          type: integer
+        price:
+          type: number
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, name, durationMinutes, price, createdAt]
+
+    CreatePackageBody:
+      type: object
+      properties:
+        name:
+          type: string
+        durationMinutes:
+          type: integer
+        price:
+          type: number
+        description:
+          type: string
+          nullable: true
+      required: [name, durationMinutes, price]
+
+    BuyPackageBody:
+      type: object
+      properties:
+        packageId:
+          type: integer
+        codeId:
+          type: integer
+          nullable: true
+        codeName:
+          type: string
+          nullable: true
+      required: [packageId]
+
+    BuyPackageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        code:
+          $ref: "#/components/schemas/AccessCode"
+        remainingBalance:
+          type: number
+      required: [success, remainingBalance]
+
+    ChangePasswordBody:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+      required: [currentPassword, newPassword]
+
+    AdminRecentSession:
+      type: object
+      properties:
+        id:
+          type: integer
+        deviceId:
+          type: string
+        lastActiveAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          nullable: true
+        codeName:
+          type: string
+          nullable: true
+        codeCode:
+          type: string
+          nullable: true
+      required: [id, deviceId, lastActiveAt, createdAt, codeName, codeCode]
+
+    AdminTopChannel:
+      type: object
+      properties:
+        channelId:
+          type: integer
+        name:
+          type: string
+        views:
+          type: integer
+      required: [channelId, name, views]
+
+    AdminStats:
+      type: object
+      properties:
+        totalCodes:
+          type: integer
+        activeCodes:
+          type: integer
+        expiredCodes:
+          type: integer
+        totalChannels:
+          type: integer
+        totalMovies:
+          type: integer
+        totalSubadmins:
+          type: integer
+        totalPackages:
+          type: integer
+        onlineNow:
+          type: integer
+        activeRecent:
+          type: integer
+        expiringToday:
+          type: integer
+        expiringSoon:
+          type: integer
+        recentSessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminRecentSession"
+        topChannels:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminTopChannel"
+      required: [totalCodes, activeCodes, expiredCodes, totalChannels, totalMovies, totalSubadmins, totalPackages, onlineNow, activeRecent, expiringToday, expiringSoon, recentSessions, topChannels]
+
+    WhatsappAlertCode:
+      type: object
+      properties:
+        codeId:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+      required: [codeId, code, name, expiresAt]
+
+    WhatsappAlert:
+      type: object
+      properties:
+        subadminId:
+          type: integer
+        subadminUsername:
+          type: string
+        whatsappNumber:
+          type: string
+        waUrl:
+          type: string
+        codes:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhatsappAlertCode"
+      required: [subadminId, subadminUsername, whatsappNumber, waUrl, codes]
+
+    WhatsappAlertsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhatsappAlert"
+      required: [alerts]
+
+    DismissWhatsappAlertsBody:
+      type: object
+      properties:
+        codeIds:
+          type: array
+          items:
+            type: integer
+        subadminId:
+          type: integer
+      required: [codeIds, subadminId]
