@@ -155,11 +155,11 @@ export const ContentCard = memo(function ContentCard({
     };
   }, [previewActive]);
 
-  // TV remote focus
+  // TV remote focus (not for touch devices — no video preview on mobile)
   useEffect(() => {
     if (isFocused) {
       isHoveringRef.current = true;
-      startTimer();
+      if (canPreview) startTimer();
     } else {
       isHoveringRef.current = false;
       stopPreview();
@@ -221,16 +221,11 @@ export const ContentCard = memo(function ContentCard({
   };
 
   const handleTouchStart = () => {
-    if (disableHover) return;
-    isHoveringRef.current = true;
-    startTimer();
+    // Touch devices never trigger video preview
   };
 
   const handleTouchEnd = () => {
-    isHoveringRef.current = false;
-    if (!previewActive) {
-      stopPreview();
-    }
+    // Touch devices never trigger video preview
   };
 
   const handleTouchCancel = () => {
