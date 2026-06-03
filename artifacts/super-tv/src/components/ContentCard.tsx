@@ -100,12 +100,11 @@ export const ContentCard = memo(function ContentCard({
   const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 
   const ytId = previewUrl ? extractYouTubeId(previewUrl) : null;
+  // Never use YouTube iframes in card previews — they show branding/controls regardless of params
   const isDirectVideo = !!(previewUrl && !ytId);
-  const canPreview = !!(ytId || isDirectVideo) && !isTouchDevice;
+  const canPreview = !!(isDirectVideo || (ytId && image)) && !isTouchDevice;
 
-  const ytSrc = ytId
-    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=0&loop=1&playlist=${ytId}&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&playsinline=1&enablejsapi=1`
-    : null;
+  const ytSrc = null; // YouTube iframe disabled in card previews
 
   const startTimer = () => {
     if (!canPreview) return;
