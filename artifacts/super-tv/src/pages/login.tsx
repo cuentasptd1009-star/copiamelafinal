@@ -156,8 +156,8 @@ export default function Login() {
           try { localStorage.setItem('supertv_remembered_code', codeToSubmit); } catch {}
           setIsRemembered(true);
           if (data.sessionConflict) {
-            setConflictMessage('Tu código está abierto en otro dispositivo. Se cerrará la otra sesión en 4 segundos...');
-            setTimeout(() => { setToken(data.token, 'user'); setLocation('/home'); }, 4000);
+            setConflictMessage('Tu código está abierto en otro dispositivo. Se cerrará la otra sesión en 2 segundos...');
+            setTimeout(() => { setToken(data.token, 'user'); setLocation('/home'); }, 2000);
           } else {
             setToken(data.token, 'user');
             setLocation('/home');
