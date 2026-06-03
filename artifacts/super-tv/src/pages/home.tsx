@@ -62,7 +62,7 @@ type TabKey = 'home' | 'channels' | 'movies' | 'series' | 'favorites';
 type NavZone = 'sidebar' | 'rows' | 'miniplayer' | 'hero' | 'catfilter';
 
 const ADULT_RE = /\b(xxx|porno?|pornog\w*|sexo?|sexual\w*|er[oó]tic[ao]?|adulto?|nsfw|hentai|nude|desnud[ao]|naked|putit[ao]?|obscen\w*|escort|prostitu\w*)\b/i;
-const channelDefaultLogo = '/channel-default.png';
+
 
 function getChannelGridCols(): number {
   const w = window.innerWidth;
@@ -242,9 +242,9 @@ function ChannelCard({ ch, onClick, focused }: { ch: Channel; onClick: () => voi
         </>
       ) : (
         <>
-          <img src={channelDefaultLogo} alt="Super TV" className="w-full h-full object-cover" />
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 pt-4 pb-1">
-            <p className="text-[9px] sm:text-[10px] text-center leading-tight w-full truncate text-white/90 font-medium">{ch.name}</p>
+          <div className="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex flex-col items-center justify-center gap-1 px-2">
+            <Tv2 className="w-6 h-6 text-white/20 flex-shrink-0" />
+            <p className="text-[9px] sm:text-[10px] text-white/60 font-semibold text-center leading-tight line-clamp-2 drop-shadow">{ch.name}</p>
           </div>
         </>
       )}

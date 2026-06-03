@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Play, Heart, Film, VolumeX, Volume2, Info } from 'lucide-react';
+import { Play, Heart, Film, VolumeX, Volume2, Info, Tv } from 'lucide-react';
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 
@@ -464,13 +464,11 @@ export const ContentCard = memo(function ContentCard({
               onError={() => setImgError(true)}
             />
           ) : isChannel ? (
-            <div className="w-full h-full flex items-center justify-center bg-[#1a1a2e]">
-              <img
-                src={`${BASE_URL}/default-channel.png`}
-                alt="Super TV"
-                loading="lazy"
-                className="w-20 h-20 object-contain"
-              />
+            <div className={`w-full h-full flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br ${titleGradient(title)}`}>
+              <Tv className="w-7 h-7 text-white/25" />
+              <p className="text-white/60 text-[10px] font-semibold text-center leading-snug line-clamp-2 px-2 drop-shadow">
+                {title}
+              </p>
             </div>
           ) : (
             <div className={`w-full h-full bg-gradient-to-br ${grad} flex flex-col items-center justify-center gap-2 px-3`}>
