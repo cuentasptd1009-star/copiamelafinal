@@ -976,7 +976,7 @@ export default function Home() {
   }, []);
   const handleLogout = () => { clearTokens(); setLocation('/'); };
   const handleInstall = () => { if (canInstall) install(); else setShowHint(true); };
-  const handleShortcut = () => setShowShortcutHint(true);
+  const handleShortcut = () => { if (canInstall) { install(); return; } setShowShortcutHint(true); };
 
   const actionButtons = useMemo(() => [
     ...(session?.type === 'user' ? [{ key: 'profile', label: 'Mi perfil', action: openProfile, icon: UserCircle2 }] : []),

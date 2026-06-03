@@ -189,6 +189,7 @@ export default function Login() {
   };
 
   const handleShortcut = () => {
+    if (canInstall) { install(); return; }
     setShowShortcutHint(true);
   };
 
