@@ -626,7 +626,7 @@ export default function Home() {
       }
       return copy;
     };
-    const toMovie = (m: any): HeroBannerItem => ({ id: m.id, title: m.title, description: m.description, banner: m.banner, poster: m.poster, category: m.category, genre: m.genre, year: m.year, type: 'movie' as const, streamUrl: m.streamUrl ?? null, streamFormat: m.streamFormat ?? null });
+    const toMovie = (m: any): HeroBannerItem => ({ id: m.id, title: m.title, description: m.description, banner: m.banner, poster: m.poster, category: m.category, genre: m.genre, year: m.year, type: 'movie' as const, streamUrl: m.filePath ?? null, streamFormat: m.videoFormat ?? null });
     const toSeries = (s: any): HeroBannerItem => ({ id: s.id, title: s.title, description: s.description, banner: s.banner, poster: s.poster, category: s.category, genre: s.genre, year: s.year, type: 'series' as const });
 
     if (activeTab === 'home') {
