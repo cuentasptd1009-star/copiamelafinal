@@ -304,16 +304,6 @@ export const ContentCard = memo(function ContentCard({
                 </div>
                 {/* Transparent overlay blocks hover — prevents YouTube showing center play/pause controls */}
                 <div style={{ position: 'absolute', inset: 0, zIndex: 1 }} />
-                {/* Edge gradient masks — hides any remaining channel/logo branding at top and bottom edges */}
-                <div style={{
-                  position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none',
-                  background: [
-                    'linear-gradient(to bottom, #000 0%, transparent 28%)',
-                    'linear-gradient(to top, #000 0%, transparent 28%)',
-                    'linear-gradient(to right, #000 0%, transparent 18%)',
-                    'linear-gradient(to left, #000 0%, transparent 18%)',
-                  ].join(', '),
-                }} />
               </>
             ) : isDirectVideo ? (
               <video
