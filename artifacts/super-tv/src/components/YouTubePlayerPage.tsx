@@ -459,14 +459,18 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', minHeight: 0 }}
       />
 
-      {/* Tap-to-start overlay — transparent, covers iframe until user taps (needed for mobile sound) */}
+      {/* Tap-to-start overlay — covers iframe and hides YouTube logo until user taps */}
       {!hasStarted && (
         <div
-          className="absolute inset-0 z-20 cursor-pointer"
-          style={{ background: 'transparent' }}
+          className="absolute inset-0 z-20 cursor-pointer flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
           onClick={e => { e.stopPropagation(); startPlayback(); containerRef.current?.focus({ preventScroll: true }); }}
           onTouchEnd={e => { e.preventDefault(); startPlayback(); containerRef.current?.focus({ preventScroll: true }); }}
-        />
+        >
+          <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl hover:bg-white/20 transition-all active:scale-95">
+            <Play className="w-9 h-9 text-white fill-white ml-1" />
+          </div>
+        </div>
       )}
 
       {/* Click catcher to block YouTube UI when playing */}
