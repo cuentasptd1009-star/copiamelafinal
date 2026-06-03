@@ -389,7 +389,7 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
           break;
         case 'ArrowDown':
           e.preventDefault();
-          if (isFullscreen) { doToggleFullscreen(); }
+          if (isFullscreen) { onBack(); }
           flashControls();
           break;
         case ' ':
@@ -542,9 +542,9 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
       {/* Persistent fullscreen button — always visible when controls are hidden */}
       {!ctrlVisible && hasStarted && (
         <button
-          onClick={e => { e.stopPropagation(); doToggleFullscreen(); }}
+          onClick={e => { e.stopPropagation(); if (isFullscreen) { onBack(); } else { doToggleFullscreen(); } }}
           className="absolute bottom-4 right-4 z-40 p-3 rounded-full bg-black/50 text-white backdrop-blur hover:bg-black/80 transition-all shadow-lg"
-          title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+          title={isFullscreen ? 'Cerrar' : 'Pantalla completa'}
         >
           {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
         </button>
@@ -647,9 +647,9 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
             )}
 
             <button
-              onClick={e => { e.stopPropagation(); doToggleFullscreen(); containerRef.current?.focus({ preventScroll: true }); }}
+              onClick={e => { e.stopPropagation(); if (isFullscreen) { onBack(); } else { doToggleFullscreen(); } containerRef.current?.focus({ preventScroll: true }); }}
               className={`${ctrlBtn} ${ytControls[ctrlFocusIdx] === 'fullscreen' ? 'ring-2 ring-white scale-110 bg-white/20' : ''}`}
-              title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+              title={isFullscreen ? 'Cerrar' : 'Pantalla completa'}
             >
               {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
             </button>

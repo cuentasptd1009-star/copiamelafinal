@@ -682,9 +682,9 @@ export default function VodPlayerPage() {
       {/* Persistent fullscreen button — always visible */}
       {!showControls && (
         <button
-          onClick={toggleFullscreen}
+          onClick={() => { if (isFullscreen) setLocation(backUrl); else toggleFullscreen(); }}
           className="absolute bottom-4 right-4 z-20 p-3 rounded-full bg-black/50 text-white backdrop-blur hover:bg-black/80 transition-all shadow-lg"
-          title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+          title={isFullscreen ? 'Cerrar' : 'Pantalla completa'}
         >
           {isFullscreen
             ? <Minimize className="w-5 h-5" />
@@ -795,7 +795,7 @@ export default function VodPlayerPage() {
             </div>
 
             <button
-              onClick={toggleFullscreen}
+              onClick={() => { if (isFullscreen) setLocation(backUrl); else toggleFullscreen(); }}
               className={`p-2.5 sm:p-3 rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/60 transition-all ${vodControls[ctrlFocusIdx] === 'fullscreen' ? 'ring-2 ring-primary scale-110' : ''}`}
             >
               {isFullscreen
