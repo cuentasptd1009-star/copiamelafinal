@@ -47,7 +47,7 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSaveRef = useRef(0);
 
-  const [hasStarted, setHasStarted] = useState(true);
+  const [hasStarted, setHasStarted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ytEnded, setYtEnded] = useState(false);
   const [ytError, setYtError] = useState<string | null>(null);
@@ -139,7 +139,6 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
         height: String(vh),
         playerVars: {
           autoplay: 1,
-          mute: 1,
           controls: 0,
           disablekb: 1,
           rel: 0,
@@ -163,10 +162,6 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
                   playerDivRef.current.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;';
                 }
               } catch {}
-              if (startFrom && startFrom > 10) {
-                try { e.target.seekTo(startFrom, true); } catch {}
-              }
-              try { e.target.playVideo(); } catch {}
             }
           },
           onError: (e: any) => {
@@ -191,13 +186,6 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
               setYtEnded(false);
               const d = ytPlayerRef.current?.getDuration?.() ?? 0;
               if (d > 0) setDuration(d);
-              // Unmute immediately on first play (muted autoplay bypass)
-              try {
-                if (e.target.isMuted?.() && !userMutedRef.current) {
-                  e.target.unMute();
-                  e.target.setVolume(100);
-                }
-              } catch {}
             }
             if (e.data === 2) setIsPlaying(false);
             if (e.data === 0) {
@@ -470,6 +458,16 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
         ref={playerDivRef}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', minHeight: 0 }}
       />
+
+      {/* Tap-to-start overlay — transparent, covers iframe until user taps (needed for mobile sound) */}
+      {!hasStarted && (
+        <div
+          className="absolute inset-0 z-20 cursor-pointer"
+          style={{ background: 'transparent' }}
+          onClick={e => { e.stopPropagation(); startPlayback(); containerRef.current?.focus({ preventScroll: true }); }}
+          onTouchEnd={e => { e.preventDefault(); startPlayback(); containerRef.current?.focus({ preventScroll: true }); }}
+        />
+      )}
 
       {/* Click catcher to block YouTube UI when playing */}
       {hasStarted && (
