@@ -610,28 +610,7 @@ export default function VodPlayerPage() {
         preload="auto"
       />
 
-      {isLoading && !error && (
-        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none bg-black/60">
-          <div className="flex flex-col items-center gap-4">
-            <img src={logo} alt="Super TV" className="w-32 sm:w-40 h-auto drop-shadow-2xl" />
-            <div className="relative w-14 h-14">
-              <svg className="w-14 h-14 animate-spin" viewBox="0 0 56 56" fill="none">
-                <circle cx="28" cy="28" r="24" stroke="white" strokeWidth="4" strokeOpacity="0.15" />
-                <path d="M28 4 A24 24 0 0 1 52 28" stroke="url(#vod-spin-grad)" strokeWidth="4" strokeLinecap="round" />
-                <defs>
-                  <linearGradient id="vod-spin-grad" x1="28" y1="4" x2="52" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#ef4444" />
-                    <stop offset="100%" stopColor="#ffffff" />
-                  </linearGradient>
-                </defs>
-              </svg>
-            </div>
-            <span className="text-white/70 text-sm tracking-wide">Cargando…</span>
-          </div>
-        </div>
-      )}
-
-      {isBuffering && !isLoading && !error && (
+      {(isLoading || isBuffering) && !error && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
           <svg className="w-10 h-10 animate-spin" viewBox="0 0 40 40" fill="none">
             <circle cx="20" cy="20" r="16" stroke="white" strokeWidth="3" strokeOpacity="0.15" />
