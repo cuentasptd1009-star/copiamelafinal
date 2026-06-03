@@ -679,8 +679,8 @@ export default function VodPlayerPage() {
         </div>
       )}
 
-      {/* Persistent fullscreen button — always visible */}
-      {!showControls && (
+      {/* Persistent fullscreen button — only visible when NOT in fullscreen */}
+      {!showControls && !isFullscreen && (
         <button
           onClick={() => { if (isFullscreen) setLocation(backUrl); else toggleFullscreen(); }}
           className="absolute bottom-4 right-4 z-20 p-3 rounded-full bg-black/50 text-white backdrop-blur hover:bg-black/80 transition-all shadow-lg"

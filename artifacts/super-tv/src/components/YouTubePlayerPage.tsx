@@ -539,8 +539,8 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
         </div>
       )}
 
-      {/* Persistent fullscreen button — always visible when controls are hidden */}
-      {!ctrlVisible && hasStarted && (
+      {/* Persistent fullscreen button — only visible when controls are hidden and NOT in fullscreen */}
+      {!ctrlVisible && hasStarted && !isFullscreen && (
         <button
           onClick={e => { e.stopPropagation(); if (isFullscreen) { onBack(); } else { doToggleFullscreen(); } }}
           className="absolute bottom-4 right-4 z-40 p-3 rounded-full bg-black/50 text-white backdrop-blur hover:bg-black/80 transition-all shadow-lg"
