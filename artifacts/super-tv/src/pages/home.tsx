@@ -678,11 +678,49 @@ export default function Home() {
     }
     if (activeTab === 'home') {
       const rows: ContentRowData[] = [];
-      if (combinedContinueWatching.length > 0) rows.push({ id: 'continue', title: 'Continuar viendo', emoji: '▶', items: [] as ContentItem[], showProgress: true });
-      if (recentMovies.length > 0) rows.push({ id: 'recent-mov', title: 'Películas recientes', emoji: '🎬', items: recentMovies as ContentItem[], showBadge: true });
-      const recentSeries = seriesList.slice(0, 14);
-      if (recentSeries.length > 0) rows.push({ id: 'recent-ser', title: 'Series disponibles', emoji: '📺', items: recentSeries.map(s => ({ ...s, _isSeries: true })) as unknown as ContentItem[] });
-      if (externalHistory.length > 0) rows.push({ id: 'ext-history', title: 'Historial de reproducción', emoji: '', items: externalHistory as unknown as ContentItem[] });
+
+      // 1. Continuar viendo
+      if (combinedContinueWatching.length > 0) {
+        rows.push({ id: 'continue', title: 'Continuar viendo', emoji: '▶', items: [] as ContentItem[], showProgress: true });
+      }
+
+      // 2. En vivo — primeros 14 canales
+      const homeChannels = allChannels.slice(0, 14);
+      if (homeChannels.length > 0) {
+        rows.push({ id: 'home-live', title: 'En vivo', emoji: '📡', items: homeChannels as ContentItem[] });
+      }
+
+      // 3. Películas — agrupadas por categoría si existen, si no todas en una fila
+      const allMoviesSorted = [...movies].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const movCatOrder = [...moviesByCategory.keys()].sort((a, b) => {
+        if (a === 'Sin categoría') return 1; if (b === 'Sin categoría') return -1;
+        return (moviesByCategory.get(b)?.length ?? 0) - (moviesByCategory.get(a)?.length ?? 0);
+      });
+      const hasNamedCats = movCatOrder.some(c => c !== 'Sin categoría');
+      if (hasNamedCats) {
+        for (const cat of movCatOrder) {
+          const items = moviesByCategory.get(cat) ?? [];
+          if (items.length > 0) rows.push({ id: `home-mv-${cat}`, title: cat === 'Sin categoría' ? 'Películas' : cat, emoji: '🎬', items: items as ContentItem[], showBadge: true });
+        }
+      } else if (allMoviesSorted.length > 0) {
+        rows.push({ id: 'home-movies', title: 'Películas', emoji: '🎬', items: allMoviesSorted as ContentItem[], showBadge: true });
+      }
+
+      // 4. Series
+      if (seriesList.length > 0) {
+        rows.push({ id: 'home-series', title: 'Series', emoji: '📺', items: seriesList.map(s => ({ ...s, _isSeries: true })) as unknown as ContentItem[] });
+      }
+
+      // 5. Canales adicionales (si hay más de 14)
+      if (allChannels.length > 14) {
+        rows.push({ id: 'home-more-channels', title: 'Más canales', emoji: '📡', items: allChannels.slice(14) as ContentItem[] });
+      }
+
+      // 6. Historial externo
+      if (externalHistory.length > 0) {
+        rows.push({ id: 'ext-history', title: 'Historial de reproducción', emoji: '', items: externalHistory as unknown as ContentItem[] });
+      }
+
       return rows;
     }
     const rows: ContentRowData[] = [];
