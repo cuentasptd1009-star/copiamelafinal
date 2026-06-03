@@ -139,7 +139,7 @@ export const ContentCard = memo(function ContentCard({
   useEffect(() => {
     if (!previewActive || !ytId) return;
     setYtCoverOpacity(1);
-    const t = setTimeout(() => setYtCoverOpacity(0), 2000);
+    const t = setTimeout(() => setYtCoverOpacity(0), 2500);
     return () => clearTimeout(t);
   }, [previewActive, ytId]);
 
@@ -285,7 +285,7 @@ export const ContentCard = memo(function ContentCard({
           <div style={{ position: 'relative', height: VIDEO_H, background: '#000', overflow: 'hidden' }}>
             {ytSrc ? (
               <>
-                {/* Scale iframe to 140% — clips channel name (top), YT logo/title (bottom), side branding */}
+                {/* Scale iframe to 170% — aggressively clips channel watermark (top), YT logo/title (bottom) */}
                 <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
                   <iframe
                     ref={ytIframeRef}
@@ -293,10 +293,10 @@ export const ContentCard = memo(function ContentCard({
                     allow="autoplay; encrypted-media"
                     style={{
                       position: 'absolute',
-                      top: '-20%',
-                      left: '-20%',
-                      width: '140%',
-                      height: '140%',
+                      top: '-35%',
+                      left: '-35%',
+                      width: '170%',
+                      height: '170%',
                       border: 'none',
                       pointerEvents: 'none',
                     }}
@@ -304,12 +304,22 @@ export const ContentCard = memo(function ContentCard({
                     title={title}
                   />
                 </div>
-                {/* Transparent overlay blocks hover events from reaching the iframe — prevents YT center controls */}
+                {/* Transparent overlay blocks hover — prevents YouTube showing center play/pause controls */}
                 <div style={{ position: 'absolute', inset: 0, zIndex: 1 }} />
-                {/* Poster cover fades out after YT initial overlays disappear */}
+                {/* Edge gradient masks — hides any remaining channel/logo branding at top and bottom edges */}
+                <div style={{
+                  position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none',
+                  background: [
+                    'linear-gradient(to bottom, #000 0%, transparent 28%)',
+                    'linear-gradient(to top, #000 0%, transparent 28%)',
+                    'linear-gradient(to right, #000 0%, transparent 18%)',
+                    'linear-gradient(to left, #000 0%, transparent 18%)',
+                  ].join(', '),
+                }} />
+                {/* Poster fades after 2.5s — sits above everything while YT initial overlays play out */}
                 <div
                   style={{
-                    position: 'absolute', inset: 0, zIndex: 2,
+                    position: 'absolute', inset: 0, zIndex: 4,
                     background: image && !imgError ? `url(${image}) center/cover no-repeat` : '#111',
                     opacity: ytCoverOpacity,
                     transition: 'opacity 0.8s ease',
