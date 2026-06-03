@@ -147,6 +147,7 @@ export const moviesTable = pgTable("movies", {
   videoFormat: text("video_format"),
   duration: integer("duration"),
   order: integer("order").notNull().default(0),
+  viewCount: integer("view_count").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
   index("idx_movies_order").on(t.order),
@@ -171,6 +172,7 @@ export const seriesTable = pgTable("series", {
   featured: boolean("featured").notNull().default(false),
   hidden: boolean("hidden").notNull().default(false),
   order: integer("order").notNull().default(0),
+  viewCount: integer("view_count").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
   index("idx_series_order").on(t.order),

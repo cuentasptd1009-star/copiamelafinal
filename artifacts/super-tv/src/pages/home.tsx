@@ -618,28 +618,30 @@ export default function Home() {
   useEffect(() => { if (isExpired) setShowExpiredOverlay(true); }, [isExpired]);
 
   const heroBannerItems = useMemo((): HeroBannerItem[] => {
+    const shuffle = <T,>(arr: T[]): T[] => {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    };
+    const toMovie = (m: any): HeroBannerItem => ({ id: m.id, title: m.title, description: m.description, banner: m.banner, poster: m.poster, category: m.category, genre: m.genre, year: m.year, type: 'movie' as const });
+    const toSeries = (s: any): HeroBannerItem => ({ id: s.id, title: s.title, description: s.description, banner: s.banner, poster: s.poster, category: s.category, genre: s.genre, year: s.year, type: 'series' as const });
+
     if (activeTab === 'home') {
-      const anyMovies = movies as any[];
-      const movFeatured = anyMovies.filter(m => m.featured).slice(0, 3);
-      const serFeatured = seriesList.filter(s => s.featured).slice(0, 2);
-      const movSource = movFeatured.length > 0 ? movFeatured : anyMovies.slice(0, 3);
-      const serSource = serFeatured.length > 0 ? serFeatured : seriesList.slice(0, 2);
-      const combined = [
-        ...movSource.map((m: any) => ({ id: m.id, title: m.title, description: m.description, banner: m.banner, poster: m.poster, category: m.category, genre: m.genre, year: m.year, type: 'movie' as const })),
-        ...serSource.map(s => ({ id: s.id, title: s.title, description: s.description, banner: s.banner, poster: s.poster, category: s.category, genre: s.genre, year: s.year, type: 'series' as const })),
-      ];
-      return combined.slice(0, 5);
+      const anyMovies = (movies as any[]).filter(m => m.banner || m.poster);
+      const anySeries = seriesList.filter(s => s.banner || s.poster);
+      const pool = shuffle([...anyMovies.map(toMovie), ...anySeries.map(toSeries)]);
+      return pool.slice(0, Math.min(10, pool.length));
     }
     if (activeTab === 'movies') {
-      const anyMovies = movies as any[];
-      const featured = anyMovies.filter(m => m.featured).slice(0, 5);
-      const source = featured.length >= 2 ? featured : anyMovies.slice(0, 5);
-      return source.map((m: any) => ({ id: m.id, title: m.title, description: m.description, banner: m.banner, poster: m.poster, category: m.category, genre: m.genre, year: m.year, type: 'movie' as const }));
+      const pool = shuffle((movies as any[]).filter(m => m.banner || m.poster).map(toMovie));
+      return pool.slice(0, Math.min(10, pool.length));
     }
     if (activeTab === 'series' && seriesList.length > 0) {
-      const featured = seriesList.filter(s => s.featured).slice(0, 5);
-      const source = featured.length >= 2 ? featured : seriesList.slice(0, 5);
-      return source.map(s => ({ id: s.id, title: s.title, description: s.description, banner: s.banner, poster: s.poster, category: s.category, genre: s.genre, year: s.year, type: 'series' as const }));
+      const pool = shuffle(seriesList.filter(s => s.banner || s.poster).map(toSeries));
+      return pool.slice(0, Math.min(10, pool.length));
     }
     return [];
   }, [activeTab, movies, seriesList]);
@@ -698,25 +700,29 @@ export default function Home() {
         rows.push({ id: 'home-live', title: 'En vivo', emoji: '📡', items: homeChannels as ContentItem[] });
       }
 
-      // 3. Películas — agrupadas por categoría si existen, si no todas en una fila
-      const allMoviesSorted = [...movies].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      const movCatOrder = [...moviesByCategory.keys()].sort((a, b) => {
-        if (a === 'Sin categoría') return 1; if (b === 'Sin categoría') return -1;
-        return (moviesByCategory.get(b)?.length ?? 0) - (moviesByCategory.get(a)?.length ?? 0);
-      });
-      const hasNamedCats = movCatOrder.some(c => c !== 'Sin categoría');
-      if (hasNamedCats) {
-        for (const cat of movCatOrder) {
-          const items = moviesByCategory.get(cat) ?? [];
-          if (items.length > 0) rows.push({ id: `home-mv-${cat}`, title: cat === 'Sin categoría' ? 'Películas' : cat, emoji: '🎬', items: items as ContentItem[], showBadge: true });
-        }
-      } else if (allMoviesSorted.length > 0) {
-        rows.push({ id: 'home-movies', title: 'Películas', emoji: '🎬', items: allMoviesSorted as ContentItem[], showBadge: true });
+      // 3. Películas — más vistas primero, luego el resto
+      const sortByViews = <T extends { viewCount?: number; createdAt?: string }>(arr: T[]) =>
+        [...arr].sort((a, b) => {
+          const vDiff = ((b as any).viewCount ?? 0) - ((a as any).viewCount ?? 0);
+          if (vDiff !== 0) return vDiff;
+          return new Date((b.createdAt ?? 0)).getTime() - new Date((a.createdAt ?? 0)).getTime();
+        });
+
+      const anyMovies = movies as any[];
+      const topMovies = sortByViews(anyMovies).slice(0, 14);
+      const topMovieIds = new Set(topMovies.map((m: any) => m.id));
+      if (topMovies.length > 0) {
+        rows.push({ id: 'home-top-movies', title: 'Películas más vistas', emoji: '🔥', items: topMovies as ContentItem[], showBadge: true });
+      }
+      const restMovies = sortByViews(anyMovies.filter((m: any) => !topMovieIds.has(m.id)));
+      if (restMovies.length > 0) {
+        rows.push({ id: 'home-movies', title: 'Más películas', emoji: '🎬', items: restMovies as ContentItem[], showBadge: true });
       }
 
-      // 4. Series
+      // 4. Series — más vistas primero
       if (seriesList.length > 0) {
-        rows.push({ id: 'home-series', title: 'Series', emoji: '📺', items: seriesList.map(s => ({ ...s, _isSeries: true })) as unknown as ContentItem[] });
+        const sortedSeries = sortByViews(seriesList as any[]).map((s: any) => ({ ...s, _isSeries: true }));
+        rows.push({ id: 'home-series', title: 'Series', emoji: '📺', items: sortedSeries as unknown as ContentItem[] });
       }
 
       // 5. Canales adicionales (si hay más de 14)
@@ -735,17 +741,24 @@ export default function Home() {
     if (continueWatching.length > 0) rows.push({ id: 'continue', title: 'Seguir viendo', emoji: '▶', items: continueWatching as ContentItem[], showProgress: true });
     if (favoriteMovies.length > 0) rows.push({ id: 'favs', title: 'Mis favoritos', emoji: '❤️', items: favoriteMovies as ContentItem[] });
     if (recommendations.length > 0) rows.push({ id: 'recs', title: 'Para ti', emoji: '⭐', items: recommendations as ContentItem[] });
+
+    const sortByViewCount = (arr: typeof movies) =>
+      [...arr].sort((a, b) => ((b as any).viewCount ?? 0) - ((a as any).viewCount ?? 0));
+
+    const topViewed = sortByViewCount(movies).filter(m => ((m as any).viewCount ?? 0) > 0).slice(0, 14);
+    if (topViewed.length > 0) rows.push({ id: 'top-viewed', title: 'Más vistas', emoji: '🔥', items: topViewed as ContentItem[] });
+
     if (recentMovies.length > 0) rows.push({ id: 'recent', title: 'Recién agregadas', emoji: '🆕', items: recentMovies as ContentItem[], showBadge: true });
-    const specialIds = new Set([...continueWatching.map(m => m.id), ...favoriteMovies.map(m => m.id), ...recommendations.map(m => m.id)]);
+    const specialIds = new Set([...continueWatching.map(m => m.id), ...favoriteMovies.map(m => m.id), ...recommendations.map(m => m.id), ...topViewed.map(m => m.id)]);
     const movCatOrder = [...moviesByCategory.keys()].sort((a, b) => {
       if (a === 'Sin categoría') return 1; if (b === 'Sin categoría') return -1;
       return (moviesByCategory.get(b)?.length ?? 0) - (moviesByCategory.get(a)?.length ?? 0);
     });
     for (const cat of movCatOrder) {
       const items = (moviesByCategory.get(cat) ?? []).filter(m => !specialIds.has(m.id));
-      if (items.length > 0) rows.push({ id: `mv-${cat}`, title: cat, emoji: '🎬', items: items as ContentItem[] });
+      if (items.length > 0) rows.push({ id: `mv-${cat}`, title: cat === 'Sin categoría' ? 'Todas las películas' : cat, emoji: '🎬', items: items as ContentItem[] });
     }
-    if (rows.length === 0 && movies.length > 0) rows.push({ id: 'mv-all', title: 'Todas las películas', emoji: '🎬', items: movies as ContentItem[] });
+    if (rows.length === 0 && movies.length > 0) rows.push({ id: 'mv-all', title: 'Todas las películas', emoji: '🎬', items: sortByViewCount(movies) as ContentItem[] });
     if (!q && externalHistory.length > 0) rows.push({ id: 'ext-history', title: 'Historial de reproducción', emoji: '', items: externalHistory as unknown as ContentItem[] });
     return rows;
   }, [searchQuery, activeTab, allChannels, movies, ytResults, archiveResults, moviesByCategory, continueWatching, recentMovies, recommendations, favoriteMovies, combinedContinueWatching, seriesList, externalHistory]);
@@ -876,9 +889,13 @@ export default function Home() {
       setMiniPlayerState({ url: item.streamUrl ?? '', title: item.name, type: 'channel', movieId: null, channelId: item.id, streamFormat: (item as any).streamFormat ?? null, isMinimized: false, channels: channelList, channelIndex: idx >= 0 ? idx : 0 });
       setLocation(`/player?channelId=${item.id}&title=${encodeURIComponent(item.name)}&type=channel&url=${encodeURIComponent((item as any).streamUrl ?? '')}&format=${(item as any).streamFormat || ''}`);
     } else if ((item as any)._isSeries) {
+      const token = getToken('user') || getToken('admin') || '';
+      if (token) fetch(`${apiBase}/api/series/${item.id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
       setLocation(`/serie/${item.id}`);
     } else {
       const mv = item as MovieItem;
+      const token = getToken('user') || getToken('admin') || '';
+      if (token) fetch(`${apiBase}/api/movies/${mv.id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
       const url = mv.filePath ?? '';
       if (!url) { setLocation(`/pelicula/${mv.id}`); return; }
       const isYouTube = url.includes('youtube.com/') || url.includes('youtu.be/');
@@ -897,13 +914,21 @@ export default function Home() {
 
   const playSeriesItem = useCallback((series: SeriesItem) => {
     if (isExpired) { setShowExpiredOverlay(true); return; }
+    const token = getToken('user') || getToken('admin') || '';
+    if (token) fetch(`${apiBase}/api/series/${series.id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
     setLocation(`/serie/${series.id}`);
   }, [setLocation, isExpired]);
 
   const playHeroBannerItem = useCallback((item: HeroBannerItem) => {
     if (isExpired) { setShowExpiredOverlay(true); return; }
-    if (item.type === 'series') setLocation(`/serie/${item.id}`);
-    else setLocation(`/pelicula/${item.id}`);
+    const token = getToken('user') || getToken('admin') || '';
+    if (item.type === 'series') {
+      if (token) fetch(`${apiBase}/api/series/${item.id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+      setLocation(`/serie/${item.id}`);
+    } else {
+      if (token) fetch(`${apiBase}/api/movies/${item.id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+      setLocation(`/pelicula/${item.id}`);
+    }
   }, [setLocation, isExpired]);
 
   const openProfile = useCallback(() => setShowProfile(true), []);

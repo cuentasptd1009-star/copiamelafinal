@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { seriesTable, seasonsTable, episodesTable, accessCodesTable } from "@workspace/db";
-import { eq, asc, ilike, desc } from "drizzle-orm";
+import { eq, asc, ilike, desc, sql } from "drizzle-orm";
 import { requireAdminAuth, extractToken, getUserSession, getAdminSession } from "../lib/auth.js";
 import { cache, TTL } from "../lib/cache.js";
 
@@ -44,6 +44,19 @@ router.get("/series", async (req: Request, res: Response) => {
   cache.set(cacheKey, result, TTL.MEDIUM);
   res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
   res.json(result);
+});
+
+router.post("/series/:id/view", async (req: Request, res: Response) => {
+  const token = extractToken(req);
+  if (!token) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userSession = await getUserSession(token);
+  const adminSession = await getAdminSession(token);
+  if (!userSession && !adminSession) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.update(seriesTable).set({ viewCount: sql`${seriesTable.viewCount} + 1` }).where(eq(seriesTable.id, id));
+  cache.delete('series:list');
+  res.json({ ok: true });
 });
 
 router.get("/series/all", requireAdminAuth, async (req: Request, res: Response) => {

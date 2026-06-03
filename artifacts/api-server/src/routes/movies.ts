@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { moviesTable, accessCodesTable } from "@workspace/db";
-import { eq, asc, ilike, and, or, ne } from "drizzle-orm";
+import { eq, asc, ilike, and, or, ne, sql } from "drizzle-orm";
 import {
   CreateMovieBody,
   UpdateMovieBody,
@@ -59,6 +59,19 @@ router.get("/movies", async (req: Request, res: Response) => {
   cache.set(cacheKey, result, TTL.MEDIUM);
   res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
   res.json(result);
+});
+
+router.post("/movies/:id/view", async (req: Request, res: Response) => {
+  const token = extractToken(req);
+  if (!token) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userSession = await getUserSession(token);
+  const adminSession = await getAdminSession(token);
+  if (!userSession && !adminSession) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.update(moviesTable).set({ viewCount: sql`${moviesTable.viewCount} + 1` }).where(eq(moviesTable.id, id));
+  cache.delete(`movies:list::`) ;
+  res.json({ ok: true });
 });
 
 router.get("/movies/search-poster", requireAdminAuth, async (req: Request, res: Response) => {
