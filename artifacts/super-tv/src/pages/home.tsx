@@ -980,7 +980,7 @@ export default function Home() {
 
   const actionButtons = useMemo(() => [
     ...(session?.type === 'user' ? [{ key: 'profile', label: 'Mi perfil', action: openProfile, icon: UserCircle2 }] : []),
-    ...(showInstallButton ? [{ key: 'install', label: 'Instalar', action: handleInstall, icon: Download }] : []),
+    ...(showInstallButton ? [{ key: 'install', label: 'Instalar app para Android', action: handleInstall, icon: Download }] : []),
     { key: 'shortcut', label: 'Acceso directo', action: handleShortcut, icon: Smartphone },
     { key: 'logout', label: 'Salir', action: handleLogout, icon: LogOut },
   ], [session, showInstallButton, openProfile, handleInstall, handleLogout]);
