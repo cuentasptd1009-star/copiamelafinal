@@ -135,13 +135,13 @@ export const ContentCard = memo(function ContentCard({
     }
   }, [previewActive]);
 
-  // Fade out the poster cover after video has loaded — wait long enough for YT overlays to disappear
+  // Fade out the poster cover after YT initial overlays disappear (≈2s is enough)
   useEffect(() => {
-    if (!previewActive || !ytSrc) return;
+    if (!previewActive || !ytId) return;
     setYtCoverOpacity(1);
-    const t = setTimeout(() => setYtCoverOpacity(0), 3500);
+    const t = setTimeout(() => setYtCoverOpacity(0), 2000);
     return () => clearTimeout(t);
-  }, [previewActive, ytSrc]);
+  }, [previewActive, ytId]);
 
   // Keep preview anchored to card while scrolling
   useEffect(() => {
