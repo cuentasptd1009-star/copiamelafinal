@@ -466,7 +466,8 @@ export default function Home() {
   const [rowsFocusActive, setRowsFocusActive] = useState(false);
   const [sidebarIdx, setSidebarIdx] = useState(0);
   const [heroBtnIndex, setHeroBtnIndex] = useState(0);
-  const [heroBannerIdx, setHeroBannerIdx] = useState(0);
+  const [heroBannerIdx, setHeroBannerIdx] = useState(() => 0);
+  const heroBannerInitialized = useRef(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [seriesList, setSeriesList] = useState<SeriesItem[]>([]);
   const [seriesLoading, setSeriesLoading] = useState(false);
@@ -642,6 +643,13 @@ export default function Home() {
     }
     return [];
   }, [activeTab, movies, seriesList]);
+
+  useEffect(() => {
+    if (heroBannerItems.length > 1 && !heroBannerInitialized.current) {
+      heroBannerInitialized.current = true;
+      setHeroBannerIdx(Math.floor(Math.random() * heroBannerItems.length));
+    }
+  }, [heroBannerItems.length]);
 
   const contentRows = useMemo((): ContentRowData[] => {
     const q = searchQuery.trim().toLowerCase();

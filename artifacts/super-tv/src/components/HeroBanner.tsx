@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Play, Info } from 'lucide-react';
 
 export interface HeroBannerItem {
@@ -28,8 +28,11 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
   const [loaded, setLoaded] = useState(false);
 
   const current = currentIndex !== undefined ? currentIndex : internalCurrent;
+  const currentRef = useRef(current);
+  currentRef.current = current;
+
   const setCurrent = (v: number | ((p: number) => number)) => {
-    const next = typeof v === 'function' ? v(current) : v;
+    const next = typeof v === 'function' ? v(currentRef.current) : v;
     setInternalCurrent(next);
     onCurrentChange?.(next);
   };
@@ -37,11 +40,13 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
   useEffect(() => {
     if (overrideItem || items.length <= 1) return;
     const timer = setInterval(() => {
-      setCurrent(p => (p + 1) % items.length);
+      const next = (currentRef.current + 1) % items.length;
+      setInternalCurrent(next);
+      onCurrentChange?.(next);
       setLoaded(false);
-    }, 8000);
+    }, 7000);
     return () => clearInterval(timer);
-  }, [items.length, overrideItem]);
+  }, [items.length, overrideItem, onCurrentChange]);
 
   if (!items.length) return null;
 
