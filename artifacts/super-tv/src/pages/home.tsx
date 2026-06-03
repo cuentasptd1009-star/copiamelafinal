@@ -1478,7 +1478,7 @@ export default function Home() {
           <button onClick={() => { setSidebarMouseOpen(true); setZone('sidebar'); }} className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors">
             <Menu className="w-5 h-5" />
           </button>
-          <img src={logo} alt="Super TV" className="h-7 w-auto" />
+          <img src={lettersLogo} alt="Super TV" className="h-7 w-auto object-contain" style={{ mixBlendMode: 'screen' }} />
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 pointer-events-none" />
             <input
