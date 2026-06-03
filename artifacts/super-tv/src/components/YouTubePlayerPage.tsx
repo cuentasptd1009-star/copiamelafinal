@@ -47,7 +47,7 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSaveRef = useRef(0);
 
-  const [hasStarted, setHasStarted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ytEnded, setYtEnded] = useState(false);
   const [ytError, setYtError] = useState<string | null>(null);
@@ -162,6 +162,10 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
                   playerDivRef.current.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;';
                 }
               } catch {}
+              if (startFrom && startFrom > 10) {
+                try { e.target.seekTo(startFrom, true); } catch {}
+              }
+              try { e.target.playVideo(); } catch {}
             }
           },
           onError: (e: any) => {
@@ -473,22 +477,6 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
         />
       )}
 
-      {/* PRE-PLAY OVERLAY */}
-      {!hasStarted && (
-        <div
-          className="absolute inset-0 z-20 bg-black flex flex-col items-center justify-center gap-6 cursor-pointer"
-          onClick={startPlayback}
-        >
-          <img
-            src={logo}
-            alt="Super TV"
-            className="w-52 sm:w-64 h-auto drop-shadow-2xl"
-          />
-          <div className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center shadow-2xl">
-            <Play className="w-9 h-9 text-white fill-white ml-1" />
-          </div>
-        </div>
-      )}
 
       {/* ERROR OVERLAY */}
       {ytError && (
