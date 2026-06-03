@@ -207,6 +207,81 @@ function sanitizeText(str: string, maxLen = 500): string {
     .slice(0, maxLen);
 }
 
+/**
+ * Cleans a raw YouTube video title into something presentable.
+ * Strips clickbait suffixes, filler phrases, emojis, year tags, quality tags, etc.
+ * Examples:
+ *   "Una PELÍCULA de ACCIÓN Que Te Quita La Respiración | EN ESPAÑOL COMPLETA HD 2024"
+ *     → "Una Película De Acción Que Te Quita La Respiración"
+ *   "EL CONJURO DEL MÁS ALLÁ 📽 Película Completa de Terror en Español Latino"
+ *     → "El Conjuro Del Más Allá"
+ */
+function cleanYouTubeTitle(raw: string): string {
+  if (!raw) return raw;
+  let t = raw;
+
+  // Remove emoji (Unicode ranges for emoticons, symbols, etc.)
+  t = t.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{FE00}-\u{FEFF}]/gu, "");
+
+  // Split at pipe and take the first chunk
+  t = t.split("|")[0];
+
+  // Split at " - " (with spaces) and take the first chunk if it's meaningful
+  const dashIdx = t.indexOf(" - ");
+  if (dashIdx > 6) t = t.slice(0, dashIdx);
+
+  // Remove content inside brackets/parentheses (often "(2024)", "[HD]", etc.)
+  t = t.replace(/[\[(][^\])]*(HD|4K|720p|1080p|completa?|full|español|latino|doblad|subtitulad|20[0-2]\d|19\d{2})[^\])]*/gi, "");
+  t = t.replace(/[\[(][^\])]{1,40}[\])]/g, "");
+
+  // Remove common filler phrases (order matters — longer phrases first)
+  const FILLER = [
+    /película[s]?\s+completa[s]?\s+en\s+español(\s+latino)?/gi,
+    /pelicula[s]?\s+completa[s]?\s+en\s+español(\s+latino)?/gi,
+    /película[s]?\s+completa[s]?/gi,
+    /pelicula[s]?\s+completa[s]?/gi,
+    /full\s+movie/gi,
+    /en\s+español\s+latino/gi,
+    /en\s+español/gi,
+    /español\s+latino/gi,
+    /\bespañol\b/gi,
+    /\blatino\b/gi,
+    /\bdoblada?\b/gi,
+    /\bsubtitulada?\b/gi,
+    /\bsubtitled?\b/gi,
+    /\bcompleta?\b/gi,
+    /\bgratis\b/gi,
+    /\boficial\b/gi,
+    /\btrailer\b/gi,
+    /\b4k\b/gi,
+    /\b1080p\b/gi,
+    /\b720p\b/gi,
+    /\bhd\b/gi,
+    /\bfull\b/gi,
+    /\bmira\b/gi,
+    /\bver\b/gi,
+    /\b20[0-2]\d\b/g,
+    /\b19[5-9]\d\b/g,
+  ];
+  for (const re of FILLER) {
+    t = t.replace(re, " ");
+  }
+
+  // Collapse whitespace
+  t = t.replace(/\s{2,}/g, " ").trim();
+
+  // Remove trailing punctuation left behind
+  t = t.replace(/[|\-–—:,]+$/, "").trim();
+
+  // Title-case (capitalize first letter of each word)
+  t = t
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // If result is too short or empty, return sanitized original
+  return t.length > 2 ? t : sanitizeText(raw, 300);
+}
+
 function parseISODuration(iso: string): string {
   const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!m) return "";
@@ -281,7 +356,7 @@ router.get("/youtube/search", requireAdminAuth, async (req: Request, res: Respon
       const year = snippet.publishedAt ? new Date(snippet.publishedAt).getFullYear() : undefined;
       return {
         videoId,
-        title: sanitizeText(snippet.title || "", 300),
+        title: cleanYouTubeTitle(sanitizeText(snippet.title || "", 300)),
         description: sanitizeText(snippet.description || "", 300),
         thumbnail: snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
         channel: sanitizeText(snippet.channelTitle || "", 100),
@@ -365,7 +440,7 @@ router.get("/youtube/video-info", requireAdminAuth, async (req: Request, res: Re
 
     res.json({
       videoId,
-      title: sanitizeText(oembed.title || "", 300),
+      title: cleanYouTubeTitle(sanitizeText(oembed.title || "", 300)),
       thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
       thumbnailHQ: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
       channel: sanitizeText(oembed.author_name || "", 100),
@@ -383,7 +458,7 @@ router.post("/youtube/import", requireAdminAuth, async (req: Request, res: Respo
     const { videoId, title, description, year, category, thumbnail } = req.body;
     if (!videoId) return res.status(400).json({ error: "videoId requerido" });
 
-    const cleanTitle = sanitizeText(String(title || videoId), 500);
+    const cleanTitle = cleanYouTubeTitle(sanitizeText(String(title || videoId), 500));
     const cleanDesc = description ? sanitizeText(String(description), 1000) : null;
     const cleanYear = year ? parseInt(String(year)) || null : null;
     const cleanCategory = category ? String(category).slice(0, 200) : null;
