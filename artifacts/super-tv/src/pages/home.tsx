@@ -979,6 +979,7 @@ export default function Home() {
             const si = sidebarItems[sidebarIdx];
             if (si?.kind === 'tab') {
               setActiveTab(si.key); setTabIndex(si.tabIdx);
+              setSearchQuery(''); setSearchInput('');
               setRowIndex(0); setColIndex(0);
               setSidebarMouseOpen(false); setZone('rows');
             } else if (showHero) { setZone('hero'); setHeroBtnIndex(0); }
@@ -1001,6 +1002,7 @@ export default function Home() {
               isListening ? stopListening() : startListening();
             } else if (si.kind === 'tab') {
               setActiveTab(si.key); setTabIndex(si.tabIdx);
+              setSearchQuery(''); setSearchInput('');
               setRowIndex(0); setColIndex(0);
               setSidebarMouseOpen(false); setZone('rows');
             } else if (si.kind === 'action') {
@@ -1237,7 +1239,7 @@ export default function Home() {
           return (
             <button
               key={item.key}
-              onClick={() => { setActiveTab(item.key); setTabIndex(i); setRowIndex(0); setColIndex(0); setZone('rows'); setSidebarMouseOpen(false); }}
+              onClick={() => { setActiveTab(item.key); setTabIndex(i); setSearchQuery(''); setSearchInput(''); setRowIndex(0); setColIndex(0); setZone('rows'); setSidebarMouseOpen(false); }}
               onMouseEnter={() => setActiveTab(item.key)}
               title={item.label}
               className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-150
@@ -1352,7 +1354,7 @@ export default function Home() {
             return (
               <button
                 key={item.key}
-                onClick={() => { setActiveTab(item.key); setTabIndex(i); setRowIndex(0); setColIndex(0); setSidebarMouseOpen(false); setZone('rows'); }}
+                onClick={() => { setActiveTab(item.key); setTabIndex(i); setSearchQuery(''); setSearchInput(''); setRowIndex(0); setColIndex(0); setSidebarMouseOpen(false); setZone('rows'); }}
                 onMouseEnter={() => setActiveTab(item.key)}
                 className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150
                   ${isActive ? 'bg-white/12 text-white' : 'text-white/55 hover:text-white hover:bg-white/7'}
@@ -1862,7 +1864,7 @@ export default function Home() {
           return (
             <button
               key={item.key}
-              onClick={() => { setActiveTab(item.key); setRowIndex(0); setColIndex(0); setZone('rows'); }}
+              onClick={() => { setActiveTab(item.key); setSearchQuery(''); setSearchInput(''); setRowIndex(0); setColIndex(0); setZone('rows'); }}
               className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-all ${isActive ? 'text-white' : 'text-white/35 hover:text-white/60'}`}
             >
               <Icon className={`w-5 h-5 transition-colors ${isActive ? 'text-primary' : ''}`} />
