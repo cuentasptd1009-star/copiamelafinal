@@ -139,6 +139,7 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
         height: String(vh),
         playerVars: {
           autoplay: 1,
+          mute: 1,
           controls: 0,
           disablekb: 1,
           rel: 0,
@@ -182,7 +183,6 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
           },
           onStateChange: (e: any) => {
             if (destroyed) return;
-            // BUFFERING (3) or PLAYING (1) — show the player, remove pre-play overlay
             if (e.data === 1 || e.data === 3) {
               setHasStarted(true);
             }
@@ -191,6 +191,13 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
               setYtEnded(false);
               const d = ytPlayerRef.current?.getDuration?.() ?? 0;
               if (d > 0) setDuration(d);
+              // Unmute immediately on first play (muted autoplay bypass)
+              try {
+                if (e.target.isMuted?.() && !userMutedRef.current) {
+                  e.target.unMute();
+                  e.target.setVolume(100);
+                }
+              } catch {}
             }
             if (e.data === 2) setIsPlaying(false);
             if (e.data === 0) {
