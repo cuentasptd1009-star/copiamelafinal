@@ -100,11 +100,13 @@ export const ContentCard = memo(function ContentCard({
   const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 
   const ytId = previewUrl ? extractYouTubeId(previewUrl) : null;
-  // Never use YouTube iframes in card previews — they show branding/controls regardless of params
   const isDirectVideo = !!(previewUrl && !ytId);
-  const canPreview = !!(isDirectVideo || (ytId && image)) && !isTouchDevice;
+  const canPreview = !!(isDirectVideo || ytId) && !isTouchDevice;
 
-  const ytSrc = null; // YouTube iframe disabled in card previews
+  // YouTube iframe: autoplay muted, skip to 10 min (600s) for a good scene, hide all branding/controls
+  const ytSrc = ytId
+    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&loop=1&playlist=${ytId}&start=600&enablejsapi=1`
+    : null;
 
   const startTimer = () => {
     if (!canPreview) return;
@@ -281,14 +283,38 @@ export const ContentCard = memo(function ContentCard({
         >
           {/* ── VIDEO SECTION ── */}
           <div style={{ position: 'relative', height: VIDEO_H, background: '#000', overflow: 'hidden' }}>
-            {ytId ? (
-              /* YouTube URL: show poster image only — no iframe to avoid YT branding/controls */
-              <div
-                style={{
-                  position: 'absolute', inset: 0,
-                  background: image && !imgError ? `url(${image}) center/cover no-repeat` : '#111',
-                }}
-              />
+            {ytSrc ? (
+              <>
+                {/* Scale iframe to 115% so YouTube watermark/controls get clipped by overflow:hidden */}
+                <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+                  <iframe
+                    ref={ytIframeRef}
+                    src={ytSrc}
+                    allow="autoplay; encrypted-media"
+                    style={{
+                      position: 'absolute',
+                      top: '-7.5%',
+                      left: '-7.5%',
+                      width: '115%',
+                      height: '115%',
+                      border: 'none',
+                      pointerEvents: 'none',
+                    }}
+                    tabIndex={-1}
+                    title={title}
+                  />
+                </div>
+                {/* Poster cover fades out once video starts */}
+                <div
+                  style={{
+                    position: 'absolute', inset: 0,
+                    background: image && !imgError ? `url(${image}) center/cover no-repeat` : '#111',
+                    opacity: ytCoverOpacity,
+                    transition: 'opacity 0.6s ease',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </>
             ) : isDirectVideo ? (
               <video
                 ref={videoRef}
