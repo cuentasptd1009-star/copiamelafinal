@@ -281,31 +281,18 @@ export const ContentCard = memo(function ContentCard({
         >
           {/* ── VIDEO SECTION ── */}
           <div style={{ position: 'relative', height: VIDEO_H, background: '#000', overflow: 'hidden' }}>
-            {ytSrc ? (
-              <>
-                <iframe
-                  ref={ytIframeRef}
-                  key="yt-preview"
-                  src={ytSrc}
-                  style={{ position: 'absolute', width: '170%', height: '170%', top: '-35%', left: '-35%', pointerEvents: 'none', border: 'none' }}
-                  allow="autoplay; encrypted-media"
-                  allowFullScreen={false}
-                  title={title}
-                />
-                {/* Cover overlay to hide YouTube logo until video is playing */}
-                <div
-                  style={{
-                    position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
-                    opacity: ytCoverOpacity,
-                    transition: 'opacity 0.7s ease-in-out',
-                    background: image && !imgError ? `url(${image}) center/cover no-repeat` : '#000',
-                  }}
-                />
-              </>
-            ) : previewUrl ? (
+            {ytId ? (
+              /* YouTube URL: show poster image only — no iframe to avoid YT branding/controls */
+              <div
+                style={{
+                  position: 'absolute', inset: 0,
+                  background: image && !imgError ? `url(${image}) center/cover no-repeat` : '#111',
+                }}
+              />
+            ) : isDirectVideo ? (
               <video
                 ref={videoRef}
-                src={previewUrl}
+                src={previewUrl!}
                 autoPlay
                 loop
                 playsInline
