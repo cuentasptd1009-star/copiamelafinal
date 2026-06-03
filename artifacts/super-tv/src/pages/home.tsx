@@ -511,7 +511,7 @@ export default function Home() {
   const [externalHistory, setExternalHistory] = useState<ExternalItem[]>(() => getExternalHistory());
   const [searchHistory, setSearchHistory] = useState<string[]>(() => getSearchHistory());
 
-  const { data: session, isError: sessionError } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false } });
+  const { data: session, isError: sessionError } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false, refetchInterval: 30000 } });
   const { data: avatars = [] } = useListAvatars({ query: { queryKey: getListAvatarsQueryKey() } });
   const updateProfileMutation = useUpdateProfile();
   const { data: allChannels = [], isLoading: channelsLoading } = useListChannels(undefined, { query: { queryKey: getListChannelsQueryKey() } });
