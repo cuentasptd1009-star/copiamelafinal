@@ -90,6 +90,7 @@ export const ContentCard = memo(function ContentCard({
   const [cardRect, setCardRect] = useState<DOMRect | null>(null);
   const [muted, setMuted] = useState(false);
   const [previewBtnIdx, setPreviewBtnIdx] = useState(0);
+  const [ytCoverOpacity, setYtCoverOpacity] = useState(1);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHoveringRef = useRef(false);
   const innerRef = useRef<HTMLDivElement | null>(null);
@@ -129,8 +130,17 @@ export const ContentCard = memo(function ContentCard({
     if (!previewActive) {
       setMuted(false);
       setPreviewBtnIdx(0);
+      setYtCoverOpacity(1);
     }
   }, [previewActive]);
+
+  // Fade out the poster cover after video has had time to start (hides YouTube logo)
+  useEffect(() => {
+    if (!previewActive || !ytId) return;
+    setYtCoverOpacity(1);
+    const t = setTimeout(() => setYtCoverOpacity(0), 1200);
+    return () => clearTimeout(t);
+  }, [previewActive, ytId]);
 
   // Keep preview anchored to card while scrolling
   useEffect(() => {
@@ -273,15 +283,26 @@ export const ContentCard = memo(function ContentCard({
           {/* ── VIDEO SECTION ── */}
           <div style={{ position: 'relative', height: VIDEO_H, background: '#000', overflow: 'hidden' }}>
             {ytSrc ? (
-              <iframe
-                ref={ytIframeRef}
-                key="yt-preview"
-                src={ytSrc}
-                style={{ position: 'absolute', width: '170%', height: '170%', top: '-35%', left: '-35%', pointerEvents: 'none', border: 'none' }}
-                allow="autoplay; encrypted-media"
-                allowFullScreen={false}
-                title={title}
-              />
+              <>
+                <iframe
+                  ref={ytIframeRef}
+                  key="yt-preview"
+                  src={ytSrc}
+                  style={{ position: 'absolute', width: '170%', height: '170%', top: '-35%', left: '-35%', pointerEvents: 'none', border: 'none' }}
+                  allow="autoplay; encrypted-media"
+                  allowFullScreen={false}
+                  title={title}
+                />
+                {/* Cover overlay to hide YouTube logo until video is playing */}
+                <div
+                  style={{
+                    position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none',
+                    opacity: ytCoverOpacity,
+                    transition: 'opacity 0.7s ease-in-out',
+                    background: image && !imgError ? `url(${image}) center/cover no-repeat` : '#000',
+                  }}
+                />
+              </>
             ) : previewUrl ? (
               <video
                 ref={videoRef}
