@@ -135,13 +135,13 @@ export const ContentCard = memo(function ContentCard({
     }
   }, [previewActive]);
 
-  // Fade out the poster cover after video has had time to start (hides YouTube logo)
+  // Fade out the poster cover after video has loaded — wait long enough for YT overlays to disappear
   useEffect(() => {
-    if (!previewActive || !ytId) return;
+    if (!previewActive || !ytSrc) return;
     setYtCoverOpacity(1);
-    const t = setTimeout(() => setYtCoverOpacity(0), 1200);
+    const t = setTimeout(() => setYtCoverOpacity(0), 3500);
     return () => clearTimeout(t);
-  }, [previewActive, ytId]);
+  }, [previewActive, ytSrc]);
 
   // Keep preview anchored to card while scrolling
   useEffect(() => {
@@ -285,7 +285,7 @@ export const ContentCard = memo(function ContentCard({
           <div style={{ position: 'relative', height: VIDEO_H, background: '#000', overflow: 'hidden' }}>
             {ytSrc ? (
               <>
-                {/* Scale iframe to 115% so YouTube watermark/controls get clipped by overflow:hidden */}
+                {/* Scale iframe to 140% — clips channel name (top), YT logo/title (bottom), side branding */}
                 <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
                   <iframe
                     ref={ytIframeRef}
@@ -293,10 +293,10 @@ export const ContentCard = memo(function ContentCard({
                     allow="autoplay; encrypted-media"
                     style={{
                       position: 'absolute',
-                      top: '-7.5%',
-                      left: '-7.5%',
-                      width: '115%',
-                      height: '115%',
+                      top: '-20%',
+                      left: '-20%',
+                      width: '140%',
+                      height: '140%',
                       border: 'none',
                       pointerEvents: 'none',
                     }}
@@ -304,13 +304,15 @@ export const ContentCard = memo(function ContentCard({
                     title={title}
                   />
                 </div>
-                {/* Poster cover fades out once video starts */}
+                {/* Transparent overlay blocks hover events from reaching the iframe — prevents YT center controls */}
+                <div style={{ position: 'absolute', inset: 0, zIndex: 1 }} />
+                {/* Poster cover fades out after YT initial overlays disappear */}
                 <div
                   style={{
-                    position: 'absolute', inset: 0,
+                    position: 'absolute', inset: 0, zIndex: 2,
                     background: image && !imgError ? `url(${image}) center/cover no-repeat` : '#111',
                     opacity: ytCoverOpacity,
-                    transition: 'opacity 0.6s ease',
+                    transition: 'opacity 0.8s ease',
                     pointerEvents: 'none',
                   }}
                 />
