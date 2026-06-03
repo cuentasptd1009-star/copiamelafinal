@@ -626,7 +626,7 @@ export default function Home() {
       }
       return copy;
     };
-    const toMovie = (m: any): HeroBannerItem => ({ id: m.id, title: m.title, description: m.description, banner: m.banner, poster: m.poster, category: m.category, genre: m.genre, year: m.year, type: 'movie' as const });
+    const toMovie = (m: any): HeroBannerItem => ({ id: m.id, title: m.title, description: m.description, banner: m.banner, poster: m.poster, category: m.category, genre: m.genre, year: m.year, type: 'movie' as const, streamUrl: m.streamUrl ?? null, streamFormat: m.streamFormat ?? null });
     const toSeries = (s: any): HeroBannerItem => ({ id: s.id, title: s.title, description: s.description, banner: s.banner, poster: s.poster, category: s.category, genre: s.genre, year: s.year, type: 'series' as const });
 
     if (activeTab === 'home') {
@@ -927,7 +927,20 @@ export default function Home() {
       setLocation(`/serie/${item.id}`);
     } else {
       if (token) fetch(`${apiBase}/api/movies/${item.id}/view`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-      setLocation(`/pelicula/${item.id}`);
+      // Go directly to the player if we have a stream URL
+      if (item.streamUrl) {
+        const params = new URLSearchParams({
+          url: item.streamUrl,
+          title: item.title,
+          type: 'movie',
+          movieId: String(item.id),
+          ...(item.category ? { category: item.category } : {}),
+          ...(item.streamFormat ? { format: item.streamFormat } : {}),
+        });
+        setLocation(`/vod-player?${params.toString()}`);
+      } else {
+        setLocation(`/pelicula/${item.id}`);
+      }
     }
   }, [setLocation, isExpired]);
 

@@ -11,6 +11,8 @@ export interface HeroBannerItem {
   genre?: string | null;
   year?: number | null;
   type: 'movie' | 'series';
+  streamUrl?: string | null;
+  streamFormat?: string | null;
 }
 
 interface HeroBannerProps {
