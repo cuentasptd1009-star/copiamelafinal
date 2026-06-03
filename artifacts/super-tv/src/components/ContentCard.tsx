@@ -103,9 +103,9 @@ export const ContentCard = memo(function ContentCard({
   const isDirectVideo = !!(previewUrl && !ytId);
   const canPreview = !!(isDirectVideo || ytId) && !isTouchDevice;
 
-  // YouTube iframe: autoplay muted, skip to 10 min (600s) for a good scene, hide all branding/controls
+  // YouTube iframe: autoplay with sound, skip to 10 min for a good scene, hide all branding/controls
   const ytSrc = ytId
-    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&loop=1&playlist=${ytId}&start=600&enablejsapi=1`
+    ? `https://www.youtube.com/embed/${ytId}?autoplay=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&disablekb=1&fs=0&loop=1&playlist=${ytId}&start=600&enablejsapi=1`
     : null;
 
   const startTimer = () => {
@@ -135,12 +135,10 @@ export const ContentCard = memo(function ContentCard({
     }
   }, [previewActive]);
 
-  // Fade out the poster cover after YT initial overlays disappear (≈2s is enough)
+  // No poster delay for YouTube — video plays immediately with sound
   useEffect(() => {
     if (!previewActive || !ytId) return;
-    setYtCoverOpacity(1);
-    const t = setTimeout(() => setYtCoverOpacity(0), 2500);
-    return () => clearTimeout(t);
+    setYtCoverOpacity(0);
   }, [previewActive, ytId]);
 
   // Keep preview anchored to card while scrolling
@@ -316,16 +314,6 @@ export const ContentCard = memo(function ContentCard({
                     'linear-gradient(to left, #000 0%, transparent 18%)',
                   ].join(', '),
                 }} />
-                {/* Poster fades after 2.5s — sits above everything while YT initial overlays play out */}
-                <div
-                  style={{
-                    position: 'absolute', inset: 0, zIndex: 4,
-                    background: image && !imgError ? `url(${image}) center/cover no-repeat` : '#111',
-                    opacity: ytCoverOpacity,
-                    transition: 'opacity 0.8s ease',
-                    pointerEvents: 'none',
-                  }}
-                />
               </>
             ) : isDirectVideo ? (
               <video
