@@ -1029,6 +1029,17 @@ export default function Home() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const nk = normalizeKey(e);
+      const isBack = nk === 'Escape' || e.key === 'Backspace';
+
+      // TV remote back button — close any open overlay/modal first
+      if (isBack) {
+        if (apkMsg) { e.preventDefault(); setApkMsg(null); return; }
+        if (showShortcutHint) { e.preventDefault(); setShowShortcutHint(false); return; }
+        if (showHint) { e.preventDefault(); setShowHint(false); return; }
+        if (sidebarMouseOpen || zone === 'sidebar') { e.preventDefault(); setSidebarMouseOpen(false); setZone('rows'); return; }
+      }
+
       if (showProfile || showHint || showShortcutHint) return;
 
       const activeEl = document.activeElement;
@@ -1298,7 +1309,7 @@ export default function Home() {
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [zone, sidebarIdx, sidebarItems, rowIndex, colIndex, rowsFocusActive, heroBtnIndex, heroBannerIdx, activeRows, seriesRows, activeTab, playItem, playSeriesItem, actionButtons, showProfile, showHint, showShortcutHint, isListening, startListening, stopListening, showHero, hoveredHero, heroBannerItems, openKeyboard, searchQuery, openProfile, catFilterIdx, channelRows, selectedChannelCategory]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [zone, sidebarIdx, sidebarItems, rowIndex, colIndex, rowsFocusActive, heroBtnIndex, heroBannerIdx, activeRows, seriesRows, activeTab, playItem, playSeriesItem, actionButtons, showProfile, showHint, showShortcutHint, isListening, startListening, stopListening, showHero, hoveredHero, heroBannerItems, openKeyboard, searchQuery, openProfile, catFilterIdx, channelRows, selectedChannelCategory, apkMsg, sidebarMouseOpen]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-background text-white flex select-none" onMouseMove={() => { if (inputModeRef.current !== 'mouse') { inputModeRef.current = 'mouse'; setInputMode('mouse'); } }}>

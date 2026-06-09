@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'wouter';
+import { normalizeKey } from '@/lib/tv-remote';
 import { useLoginWithCode } from '@workspace/api-client-react';
 import { apiBase } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -202,14 +203,16 @@ export default function Login() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const nk = normalizeKey(e);
+      const isBack = nk === 'Escape' || e.key === 'Backspace';
       if (showHint || showShortcutHint || showApkMsg) {
-        if (e.key === 'Escape' || e.key === 'Backspace') { setShowHint(false); setShowShortcutHint(false); setShowApkMsg(''); }
+        if (isBack) { setShowHint(false); setShowShortcutHint(false); setShowApkMsg(''); }
         return;
       }
 
       const isTyping = document.activeElement === inputRef.current;
 
-      switch (e.key) {
+      switch (nk) {
         case 'ArrowDown':
           e.preventDefault();
           if (focusZone === 'input') setFocusZone('remember');

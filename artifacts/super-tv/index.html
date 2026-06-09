@@ -2,6 +2,7 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <link rel="icon" type="image/png" href="/icon-192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#090E17" />
@@ -32,6 +33,20 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
       (function() {
+        /* CSS Variables fallback: older Samsung/LG TVs lack support. Apply base colors
+           so the loading screen looks correct even without CSS vars. */
+        var cssVarsOk = (function() {
+          try { return window.CSS && window.CSS.supports && window.CSS.supports('color', 'var(--x)'); } catch(e) { return false; }
+        })();
+        if (!cssVarsOk) {
+          /* Inject minimal inline styles using hard-coded values */
+          var s = document.createElement('style');
+          s.textContent = 'body,html{background:#090E17;color:#fff;font-family:Inter,sans-serif}' +
+            '#app-loading{background:#090E17}' +
+            '#app-error{background:#090E17}' +
+            '#app-error button{background:#e11d48;color:#fff}';
+          document.head.appendChild(s);
+        }
         document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
 
         document.addEventListener('keydown', function(e) {
