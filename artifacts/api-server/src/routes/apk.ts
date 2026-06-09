@@ -6,7 +6,10 @@ import { extractToken, getAdminSession } from "../lib/auth.js";
 
 const router: IRouter = Router();
 
-const APK_DIR = path.join(process.cwd(), "uploads", "apk");
+const isServerless = process.env.VERCEL === "1" || process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined;
+const APK_DIR = isServerless
+  ? path.join("/tmp", "uploads", "apk")
+  : path.join(process.cwd(), "uploads", "apk");
 const APK_PATH = path.join(APK_DIR, "super-tv.apk");
 
 if (!fs.existsSync(APK_DIR)) {
