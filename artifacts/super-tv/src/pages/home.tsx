@@ -1319,7 +1319,7 @@ export default function Home() {
           return (
             <button
               key={item.key}
-              onClick={() => { setActiveTab(item.key); setTabIndex(i); setSearchQuery(''); setSearchInput(''); setRowIndex(0); setColIndex(0); setZone('rows'); setSidebarMouseOpen(false); }}
+              onClick={() => { setSidebarMouseOpen(true); setZone('sidebar'); const idx = sidebarItems.findIndex(it => it.kind === 'tab' && it.key === item.key); setSidebarIdx(idx >= 0 ? idx : i); }}
               title={item.label}
               className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-150
                 ${isActive ? 'bg-white/10 text-white' : 'text-white/35 hover:text-white hover:bg-white/8'}`}
@@ -1360,7 +1360,7 @@ export default function Home() {
       </div>
 
       {/* ── FULL SIDEBAR OVERLAY ── */}
-      {showSidebar && <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-sm" onClick={() => { setSidebarMouseOpen(false); setZone('rows'); }} />}
+      {showSidebar && <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-sm" />}
       <aside
         className={`fixed left-0 top-0 h-full z-[350] bg-background border-r border-white/8 flex flex-col transition-all duration-300 w-72 shadow-2xl
           ${showSidebar ? 'translate-x-0' : '-translate-x-full'}`}
