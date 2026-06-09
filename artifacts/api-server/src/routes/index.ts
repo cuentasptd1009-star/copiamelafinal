@@ -23,6 +23,7 @@ import archiveSearchRouter from "./archiveSearch.js";
 import youtubeSearchRouter from "./youtubeSearch.js";
 import userSearchRouter from "./userSearch.js";
 import checkUrlRouter from "./checkUrl.js";
+import apkRouter from "./apk.js";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use(archiveSearchRouter);
 router.use(youtubeSearchRouter);
 router.use(userSearchRouter);
 router.use(checkUrlRouter);
+router.use(apkRouter);
 
 export default router;

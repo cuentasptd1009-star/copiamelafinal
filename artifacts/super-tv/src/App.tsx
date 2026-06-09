@@ -15,6 +15,7 @@ const VodPlayerPage = lazy(() => import("@/pages/vod-player"));
 const AdminPanel = lazy(() => import("@/pages/admin"));
 const SubadminPanel = lazy(() => import("@/pages/subadmin"));
 const ActivarPage = lazy(() => import("@/pages/activar"));
+const DescargarPage = lazy(() => import("@/pages/descargar"));
 const MovieDetail = lazy(() => import("@/pages/movie-detail"));
 const SeriesDetail = lazy(() => import("@/pages/series-detail"));
 const MiniPlayer = lazy(() =>
@@ -91,6 +92,7 @@ function Router() {
       <Route path="/admin" component={AdminPanel} />
       <Route path="/subadmin" component={SubadminPanel} />
       <Route path="/activar" component={ActivarPage} />
+      <Route path="/descargar" component={DescargarPage} />
       <Route component={NotFound} />
     </Switch>
   );

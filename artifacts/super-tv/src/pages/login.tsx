@@ -181,11 +181,7 @@ export default function Login() {
   };
 
   const handleInstall = () => {
-    if (canInstall) {
-      install();
-    } else {
-      setShowHint(true);
-    }
+    window.location.href = `${apiBase}/api/apk/download`;
   };
 
   const handleShortcut = () => {
@@ -365,19 +361,17 @@ export default function Login() {
         </form>
 
         <div className="flex flex-col items-center gap-3 w-full">
-          {showInstallButton && (
-            <Button
-              ref={installRef}
-              variant="outline"
-              className={`w-full gap-2 border-primary/40 text-primary hover:bg-primary/10 ${focusZone === 'install' ? focusRing : ''}`}
-              onClick={handleInstall}
-              onFocus={() => setFocusZone('install')}
-              type="button"
-            >
-              <Download className="w-4 h-4" />
-              Instalar APK en dispositivos Android
-            </Button>
-          )}
+          <Button
+            ref={installRef}
+            variant="outline"
+            className={`w-full gap-2 border-primary/40 text-primary hover:bg-primary/10 ${focusZone === 'install' ? focusRing : ''}`}
+            onClick={handleInstall}
+            onFocus={() => setFocusZone('install')}
+            type="button"
+          >
+            <Download className="w-4 h-4" />
+            Instalar APK en dispositivos Android
+          </Button>
           <Button
             ref={shortcutRef}
             variant="outline"

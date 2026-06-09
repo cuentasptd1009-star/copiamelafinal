@@ -4399,6 +4399,109 @@ function PackagesManager() {
   );
 }
 
+function ApkUploadSection() {
+  const { toast } = useToast();
+  const [apkInfo, setApkInfo] = useState<{ available: boolean; size?: number; updatedAt?: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadInfo = useCallback(async () => {
+    try {
+      const r = await fetch(`${apiBase}/api/apk/info`);
+      const d = await r.json();
+      setApkInfo(d);
+    } catch { setApkInfo({ available: false }); }
+  }, []);
+
+  useEffect(() => { loadInfo(); }, [loadInfo]);
+
+  const handleUpload = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.apk')) {
+      toast({ variant: 'destructive', title: 'Archivo inválido', description: 'Solo se permiten archivos .apk' });
+      return;
+    }
+    const token = localStorage.getItem('admin_token') || '';
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('apk', file);
+      const r = await fetch(`${apiBase}/api/admin/apk/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'Error al subir');
+      toast({ title: 'APK subido correctamente', description: 'El botón de instalar ya descargará el nuevo APK.' });
+      await loadInfo();
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Error', description: e.message });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const fmtSize = (bytes: number) => {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / 1024).toFixed(0)} KB`;
+  };
+
+  return (
+    <Card className="bg-background border-border">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Upload className="w-4 h-4" /> APK para Android
+          {apkInfo?.available ? (
+            <span className="ml-auto text-xs text-green-500 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> Disponible
+            </span>
+          ) : (
+            <span className="ml-auto text-xs text-yellow-500 flex items-center gap-1">
+              <XCircle className="w-3 h-3" /> Sin APK
+            </span>
+          )}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          Sube el APK que los usuarios descargarán al tocar "Instalar APK" o visitar <span className="font-mono">/descargar</span>.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {apkInfo?.available && (
+          <div className="bg-muted/50 rounded-md p-3 text-xs text-muted-foreground space-y-1">
+            <p><span className="text-foreground font-medium">Tamaño:</span> {apkInfo.size ? fmtSize(apkInfo.size) : '—'}</p>
+            {apkInfo.updatedAt && (
+              <p><span className="text-foreground font-medium">Subido:</span> {new Date(apkInfo.updatedAt).toLocaleString('es')}</p>
+            )}
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".apk,application/vnd.android.package-archive"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
+        />
+        <div className="flex gap-2">
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex-1"
+          >
+            {uploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Subiendo...</> : <><Upload className="w-4 h-4 mr-2" />{apkInfo?.available ? 'Reemplazar APK' : 'Subir APK'}</>}
+          </Button>
+          {apkInfo?.available && (
+            <Button variant="outline" asChild>
+              <a href={`${apiBase}/api/apk/download`} download="super-tv.apk">
+                <Download className="w-4 h-4" />
+              </a>
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SettingsManager() {
   const { toast } = useToast();
   const changePasswordMutation = useAdminChangePassword();
@@ -4552,6 +4655,9 @@ function SettingsManager() {
       <h3 className="text-lg font-medium flex items-center gap-2">
         <Settings className="w-5 h-5" /> Configuración
       </h3>
+
+      {/* APK Upload */}
+      <ApkUploadSection />
 
       {/* Terabox Cookies */}
       <Card className="bg-background border-border">

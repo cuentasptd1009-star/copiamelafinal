@@ -630,26 +630,24 @@ export default function Home() {
     const toSeries = (s: any): HeroBannerItem => ({ id: s.id, title: s.title, description: s.description, banner: s.banner, poster: s.poster, category: s.category, genre: s.genre, year: s.year, type: 'series' as const });
 
     if (activeTab === 'home') {
-      const anyMovies = (movies as any[]).filter(m => m.banner || m.poster);
-      const anySeries = seriesList.filter(s => s.banner || s.poster);
-      const pool = shuffle([...anyMovies.map(toMovie), ...anySeries.map(toSeries)]);
-      return pool.slice(0, Math.min(10, pool.length));
+      const pool = shuffle((movies as any[]).filter(m => m.banner || m.poster).map(toMovie));
+      return pool;
     }
     if (activeTab === 'movies') {
       const pool = shuffle((movies as any[]).filter(m => m.banner || m.poster).map(toMovie));
-      return pool.slice(0, Math.min(10, pool.length));
+      return pool;
     }
     if (activeTab === 'series' && seriesList.length > 0) {
       const pool = shuffle(seriesList.filter(s => s.banner || s.poster).map(toSeries));
-      return pool.slice(0, Math.min(10, pool.length));
+      return pool;
     }
     return [];
   }, [activeTab, movies, seriesList]);
 
   useEffect(() => {
-    if (heroBannerItems.length > 1 && !heroBannerInitialized.current) {
-      heroBannerInitialized.current = true;
+    if (heroBannerItems.length > 0) {
       setHeroBannerIdx(Math.floor(Math.random() * heroBannerItems.length));
+      heroBannerInitialized.current = true;
     }
   }, [heroBannerItems.length]);
 
@@ -975,12 +973,12 @@ export default function Home() {
     }
   }, []);
   const handleLogout = () => { clearTokens(); setLocation('/'); };
-  const handleInstall = () => { if (canInstall) install(); else setShowHint(true); };
+  const handleInstall = () => { window.location.href = `${apiBase}/api/apk/download`; };
   const handleShortcut = () => { if (canInstall) { install(); return; } setShowShortcutHint(true); };
 
   const actionButtons = useMemo(() => [
     ...(session?.type === 'user' ? [{ key: 'profile', label: 'Mi perfil', action: openProfile, icon: UserCircle2 }] : []),
-    ...(showInstallButton ? [{ key: 'install', label: 'Instalar app para Android', action: handleInstall, icon: Download }] : []),
+    { key: 'install', label: 'Instalar app para Android', action: handleInstall, icon: Download },
     { key: 'shortcut', label: 'Acceso directo', action: handleShortcut, icon: Smartphone },
     { key: 'logout', label: 'Salir', action: handleLogout, icon: LogOut },
   ], [session, showInstallButton, openProfile, handleInstall, handleLogout]);
@@ -1310,8 +1308,6 @@ export default function Home() {
       {/* ── NARROW ICON RAIL (desktop, always visible) ── */}
       <div
         className="hidden md:flex fixed left-0 top-0 h-full z-50 w-16 bg-background border-r border-white/5 flex-col items-center py-4 gap-1"
-        onMouseEnter={openSidebarHover}
-        onMouseLeave={closeSidebarHover}
       >
         <div className="mb-3 flex items-center justify-center w-10 h-10">
           <img src={logo} alt="Super TV" className="h-7 w-auto object-contain" />
@@ -1324,7 +1320,6 @@ export default function Home() {
             <button
               key={item.key}
               onClick={() => { setActiveTab(item.key); setTabIndex(i); setSearchQuery(''); setSearchInput(''); setRowIndex(0); setColIndex(0); setZone('rows'); setSidebarMouseOpen(false); }}
-              onMouseEnter={() => setActiveTab(item.key)}
               title={item.label}
               className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-150
                 ${isActive ? 'bg-white/10 text-white' : 'text-white/35 hover:text-white hover:bg-white/8'}`}
@@ -1369,8 +1364,6 @@ export default function Home() {
       <aside
         className={`fixed left-0 top-0 h-full z-[350] bg-background border-r border-white/8 flex flex-col transition-all duration-300 w-72 shadow-2xl
           ${showSidebar ? 'translate-x-0' : '-translate-x-full'}`}
-        onMouseEnter={openSidebarHover}
-        onMouseLeave={closeSidebarHover}
       >
 
         {/* Logo */}
@@ -1439,7 +1432,6 @@ export default function Home() {
               <button
                 key={item.key}
                 onClick={() => { setActiveTab(item.key); setTabIndex(i); setSearchQuery(''); setSearchInput(''); setRowIndex(0); setColIndex(0); setSidebarMouseOpen(false); setZone('rows'); }}
-                onMouseEnter={() => setActiveTab(item.key)}
                 className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150
                   ${isActive ? 'bg-white/12 text-white' : 'text-white/55 hover:text-white hover:bg-white/7'}
                   ${isFocused ? 'ring-2 ring-primary/60' : ''}`}
