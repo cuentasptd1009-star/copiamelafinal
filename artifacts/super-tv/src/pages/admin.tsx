@@ -4400,108 +4400,163 @@ function PackagesManager() {
 }
 
 function ApkUploadSection() {
-  const { toast } = useToast();
-  const [apkInfo, setApkInfo] = useState<{ available: boolean; size?: number; updatedAt?: string } | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+    const { toast } = useToast();
+    const [apkInfo, setApkInfo] = useState<{ available: boolean; size?: number; updatedAt?: string } | null>(null);
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadInfo = useCallback(async () => {
-    try {
-      const r = await fetch(`${apiBase}/api/apk/info`);
-      const d = await r.json();
-      setApkInfo(d);
-    } catch { setApkInfo({ available: false }); }
-  }, []);
+    const loadInfo = async () => {
+      try {
+        const r = await fetch(`${apiBase}/api/apk/info`);
+        const d = await r.json();
+        setApkInfo(d);
+      } catch { setApkInfo({ available: false }); }
+    };
+    useEffect(() => { loadInfo(); }, []);
 
-  useEffect(() => { loadInfo(); }, [loadInfo]);
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.apk')) {
+        toast({ variant: 'destructive', title: 'Archivo inválido', description: 'Solo se permiten archivos .apk' });
+        return;
+      }
+      const adminToken = localStorage.getItem('admin_token') || localStorage.getItem('user_token') || '';
+      setUploading(true);
+      setUploadProgress(0);
+      try {
+        // Step 1: Get Cloudinary signed upload params from backend
+        const paramsRes = await fetch(`${apiBase}/api/admin/apk/upload-params`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+        });
+        if (!paramsRes.ok) {
+          const err = await paramsRes.json().catch(() => ({}));
+          throw new Error(err.error || 'No se pudo obtener parámetros de subida');
+        }
+        const params = await paramsRes.json();
 
-  const handleUpload = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.apk')) {
-      toast({ variant: 'destructive', title: 'Archivo inválido', description: 'Solo se permiten archivos .apk' });
-      return;
+        // Step 2: Upload APK directly to Cloudinary (bypasses Vercel 4.5MB limit)
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('public_id', params.publicId);
+        fd.append('api_key', params.apiKey);
+        fd.append('timestamp', String(params.timestamp));
+        fd.append('signature', params.signature);
+        fd.append('overwrite', 'true');
+
+        const cloudUrl: string = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100));
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const result = JSON.parse(xhr.responseText);
+                resolve(result.secure_url as string);
+              } catch { reject(new Error('Respuesta inválida de Cloudinary')); }
+            } else {
+              reject(new Error(`Error al subir a Cloudinary: ${xhr.status}`));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Error de red al subir el APK'));
+          xhr.open('POST', params.uploadUrl);
+          xhr.send(fd);
+        });
+
+        // Step 3: Notify backend of successful upload
+        const confirmRes = await fetch(`${apiBase}/api/admin/apk/confirm-upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+          body: JSON.stringify({ url: cloudUrl, size: file.size }),
+        });
+        if (!confirmRes.ok) throw new Error('Error al guardar la información del APK');
+
+        await loadInfo();
+        toast({ title: 'APK subido correctamente', description: 'El botón de instalar ya descargará el nuevo APK.' });
+      } catch (err: any) {
+        toast({ variant: 'destructive', title: 'Error al subir APK', description: err?.message || 'Error desconocido' });
+      } finally {
+        setUploading(false);
+        setUploadProgress(0);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    function fmtSize(bytes: number) {
+      if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      return (bytes / 1024).toFixed(0) + ' KB';
     }
-    const token = localStorage.getItem('admin_token') || '';
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('apk', file);
-      const r = await fetch(`${apiBase}/api/admin/apk/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-      if (!r.ok) throw new Error((await r.json()).error || 'Error al subir');
-      toast({ title: 'APK subido correctamente', description: 'El botón de instalar ya descargará el nuevo APK.' });
-      await loadInfo();
-    } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Error', description: e.message });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
 
-  const fmtSize = (bytes: number) => {
-    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / 1024).toFixed(0)} KB`;
-  };
-
-  return (
-    <Card className="bg-background border-border">
-      <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          <Upload className="w-4 h-4" /> APK para Android
-          {apkInfo?.available ? (
-            <span className="ml-auto text-xs text-green-500 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> Disponible
-            </span>
-          ) : (
-            <span className="ml-auto text-xs text-yellow-500 flex items-center gap-1">
-              <XCircle className="w-3 h-3" /> Sin APK
-            </span>
+    return (
+      <Card className="bg-card border-white/10">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Upload className="w-4 h-4" /> APK para Android
+            {apkInfo?.available ? (
+              <span className="ml-auto text-xs text-green-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Disponible
+              </span>
+            ) : (
+              <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
+                <XCircle className="w-3 h-3" /> Sin APK
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Sube el APK que los usuarios descargarán al tocar "Instalar APK" o visitar <span className="font-mono">/descargar</span>.
+          </p>
+          {apkInfo?.available && (
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p><span className="text-foreground font-medium">Tamaño:</span> {apkInfo.size ? fmtSize(apkInfo.size) : '—'}</p>
+              {apkInfo.updatedAt && (
+                <p><span className="text-foreground font-medium">Subido:</span> {new Date(apkInfo.updatedAt).toLocaleString('es')}</p>
+              )}
+            </div>
           )}
-        </CardTitle>
-        <p className="text-xs text-muted-foreground mt-1">
-          Sube el APK que los usuarios descargarán al tocar "Instalar APK" o visitar <span className="font-mono">/descargar</span>.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {apkInfo?.available && (
-          <div className="bg-muted/50 rounded-md p-3 text-xs text-muted-foreground space-y-1">
-            <p><span className="text-foreground font-medium">Tamaño:</span> {apkInfo.size ? fmtSize(apkInfo.size) : '—'}</p>
-            {apkInfo.updatedAt && (
-              <p><span className="text-foreground font-medium">Subido:</span> {new Date(apkInfo.updatedAt).toLocaleString('es')}</p>
+          {uploading && (
+            <div className="space-y-1">
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-200" style={{ width: `${uploadProgress}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground">{uploadProgress}% subido a Cloudinary...</p>
+            </div>
+          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".apk,application/vnd.android.package-archive"
+              className="hidden"
+              id="apk-upload-input"
+              onChange={handleFileChange}
+              disabled={uploading}
+            />
+            <Button asChild disabled={uploading}>
+              <label htmlFor="apk-upload-input" className="cursor-pointer">
+                {uploading
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Subiendo {uploadProgress}%</>
+                  : <><Upload className="w-4 h-4 mr-2" />{apkInfo?.available ? 'Reemplazar APK' : 'Subir APK'}</>
+                }
+              </label>
+            </Button>
+            {apkInfo?.available && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={`${apiBase}/api/apk/download`} download="super-tv.apk">
+                  <Download className="w-4 h-4" />
+                </a>
+              </Button>
             )}
           </div>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".apk,application/vnd.android.package-archive"
-          className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
-        />
-        <div className="flex gap-2">
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex-1"
-          >
-            {uploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Subiendo...</> : <><Upload className="w-4 h-4 mr-2" />{apkInfo?.available ? 'Reemplazar APK' : 'Subir APK'}</>}
-          </Button>
-          {apkInfo?.available && (
-            <Button variant="outline" asChild>
-              <a href={`${apiBase}/api/apk/download`} download="super-tv.apk">
-                <Download className="w-4 h-4" />
-              </a>
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+        </CardContent>
+      </Card>
+    );
+  }
 
+  
 function SettingsManager() {
   const { toast } = useToast();
   const changePasswordMutation = useAdminChangePassword();
