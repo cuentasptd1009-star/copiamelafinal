@@ -97,10 +97,8 @@ export const ContentCard = memo(function ContentCard({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const ytIframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  const isTouchDevice = typeof window !== 'undefined' && (
-    window.matchMedia('(hover: none) and (pointer: coarse)').matches ||
-    navigator.maxTouchPoints > 0
-  );
+  const isTouchDevice = typeof window !== 'undefined' &&
+    window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 
   const ytId = previewUrl ? extractYouTubeId(previewUrl) : null;
   const isDirectVideo = !!(previewUrl && !ytId);
