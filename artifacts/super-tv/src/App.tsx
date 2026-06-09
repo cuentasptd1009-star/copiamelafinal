@@ -7,23 +7,20 @@ import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { getToken } from "@/lib/auth";
 import { SplashScreen } from "@/components/SplashScreen";
 
-const NotFound = lazy(() => import("@/pages/not-found"));
-const Login = lazy(() => import("@/pages/login"));
-const Home = lazy(() => import("@/pages/home"));
-const PlayerPage = lazy(() => import("@/pages/player"));
-const VodPlayerPage = lazy(() => import("@/pages/vod-player"));
+import Login from "@/pages/login";
+import Home from "@/pages/home";
+import PlayerPage from "@/pages/player";
+import VodPlayerPage from "@/pages/vod-player";
+import ActivarPage from "@/pages/activar";
+import DescargarPage from "@/pages/descargar";
+import MovieDetail from "@/pages/movie-detail";
+import SeriesDetail from "@/pages/series-detail";
+import NotFound from "@/pages/not-found";
+import { MiniPlayer } from "@/components/MiniPlayer";
+import { TvKeyboard } from "@/components/TvKeyboard";
+
 const AdminPanel = lazy(() => import("@/pages/admin"));
 const SubadminPanel = lazy(() => import("@/pages/subadmin"));
-const ActivarPage = lazy(() => import("@/pages/activar"));
-const DescargarPage = lazy(() => import("@/pages/descargar"));
-const MovieDetail = lazy(() => import("@/pages/movie-detail"));
-const SeriesDetail = lazy(() => import("@/pages/series-detail"));
-const MiniPlayer = lazy(() =>
-  import("@/components/MiniPlayer").then((m) => ({ default: m.MiniPlayer }))
-);
-const TvKeyboard = lazy(() =>
-  import("@/components/TvKeyboard").then((m) => ({ default: m.TvKeyboard }))
-);
 
 setAuthTokenGetter(() => {
   const path = window.location.pathname;
@@ -62,9 +59,7 @@ function HomeRoute() {
 
   return (
     <>
-      <Suspense fallback={null}>
-        <Home />
-      </Suspense>
+      <Home />
       {showSplash && <SplashScreen onDone={handleSplashDone} />}
     </>
   );
@@ -103,14 +98,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Suspense fallback={null}>
-            <Router />
-            <MiniPlayer />
-          </Suspense>
+          <Router />
+          <MiniPlayer />
         </WouterRouter>
-        <Suspense fallback={null}>
-          <TvKeyboard />
-        </Suspense>
+        <TvKeyboard />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

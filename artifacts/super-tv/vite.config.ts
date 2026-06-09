@@ -22,17 +22,18 @@ export default defineConfig({
     tailwindcss(),
     legacy({
       targets: [
-        'chrome >= 47',
+        'chrome >= 38',
         'safari >= 9',
-        'firefox >= 44',
+        'firefox >= 40',
         'ios >= 9',
         'android >= 4.4',
-        'samsung >= 4',
-        'opera >= 36',
+        'samsung >= 2',
+        'opera >= 30',
       ],
       modernPolyfills: true,
       renderLegacyChunks: true,
       polyfills: true,
+      externalSystemjs: false,
     }),
     runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
@@ -60,7 +61,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    target: ['es2015', 'chrome49', 'safari9'],
+    target: ['es2015', 'chrome47', 'safari9'],
   },
   server: {
     port,

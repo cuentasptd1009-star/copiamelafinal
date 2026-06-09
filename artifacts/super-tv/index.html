@@ -32,14 +32,191 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
+      /* ===== POLYFILLS for old TV browsers (Samsung 2014+, LG 2014+, Chrome 38+) ===== */
       (function() {
-        /* CSS Variables fallback: older Samsung/LG TVs lack support. Apply base colors
-           so the loading screen looks correct even without CSS vars. */
+
+        /* Object.assign */
+        if (typeof Object.assign !== 'function') {
+          Object.assign = function(target) {
+            if (target == null) throw new TypeError('Cannot convert undefined or null to object');
+            var to = Object(target);
+            for (var i = 1; i < arguments.length; i++) {
+              var src = arguments[i];
+              if (src != null) { for (var k in src) { if (Object.prototype.hasOwnProperty.call(src, k)) to[k] = src[k]; } }
+            }
+            return to;
+          };
+        }
+
+        /* Array.from */
+        if (!Array.from) {
+          Array.from = function(arrayLike) {
+            return Array.prototype.slice.call(arrayLike);
+          };
+        }
+
+        /* Array.prototype.includes */
+        if (!Array.prototype.includes) {
+          Array.prototype.includes = function(val) {
+            return this.indexOf(val) !== -1;
+          };
+        }
+
+        /* String.prototype.includes */
+        if (!String.prototype.includes) {
+          String.prototype.includes = function(search) {
+            return this.indexOf(search) !== -1;
+          };
+        }
+
+        /* String.prototype.startsWith */
+        if (!String.prototype.startsWith) {
+          String.prototype.startsWith = function(s) { return this.slice(0, s.length) === s; };
+        }
+
+        /* String.prototype.endsWith */
+        if (!String.prototype.endsWith) {
+          String.prototype.endsWith = function(s) { return this.slice(-s.length) === s; };
+        }
+
+        /* Number.isFinite / Number.isNaN / Number.isInteger */
+        if (!Number.isFinite) Number.isFinite = function(v) { return typeof v === 'number' && isFinite(v); };
+        if (!Number.isNaN)    Number.isNaN    = function(v) { return typeof v === 'number' && isNaN(v); };
+        if (!Number.isInteger) Number.isInteger = function(v) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v; };
+        if (!Number.parseInt)  Number.parseInt  = parseInt;
+        if (!Number.parseFloat) Number.parseFloat = parseFloat;
+
+        /* Math.sign, Math.trunc, Math.log2 */
+        if (!Math.sign)  Math.sign  = function(x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
+        if (!Math.trunc) Math.trunc = function(x) { return x < 0 ? Math.ceil(x) : Math.floor(x); };
+        if (!Math.log2)  Math.log2  = function(x) { return Math.log(x) / Math.LN2; };
+        if (!Math.log10) Math.log10 = function(x) { return Math.log(x) / Math.LN10; };
+        if (!Math.cbrt)  Math.cbrt  = function(x) { var y = Math.pow(Math.abs(x), 1/3); return x < 0 ? -y : y; };
+        if (!Math.hypot) Math.hypot = function() { var s=0; for(var i=0;i<arguments.length;i++) s+=arguments[i]*arguments[i]; return Math.sqrt(s); };
+        if (!Math.clz32) Math.clz32 = function(x) { if(x==null||x===0) return 32; x = x >>> 0; var n=0; if((x&0xFFFF0000)===0){n+=16;x<<=16;} if((x&0xFF000000)===0){n+=8;x<<=8;} if((x&0xF0000000)===0){n+=4;x<<=4;} if((x&0xC0000000)===0){n+=2;x<<=2;} if((x&0x80000000)===0)n+=1; return n; };
+        if (!Math.fround) Math.fround = function(x) { return new Float32Array([x])[0]; };
+        if (!Math.imul)   Math.imul = function(a,b) { var ah=(a>>>16)&0xffff,al=a&0xffff,bh=(b>>>16)&0xffff,bl=b&0xffff; return (al*bl)+((((ah*bl)+(al*bh))<<16)>>>0)|0; };
+
+        /* Promise polyfill (tiny) — required for React on Chrome 38 */
+        if (typeof Promise === 'undefined') {
+          /* Minimal Promise/A+ polyfill */
+          var PENDING=0,FULFILLED=1,REJECTED=2;
+          function P(fn) {
+            var state=PENDING,val,cbs=[];
+            function resolve(v) { if(state!==PENDING)return; if(v&&typeof v.then==='function'){v.then(resolve,reject);return;} state=FULFILLED;val=v; cbs.forEach(function(c){c.onFulfilled&&c.onFulfilled(val);}); }
+            function reject(r)  { if(state!==PENDING)return; state=REJECTED;val=r; cbs.forEach(function(c){c.onRejected&&c.onRejected(val);}); }
+            this.then=function(onFulfilled,onRejected){
+              return new P(function(res,rej){
+                function handle(){ try{ var r=typeof onFulfilled==='function'?onFulfilled(val):val; res(r); }catch(e){rej(e);} }
+                function hrej() { try{ var r=typeof onRejected==='function'?onRejected(val):val; if(typeof onRejected==='function')res(r); else rej(r); }catch(e){rej(e);} }
+                if(state===FULFILLED) setTimeout(handle,0);
+                else if(state===REJECTED) setTimeout(hrej,0);
+                else cbs.push({onFulfilled:function(){setTimeout(handle,0);},onRejected:function(){setTimeout(hrej,0);}});
+              });
+            };
+            this['catch']=function(fn){return this.then(null,fn);};
+            try{fn(resolve,reject);}catch(e){reject(e);}
+          }
+          P.resolve=function(v){return new P(function(r){r(v);});};
+          P.reject=function(v){return new P(function(_,r){r(v);});};
+          P.all=function(ps){return new P(function(res,rej){if(!ps.length)return res([]); var results=[],done=0; ps.forEach(function(p,i){P.resolve(p).then(function(v){results[i]=v;if(++done===ps.length)res(results);},rej);});});};
+          P.race=function(ps){return new P(function(res,rej){ps.forEach(function(p){P.resolve(p).then(res,rej);});});};
+          P.allSettled=function(ps){return P.all(ps.map(function(p){return P.resolve(p).then(function(v){return{status:'fulfilled',value:v};},function(r){return{status:'rejected',reason:r};});}));};
+          window.Promise = P;
+        } else if (!Promise.allSettled) {
+          Promise.allSettled = function(ps) {
+            return Promise.all(ps.map(function(p) {
+              return Promise.resolve(p).then(function(v){return{status:'fulfilled',value:v};}, function(r){return{status:'rejected',reason:r};});
+            }));
+          };
+        }
+
+        /* crypto.randomUUID polyfill */
+        if (!window.crypto) window.crypto = {};
+        if (!window.crypto.getRandomValues) {
+          window.crypto.getRandomValues = function(arr) {
+            for (var i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
+            return arr;
+          };
+        }
+        if (!window.crypto.randomUUID) {
+          window.crypto.randomUUID = function() {
+            var b = new Uint8Array(16);
+            window.crypto.getRandomValues(b);
+            b[6] = (b[6] & 0x0f) | 0x40;
+            b[8] = (b[8] & 0x3f) | 0x80;
+            function h(n) { return ('00'+n.toString(16)).slice(-2); }
+            return h(b[0])+h(b[1])+h(b[2])+h(b[3])+'-'+h(b[4])+h(b[5])+'-'+h(b[6])+h(b[7])+'-'+h(b[8])+h(b[9])+'-'+h(b[10])+h(b[11])+h(b[12])+h(b[13])+h(b[14])+h(b[15]);
+          };
+        }
+
+        /* requestAnimationFrame polyfill */
+        var lastTime = 0;
+        if (!window.requestAnimationFrame) {
+          window.requestAnimationFrame = function(cb) {
+            var now = Date.now(), next = Math.max(lastTime + 16, now);
+            return setTimeout(function() { cb(lastTime = next); }, next - now);
+          };
+          window.cancelAnimationFrame = clearTimeout;
+        }
+
+        /* requestIdleCallback polyfill */
+        if (!window.requestIdleCallback) {
+          window.requestIdleCallback = function(cb, opts) {
+            var start = Date.now();
+            return setTimeout(function() {
+              cb({ didTimeout: false, timeRemaining: function() { return Math.max(0, 50 - (Date.now() - start)); } });
+            }, opts && opts.timeout ? opts.timeout : 1);
+          };
+          window.cancelIdleCallback = clearTimeout;
+        }
+
+        /* queueMicrotask polyfill */
+        if (!window.queueMicrotask) {
+          window.queueMicrotask = function(fn) {
+            Promise.resolve().then(fn).catch(function(e) { setTimeout(function() { throw e; }); });
+          };
+        }
+
+        /* structuredClone polyfill */
+        if (!window.structuredClone) {
+          window.structuredClone = function(obj) {
+            try { return JSON.parse(JSON.stringify(obj)); } catch(e) { return obj; }
+          };
+        }
+
+        /* globalThis polyfill */
+        if (typeof globalThis === 'undefined') {
+          (function() {
+            Object.defineProperty(Object.prototype, '__magic__', {
+              get: function() { return this; },
+              configurable: true
+            });
+            /* eslint-disable-next-line no-undef */
+            var g = __magic__;
+            delete Object.prototype.__magic__;
+            if (typeof g === 'undefined') { g = window; }
+            g.globalThis = g;
+          }());
+        }
+
+        /* CustomEvent polyfill (IE/old WebKit) */
+        if (typeof window.CustomEvent !== 'function') {
+          function CustomEvent(event, params) {
+            params = params || { bubbles: false, cancelable: false, detail: null };
+            var evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent(event, params.bubbles, params.cancelable, params.detail);
+            return evt;
+          }
+          CustomEvent.prototype = window.Event.prototype;
+          window.CustomEvent = CustomEvent;
+        }
+
+        /* CSS Variables fallback: older Samsung/LG TVs lack support */
         var cssVarsOk = (function() {
           try { return window.CSS && window.CSS.supports && window.CSS.supports('color', 'var(--x)'); } catch(e) { return false; }
         })();
         if (!cssVarsOk) {
-          /* Inject minimal inline styles using hard-coded values */
           var s = document.createElement('style');
           s.textContent = 'body,html{background:#090E17;color:#fff;font-family:Inter,sans-serif}' +
             '#app-loading{background:#090E17}' +
@@ -47,6 +224,7 @@
             '#app-error button{background:#e11d48;color:#fff}';
           document.head.appendChild(s);
         }
+
         document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
 
         document.addEventListener('keydown', function(e) {
@@ -62,15 +240,27 @@
     </script>
   <style>
     #app-loading {
+      display: -webkit-box;
+      display: -webkit-flex;
+      display: -ms-flexbox;
       display: flex;
+      -webkit-box-orient: vertical;
+      -webkit-box-direction: normal;
+      -webkit-flex-direction: column;
+      -ms-flex-direction: column;
       flex-direction: column;
+      -webkit-box-align: center;
+      -webkit-align-items: center;
+      -ms-flex-align: center;
       align-items: center;
+      -webkit-box-pack: center;
+      -webkit-justify-content: center;
+      -ms-flex-pack: center;
       justify-content: center;
       min-height: 100vh;
       background: #090E17;
       color: #ffffff;
       font-family: Inter, sans-serif;
-      gap: 24px;
     }
     #app-loading .spinner {
       width: 48px;
@@ -78,14 +268,27 @@
       border: 4px solid rgba(255,255,255,0.15);
       border-top-color: #e11d48;
       border-radius: 50%;
+      margin-bottom: 24px;
+      -webkit-animation: spin 0.9s linear infinite;
       animation: spin 0.9s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @-webkit-keyframes spin { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+    @keyframes spin { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
     #app-loading p { color: rgba(255,255,255,0.5); font-size: 14px; margin: 0; }
     #app-error {
       display: none;
+      -webkit-box-orient: vertical;
+      -webkit-box-direction: normal;
+      -webkit-flex-direction: column;
+      -ms-flex-direction: column;
       flex-direction: column;
+      -webkit-box-align: center;
+      -webkit-align-items: center;
+      -ms-flex-align: center;
       align-items: center;
+      -webkit-box-pack: center;
+      -webkit-justify-content: center;
+      -ms-flex-pack: center;
       justify-content: center;
       min-height: 100vh;
       background: #090E17;
@@ -93,10 +296,9 @@
       font-family: Inter, sans-serif;
       text-align: center;
       padding: 32px;
-      gap: 16px;
     }
-    #app-error h2 { font-size: 20px; margin: 0; }
-    #app-error p { color: rgba(255,255,255,0.5); font-size: 13px; margin: 0; max-width: 320px; line-height: 1.6; }
+    #app-error h2 { font-size: 20px; margin: 0 0 16px 0; }
+    #app-error p { color: rgba(255,255,255,0.5); font-size: 13px; margin: 0 0 16px 0; max-width: 320px; line-height: 1.6; }
     #app-error button {
       margin-top: 8px;
       padding: 10px 24px;
@@ -122,16 +324,23 @@
     <div id="root"></div>
     <script>
       window.__appStarted = false;
+      var __errorShown = false;
       function __showAppError() {
-        if (!window.__appStarted) {
+        if (!window.__appStarted && !__errorShown) {
+          __errorShown = true;
           document.getElementById('app-loading').style.display = 'none';
           document.getElementById('app-error').style.display = 'flex';
         }
       }
-      window.onerror = function() { __showAppError(); };
-      window.onunhandledrejection = function() { __showAppError(); };
-      window.addEventListener('unhandledrejection', function() { __showAppError(); });
-      setTimeout(__showAppError, 25000);
+      /* Only show error on script errors — NOT on unhandled promise rejections
+         (React Query and other libs produce benign rejections on old TV browsers) */
+      window.onerror = function(msg, src, line, col, err) {
+        /* Ignore errors from extensions or SW */
+        if (src && (src.indexOf('chrome-extension') !== -1 || src.indexOf('moz-extension') !== -1)) return;
+        __showAppError();
+      };
+      /* Extend timeout to 40s for slow TV browsers */
+      setTimeout(__showAppError, 40000);
     </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>
