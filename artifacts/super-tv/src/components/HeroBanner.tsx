@@ -75,8 +75,7 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
         <div className="absolute inset-0 bg-black" />
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/60 to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[hsl(0,0%,4%)] via-black/50 to-black/20" />
+      <div className="absolute bottom-0 left-0 right-0 h-2/5 bg-gradient-to-t from-black/80 to-transparent" />
 
       {focusedBtnIndex !== null && focusedBtnIndex !== undefined && (
         <div className="absolute inset-0 ring-inset ring-2 ring-primary/30 pointer-events-none rounded-none" />
