@@ -9,6 +9,7 @@ import { SplashScreen } from "@/components/SplashScreen";
 
 import Login from "@/pages/login";
 import Home from "@/pages/home";
+import { isLegacyBrowser } from "@/lib/browser-compat";
 import PlayerPage from "@/pages/player";
 import VodPlayerPage from "@/pages/vod-player";
 import ActivarPage from "@/pages/activar";
@@ -50,7 +51,7 @@ function markSplashShown() {
 }
 
 function HomeRoute() {
-  const [showSplash, setShowSplash] = useState(() => !splashAlreadyShown());
+  const [showSplash, setShowSplash] = useState(() => !splashAlreadyShown() && !isLegacyBrowser());
 
   const handleSplashDone = useCallback(() => {
     markSplashShown();

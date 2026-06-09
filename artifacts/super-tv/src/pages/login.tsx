@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { setToken, getToken } from '@/lib/auth';
 import { usePwaInstall } from '@/hooks/use-pwa-install';
 import { useTvKeyboard } from '@/hooks/use-tv-keyboard';
+import { isLegacyBrowser } from '@/lib/browser-compat';
 import { Download, Share2, Smartphone, QrCode, X, Tv, CheckCircle, Loader2, Eye, EyeOff, Bookmark, BookmarkCheck } from 'lucide-react';
 import logo from '@assets/logo_supertv.png';
 
@@ -43,6 +44,7 @@ function isTvDevice(): boolean {
 }
 
 export default function Login() {
+  const legacy = isLegacyBrowser();
   const [code, setCode] = useState(() => {
     try { return localStorage.getItem('supertv_remembered_code') || ''; } catch { return ''; }
   });
@@ -285,8 +287,8 @@ export default function Login() {
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md flex flex-col items-center space-y-8 animate-in fade-in zoom-in duration-500">
-        <img src={logo} alt="Super TV Logo" className="w-48 h-auto drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
+      <div className={`w-full max-w-md flex flex-col items-center space-y-8 ${legacy ? '' : 'animate-in fade-in zoom-in duration-500'}`}>
+        <img src={logo} alt="Super TV Logo" className={`w-48 h-auto ${legacy ? '' : 'drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]'}`} />
 
         <form onSubmit={handleSubmit} className="w-full space-y-4">
           <div className="space-y-2">
@@ -375,30 +377,34 @@ export default function Login() {
         </form>
 
         <div className="flex flex-col items-center gap-3 w-full">
-          <Button
-            ref={installRef}
-            variant="outline"
-            className={`w-full gap-2 border-primary/40 text-primary hover:bg-primary/10 ${focusZone === 'install' ? focusRing : ''}`}
-            onClick={handleInstall}
-            onFocus={() => setFocusZone('install')}
-            type="button"
-          >
-            <Download className="w-4 h-4" />
-            Instalar APK en dispositivos Android
-          </Button>
-          <Button
-            ref={shortcutRef}
-            variant="outline"
-            className={`w-full gap-2 border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50 ${focusZone === 'shortcut' ? focusRing : ''}`}
-            onClick={handleShortcut}
-            onFocus={() => setFocusZone('shortcut')}
-            type="button"
-          >
-            <Smartphone className="w-4 h-4" />
-            Crear acceso directo a pantalla de inicio
-          </Button>
+          {!legacy && (
+            <Button
+              ref={installRef}
+              variant="outline"
+              className={`w-full gap-2 border-primary/40 text-primary hover:bg-primary/10 ${focusZone === 'install' ? focusRing : ''}`}
+              onClick={handleInstall}
+              onFocus={() => setFocusZone('install')}
+              type="button"
+            >
+              <Download className="w-4 h-4" />
+              Instalar APK en dispositivos Android
+            </Button>
+          )}
+          {!legacy && (
+            <Button
+              ref={shortcutRef}
+              variant="outline"
+              className={`w-full gap-2 border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50 ${focusZone === 'shortcut' ? focusRing : ''}`}
+              onClick={handleShortcut}
+              onFocus={() => setFocusZone('shortcut')}
+              type="button"
+            >
+              <Smartphone className="w-4 h-4" />
+              Crear acceso directo a pantalla de inicio
+            </Button>
+          )}
           <p className="text-muted-foreground text-sm">Tu Streaming de Confianza</p>
-          <p className="text-muted-foreground/40 text-xs">▲▼ Navegar · Enter Seleccionar</p>
+          {isTV && <p className="text-muted-foreground/40 text-xs">▲▼ Navegar · Enter Seleccionar</p>}
         </div>
       </div>
 

@@ -147,3 +147,94 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+/* ============================================================
+   LEGACY TV BROWSER OVERRIDES (Samsung 2014-2016, LG 2014-2016)
+   Applied when html.legacy-tv is set by browser-compat detection
+   ============================================================ */
+
+/* Kill all animations and transitions — old browsers are slow */
+.legacy-tv *,
+.legacy-tv *::before,
+.legacy-tv *::after {
+  -webkit-animation-duration: 0.001ms !important;
+  animation-duration: 0.001ms !important;
+  -webkit-animation-delay: 0s !important;
+  animation-delay: 0s !important;
+  -webkit-transition-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+  -webkit-transition-delay: 0s !important;
+  transition-delay: 0s !important;
+}
+
+/* Ensure animate-in / fade-in / slide-in elements are always visible */
+.legacy-tv [class*="animate-in"],
+.legacy-tv [class*="fade-in"],
+.legacy-tv [class*="zoom-in"],
+.legacy-tv [class*="slide-in"],
+.legacy-tv [class*="slide-out"],
+.legacy-tv [class*="spin-in"],
+.legacy-tv [class*="spin-out"] {
+  opacity: 1 !important;
+  -webkit-transform: none !important;
+  transform: none !important;
+  -webkit-animation: none !important;
+  animation: none !important;
+}
+
+/* Remove expensive drop-shadows (GPU-heavy on old TVs) */
+.legacy-tv [class*="drop-shadow"] {
+  -webkit-filter: none !important;
+  filter: none !important;
+}
+
+/* Remove backdrop blur — not supported and causes crashes on old WebKit */
+.legacy-tv [class*="backdrop-blur"],
+.legacy-tv [class*="backdrop-saturate"],
+.legacy-tv [class*="backdrop-brightness"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Simplify box shadows to a flat border — shadows are slow on old TVs */
+.legacy-tv .shadow-2xl,
+.legacy-tv .shadow-xl,
+.legacy-tv [class*="shadow-["] {
+  box-shadow: none !important;
+  border: 1px solid rgba(255,255,255,0.15) !important;
+}
+
+/* Fix flexbox gap — use margin instead (gap in flexbox needs Chrome 84+) */
+.legacy-tv [class*="gap-1"] > * + * { margin-top: 0.25rem; margin-left: 0.25rem; }
+.legacy-tv [class*="gap-2"] > * + * { margin-top: 0.5rem; margin-left: 0.5rem; }
+.legacy-tv [class*="gap-3"] > * + * { margin-top: 0.75rem; margin-left: 0.75rem; }
+.legacy-tv [class*="gap-4"] > * + * { margin-top: 1rem; margin-left: 1rem; }
+.legacy-tv [class*="gap-5"] > * + * { margin-top: 1.25rem; margin-left: 1.25rem; }
+.legacy-tv [class*="gap-6"] > * + * { margin-top: 1.5rem; margin-left: 1.5rem; }
+.legacy-tv [class*="gap-8"] > * + * { margin-top: 2rem; margin-left: 2rem; }
+.legacy-tv .flex-col > * + *,
+.legacy-tv [class*="flex-col"] > * + * { margin-left: 0 !important; }
+.legacy-tv .flex-row > * + *,
+.legacy-tv [class*="flex-row"] > * + * { margin-top: 0 !important; }
+
+/* nav-item-focused: use a simpler highlight for old TVs */
+.legacy-tv .nav-item-focused {
+  outline: 3px solid #e11d48 !important;
+  outline-offset: 2px !important;
+  -webkit-transform: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Keep the loading spinner animation working */
+.legacy-tv #app-loading .spinner {
+  -webkit-animation: spin 0.9s linear infinite !important;
+  animation: spin 0.9s linear infinite !important;
+  -webkit-animation-duration: 0.9s !important;
+  animation-duration: 0.9s !important;
+}
+
+/* Simplify rounded corners — border-radius-2xl can be slow on old GPU */
+.legacy-tv [class*="rounded-2xl"] { border-radius: 8px !important; }
+.legacy-tv [class*="rounded-3xl"] { border-radius: 8px !important; }
+.legacy-tv [class*="rounded-full"] { border-radius: 50% !important; }

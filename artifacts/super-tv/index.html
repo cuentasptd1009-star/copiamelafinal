@@ -212,6 +212,26 @@
           window.CustomEvent = CustomEvent;
         }
 
+        /* ===== LEGACY BROWSER DETECTION ===== */
+        /* Sets window.__legacyBrowser and adds .legacy-tv to <html> for old Samsung/LG TVs */
+        var __isLegacy = (function() {
+          var ua = navigator.userAgent;
+          /* Samsung Tizen 1.x / 2.x = Chrome 38-47 */
+          if (/Tizen\/[12]\./i.test(ua)) return true;
+          /* LG webOS 1.x / 2.x = Chrome 38-53 */
+          if (/Web0S\/[12]\.|webOS\/[12]\./i.test(ua)) return true;
+          /* Chrome version < 56 (released 2017) */
+          var cm = ua.match(/Chrom(?:e|ium)\/(\d+)/);
+          if (cm && parseInt(cm[1], 10) < 56) return true;
+          /* No CSS Grid = very old browser */
+          try { if (!window.CSS || !window.CSS.supports || !window.CSS.supports('display', 'grid')) return true; } catch(e) { return true; }
+          return false;
+        })();
+        if (__isLegacy) {
+          window.__legacyBrowser = true;
+          document.documentElement.className = (document.documentElement.className || '') + ' legacy-tv';
+        }
+
         /* CSS Variables fallback: older Samsung/LG TVs lack support */
         var cssVarsOk = (function() {
           try { return window.CSS && window.CSS.supports && window.CSS.supports('color', 'var(--x)'); } catch(e) { return false; }
