@@ -1373,7 +1373,7 @@ export default function Home() {
       </div>
 
       {/* ── FULL SIDEBAR OVERLAY ── */}
-      {showSidebar && <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-sm" />}
+      {showSidebar && <div className="fixed inset-0 z-[340] bg-black/60 backdrop-blur-sm" onClick={() => { setSidebarMouseOpen(false); setZone('rows'); }} />}
       <aside
         className={`fixed left-0 top-0 h-full z-[350] bg-background border-r border-white/8 flex flex-col transition-all duration-300 w-72 shadow-2xl
           ${showSidebar ? 'translate-x-0' : '-translate-x-full'}`}
