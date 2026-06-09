@@ -1,0 +1,12 @@
+node_modules
+.migration-backup
+artifacts/super-tv/node_modules
+artifacts/api-server/node_modules
+artifacts/mockup-sandbox/node_modules
+artifacts/mockup-sandbox
+lib/*/node_modules
+**/node_modules
+**/*.map
+.git
+.cache
+.local
