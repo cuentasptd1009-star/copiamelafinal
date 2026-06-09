@@ -202,8 +202,8 @@ export default function Login() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (showHint || showShortcutHint) {
-        if (e.key === 'Escape' || e.key === 'Backspace') { setShowHint(false); setShowShortcutHint(false); }
+      if (showHint || showShortcutHint || showApkMsg) {
+        if (e.key === 'Escape' || e.key === 'Backspace') { setShowHint(false); setShowShortcutHint(false); setShowApkMsg(''); }
         return;
       }
 
@@ -489,8 +489,8 @@ export default function Login() {
       )}
 
       {showApkMsg && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-4">
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-4" onClick={() => setShowApkMsg('')}>
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <Download className="w-6 h-6 text-yellow-400 flex-shrink-0" />
               <h2 className="text-base font-bold">APK no disponible</h2>

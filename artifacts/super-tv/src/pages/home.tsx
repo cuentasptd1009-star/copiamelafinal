@@ -1305,16 +1305,16 @@ export default function Home() {
 
       {/* ── EXPIRED OVERLAY ── */}
       {isExpired && showExpiredOverlay && (
-        <div className="fixed inset-0 z-[200] bg-background flex flex-col items-center justify-center gap-6 text-center px-6">
-          <button onClick={() => setShowExpiredOverlay(false)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-white/50 hover:text-white"><X className="w-5 h-5" /></button>
-          <div className="flex flex-col items-center gap-4">
+        <div className="fixed inset-0 z-[200] bg-background flex flex-col items-center justify-center gap-6 text-center px-6" onClick={() => setShowExpiredOverlay(false)}>
+          <button onClick={e => { e.stopPropagation(); setShowExpiredOverlay(false); }} className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 transition-colors text-white/50 hover:text-white"><X className="w-5 h-5" /></button>
+          <div className="flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
             <div className="w-20 h-20 rounded-full bg-destructive/15 flex items-center justify-center"><Lock className="w-10 h-10 text-destructive" /></div>
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-white">Acceso vencido</h2>
               <p className="text-white/50 max-w-xs">Tu código venció. Para renovarlo, contacta a tu proveedor.</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="text-sm text-white/40 hover:text-white transition-colors underline underline-offset-4">Cerrar sesión</button>
+          <button onClick={e => { e.stopPropagation(); handleLogout(); }} className="text-sm text-white/40 hover:text-white transition-colors underline underline-offset-4">Cerrar sesión</button>
         </div>
       )}
 
@@ -2005,8 +2005,8 @@ export default function Home() {
       )}
 
       {apkMsg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-card border border-white/10 rounded-2xl p-6 max-w-sm w-full space-y-3 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setApkMsg(null)}>
+          <div className="bg-card border border-white/10 rounded-2xl p-6 max-w-sm w-full space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <Download className="w-6 h-6 text-yellow-400 flex-shrink-0" />
               <h2 className="text-base font-bold text-white">APK no disponible</h2>
