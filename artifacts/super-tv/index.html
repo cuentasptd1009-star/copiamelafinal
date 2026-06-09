@@ -107,18 +107,16 @@
     <div id="root"></div>
     <script>
       window.__appStarted = false;
-      window.onerror = function() {
+      function __showAppError() {
         if (!window.__appStarted) {
           document.getElementById('app-loading').style.display = 'none';
           document.getElementById('app-error').style.display = 'flex';
         }
-      };
-      setTimeout(function() {
-        if (!window.__appStarted) {
-          document.getElementById('app-loading').style.display = 'none';
-          document.getElementById('app-error').style.display = 'flex';
-        }
-      }, 15000);
+      }
+      window.onerror = function() { __showAppError(); };
+      window.onunhandledrejection = function() { __showAppError(); };
+      window.addEventListener('unhandledrejection', function() { __showAppError(); });
+      setTimeout(__showAppError, 25000);
     </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>

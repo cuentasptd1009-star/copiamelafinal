@@ -22,16 +22,17 @@ export default defineConfig({
     tailwindcss(),
     legacy({
       targets: [
-        'chrome >= 49',
+        'chrome >= 47',
         'safari >= 9',
         'firefox >= 44',
         'ios >= 9',
-        'android >= 5',
-        'samsung >= 5',
+        'android >= 4.4',
+        'samsung >= 4',
         'opera >= 36',
       ],
       modernPolyfills: true,
       renderLegacyChunks: true,
+      polyfills: true,
     }),
     runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
