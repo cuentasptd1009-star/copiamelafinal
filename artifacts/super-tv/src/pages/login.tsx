@@ -53,6 +53,7 @@ export default function Login() {
   const [conflictMessage, setConflictMessage] = useState('');
   const [showHint, setShowHint] = useState(false);
   const [showShortcutHint, setShowShortcutHint] = useState(false);
+  const [showApkMsg, setShowApkMsg] = useState('');
   const [focusZone, setFocusZone] = useState<FocusZone>('input');
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrActivated, setQrActivated] = useState(false);
@@ -180,8 +181,18 @@ export default function Login() {
     );
   };
 
-  const handleInstall = () => {
-    window.location.href = `${apiBase}/api/apk/download`;
+  const handleInstall = async () => {
+    try {
+      const res = await fetch(`${apiBase}/api/apk/info`);
+      const data = await res.json();
+      if (data.available) {
+        window.location.href = `${apiBase}/api/apk/download`;
+      } else {
+        setShowApkMsg('No hay APK disponible por el momento. El administrador aún no ha subido el archivo.');
+      }
+    } catch {
+      setShowApkMsg('No se pudo verificar la disponibilidad del APK. Intenta de nuevo más tarde.');
+    }
   };
 
   const handleShortcut = () => {
@@ -472,6 +483,24 @@ export default function Login() {
               className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showApkMsg && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <Download className="w-6 h-6 text-yellow-400 flex-shrink-0" />
+              <h2 className="text-base font-bold">APK no disponible</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">{showApkMsg}</p>
+            <button
+              onClick={() => setShowApkMsg('')}
+              className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              Volver
             </button>
           </div>
         </div>

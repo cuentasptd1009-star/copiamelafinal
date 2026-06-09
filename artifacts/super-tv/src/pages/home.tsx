@@ -973,7 +973,20 @@ export default function Home() {
     }
   }, []);
   const handleLogout = () => { clearTokens(); setLocation('/'); };
-  const handleInstall = () => { window.location.href = `${apiBase}/api/apk/download`; };
+  const [apkMsg, setApkMsg] = useState<string | null>(null);
+  const handleInstall = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBase}/api/apk/info`);
+      const data = await res.json();
+      if (data.available) {
+        window.location.href = `${apiBase}/api/apk/download`;
+      } else {
+        setApkMsg('No hay APK disponible por el momento. El administrador aún no ha subido el archivo.');
+      }
+    } catch {
+      setApkMsg('No se pudo verificar la disponibilidad del APK. Intenta de nuevo más tarde.');
+    }
+  }, []);
   const handleShortcut = () => { if (canInstall) { install(); return; } setShowShortcutHint(true); };
 
   const actionButtons = useMemo(() => [
@@ -1987,6 +2000,19 @@ export default function Home() {
             <h2 className="text-base font-bold text-white">Acceso directo al escritorio</h2>
             <p className="text-sm text-white/60">En tu navegador, busca la opción "Agregar a pantalla de inicio" o "Instalar aplicación" para crear un acceso directo.</p>
             <button onClick={() => setShowShortcutHint(false)} className="w-full py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">Entendido</button>
+          </div>
+        </div>
+      )}
+
+      {apkMsg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-card border border-white/10 rounded-2xl p-6 max-w-sm w-full space-y-3 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <Download className="w-6 h-6 text-yellow-400 flex-shrink-0" />
+              <h2 className="text-base font-bold text-white">APK no disponible</h2>
+            </div>
+            <p className="text-sm text-white/60">{apkMsg}</p>
+            <button onClick={() => setApkMsg(null)} className="w-full py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">Volver</button>
           </div>
         </div>
       )}
