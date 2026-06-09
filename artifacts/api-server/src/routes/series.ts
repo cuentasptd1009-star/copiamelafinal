@@ -8,7 +8,7 @@ import { cache, TTL } from "../lib/cache.js";
 const router = Router();
 
 function formatSeries(s: typeof seriesTable.$inferSelect) {
-  return { ...s, createdAt: s.createdAt.toISOString() };
+  return { ...s, createdAt: s.createdAt?.toISOString() ?? null };
 }
 
 async function checkAuth(req: Request, res: Response): Promise<boolean> {
@@ -114,10 +114,10 @@ router.get("/series/:id", async (req: Request, res: Response) => {
 
   const seasonsWithEpisodes = seasons.map(season => ({
     ...season,
-    createdAt: season.createdAt.toISOString(),
+    createdAt: season.createdAt?.toISOString() ?? null,
     episodes: episodes
       .filter(ep => ep.seasonId === season.id)
-      .map(ep => ({ ...ep, createdAt: ep.createdAt.toISOString() })),
+      .map(ep => ({ ...ep, createdAt: ep.createdAt?.toISOString() ?? null })),
   }));
 
   const result = { ...formatSeries(s), seasons: seasonsWithEpisodes };
@@ -302,7 +302,7 @@ router.post("/seasons", requireAdminAuth, async (req: Request, res: Response) =>
   if (!seriesId || !seasonNumber) { res.status(400).json({ error: "seriesId and seasonNumber required" }); return; }
   const [created] = await db.insert(seasonsTable).values({ seriesId: Number(seriesId), seasonNumber: Number(seasonNumber), title, poster }).returning();
   cache.invalidatePrefix("series:");
-  res.status(201).json({ ...created, createdAt: created.createdAt.toISOString() });
+  res.status(201).json({ ...created, createdAt: created.createdAt?.toISOString() ?? null });
 });
 
 router.put("/seasons/:id", requireAdminAuth, async (req: Request, res: Response) => {
@@ -314,7 +314,7 @@ router.put("/seasons/:id", requireAdminAuth, async (req: Request, res: Response)
   const [updated] = await db.update(seasonsTable).set(patch).where(eq(seasonsTable.id, id)).returning();
   if (!updated) { res.status(404).json({ error: "Not found" }); return; }
   cache.invalidatePrefix("series:");
-  res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
+  res.json({ ...updated, createdAt: updated.createdAt?.toISOString() ?? null });
 });
 
 router.delete("/seasons/:id", requireAdminAuth, async (req: Request, res: Response) => {
@@ -346,7 +346,7 @@ router.post("/episodes", requireAdminAuth, async (req: Request, res: Response) =
     order: existing.length,
   }).returning();
   cache.invalidatePrefix("series:");
-  res.status(201).json({ ...created, createdAt: created.createdAt.toISOString() });
+  res.status(201).json({ ...created, createdAt: created.createdAt?.toISOString() ?? null });
 });
 
 router.put("/episodes/:id", requireAdminAuth, async (req: Request, res: Response) => {
@@ -359,7 +359,7 @@ router.put("/episodes/:id", requireAdminAuth, async (req: Request, res: Response
   const [updated] = await db.update(episodesTable).set(patch).where(eq(episodesTable.id, id)).returning();
   if (!updated) { res.status(404).json({ error: "Not found" }); return; }
   cache.invalidatePrefix("series:");
-  res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
+  res.json({ ...updated, createdAt: updated.createdAt?.toISOString() ?? null });
 });
 
 router.delete("/episodes/:id", requireAdminAuth, async (req: Request, res: Response) => {

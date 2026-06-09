@@ -54,7 +54,7 @@ router.get("/movies", async (req: Request, res: Response) => {
   }
 
   const movies = await query.orderBy(asc(moviesTable.order));
-  const result = movies.map((m) => ({ ...m, createdAt: m.createdAt.toISOString() }));
+  const result = movies.map((m) => ({ ...m, createdAt: m.createdAt?.toISOString() ?? null }));
 
   cache.set(cacheKey, result, TTL.MEDIUM);
   res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
@@ -219,7 +219,7 @@ router.post("/movies", requireAdminAuth, async (req: Request, res: Response) => 
     duration: parsed.data.duration ?? null,
   }).returning();
   cache.invalidatePrefix("movies:");
-  res.status(201).json({ ...created, createdAt: created.createdAt.toISOString() });
+  res.status(201).json({ ...created, createdAt: created.createdAt?.toISOString() ?? null });
 });
 
 router.put("/movies/:id", requireAdminAuth, async (req: Request, res: Response) => {
@@ -239,7 +239,7 @@ router.put("/movies/:id", requireAdminAuth, async (req: Request, res: Response) 
     return;
   }
   cache.invalidatePrefix("movies:");
-  res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
+  res.json({ ...updated, createdAt: updated.createdAt?.toISOString() ?? null });
 });
 
 router.patch("/movies/:id/hidden", requireAdminAuth, async (req: Request, res: Response) => {
