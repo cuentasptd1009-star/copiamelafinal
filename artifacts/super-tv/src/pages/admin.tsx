@@ -4422,7 +4422,7 @@ function ApkUploadSection() {
         toast({ variant: 'destructive', title: 'Archivo inválido', description: 'Solo se permiten archivos .apk' });
         return;
       }
-      const adminToken = localStorage.getItem('admin_token') || localStorage.getItem('user_token') || '';
+      const adminToken = localStorage.getItem('supertv_admin_token') || '';
       setUploading(true);
       setUploadProgress(0);
       try {
@@ -4583,7 +4583,7 @@ function SettingsManager() {
   const [dropboxTestResult, setDropboxTestResult] = useState<{ ok: boolean; name?: string; email?: string; error?: string } | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token') || '';
+    const token = localStorage.getItem('supertv_admin_token') || '';
     fetch(`${apiBase}/api/admin/settings`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => {
@@ -4594,7 +4594,7 @@ function SettingsManager() {
   }, []);
 
   const handleSaveDropbox = async () => {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token') || '';
+    const token = localStorage.getItem('supertv_admin_token') || '';
     setDropboxLoading(true);
     try {
       const r = await fetch(`${apiBase}/api/admin/settings`, {
@@ -4617,7 +4617,7 @@ function SettingsManager() {
   };
 
   const handleClearDropbox = async () => {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token') || '';
+    const token = localStorage.getItem('supertv_admin_token') || '';
     setDropboxLoading(true);
     try {
       await fetch(`${apiBase}/api/admin/settings`, {
@@ -4632,7 +4632,7 @@ function SettingsManager() {
   };
 
   const handleTestDropbox = async () => {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token') || '';
+    const token = localStorage.getItem('supertv_admin_token') || '';
     setDropboxLoading(true);
     try {
       const r = await fetch(`${apiBase}/api/dropbox/test`, { headers: { Authorization: `Bearer ${token}` } });
@@ -4643,7 +4643,7 @@ function SettingsManager() {
   };
 
   const handleSaveTerabox = async () => {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token') || '';
+    const token = localStorage.getItem('supertv_admin_token') || '';
     setTeraboxLoading(true);
     try {
       const r = await fetch(`${apiBase}/api/admin/settings`, {
@@ -4665,7 +4665,7 @@ function SettingsManager() {
   };
 
   const handleClearTerabox = async () => {
-    const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token') || '';
+    const token = localStorage.getItem('supertv_admin_token') || '';
     setTeraboxLoading(true);
     try {
       await fetch(`${apiBase}/api/admin/settings`, {
