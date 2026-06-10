@@ -111,21 +111,25 @@ import { Router, type IRouter, type Request, type Response } from "express";
     }
   });
 
-  // Download APK — redirects to the Cloudinary URL
-  router.get("/apk/download", async (_req: Request, res: Response) => {
+  // Download APK — redirects to the Cloudinary URL with correct filename
+  router.get('/apk/download', async (_req: Request, res: Response) => {
     try {
       const [row] = await db
         .select()
         .from(settingsTable)
-        .where(eq(settingsTable.key, "apkCloudinaryUrl"))
+        .where(eq(settingsTable.key, 'apkCloudinaryUrl'))
         .limit(1);
       if (row) {
-        res.redirect(302, row.value);
+        // Add fl_attachment transformation so Cloudinary serves file as super-tv.apk
+        const downloadUrl = row.value.includes('/upload/')
+          ? row.value.replace('/upload/', '/upload/fl_attachment:super-tv.apk/')
+          : row.value;
+        res.redirect(302, downloadUrl);
         return;
       }
     } catch {}
     res.status(404).json({
-      error: "APK no disponible. El administrador aún no ha subido el archivo.",
+      error: 'APK no disponible. El administrador aún no ha subido el archivo.',
     });
   });
 
