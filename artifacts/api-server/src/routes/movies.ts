@@ -31,15 +31,15 @@ router.get("/movies", async (req: Request, res: Response) => {
   const parsed = ListMoviesQueryParams.safeParse(req.query);
   const params = parsed.success ? parsed.data : {};
 
-  const cacheKey = `movies:list:${params.category ?? ""}:${params.search ?? ""}`;
+  const isAdmin = !!adminSession;
+
+  const cacheKey = `movies:list:${isAdmin ? 'admin' : 'user'}:${params.category ?? ""}:${params.search ?? ""}`;
   const cached = cache.get<object[]>(cacheKey);
   if (cached) {
     res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=60");
     res.json(cached);
     return;
   }
-
-  const isAdmin = !!adminSession;
 
   let query = db.select().from(moviesTable).$dynamic();
 
