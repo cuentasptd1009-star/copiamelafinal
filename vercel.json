@@ -1,7 +1,7 @@
 {
   "version": 2,
   "installCommand": "CI=true pnpm install --no-frozen-lockfile",
-  "buildCommand": "BASE_PATH=/ PORT=3000 pnpm --filter @workspace/super-tv run build && pnpm --filter @workspace/api-server run build",
+  "buildCommand": "pnpm --filter @workspace/db run push-force && BASE_PATH=/ PORT=3000 pnpm --filter @workspace/super-tv run build && pnpm --filter @workspace/api-server run build",
   "outputDirectory": "artifacts/super-tv/dist/public",
   "functions": {
     "api/[...slug].js": {
