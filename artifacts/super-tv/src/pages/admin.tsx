@@ -2470,7 +2470,7 @@ function extractYtVideoId(url: string): string | null {
 function MoviesManager() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data: movies, isLoading } = useListMovies(undefined, { query: { queryKey: getListMoviesQueryKey() } });
+  const { data: movies, isLoading, isError: moviesError } = useListMovies(undefined, { query: { queryKey: getListMoviesQueryKey(), staleTime: 0, refetchOnMount: 'always' as const } });
   const createMutation = useCreateMovie();
   const updateMutation = useUpdateMovie();
   const deleteMutation = useDeleteMovie();
@@ -4457,7 +4457,7 @@ function ApkUploadSection() {
                 resolve(result.secure_url as string);
               } catch { reject(new Error('Respuesta inválida de Cloudinary')); }
             } else {
-              reject(new Error(`Error al subir a Cloudinary: ${xhr.status}`));
+              reject(new Error(`Error al subir a Cloudinary: ${xhr.status} - ${xhr.responseText.slice(0, 300)}`));
             }
           };
           xhr.onerror = () => reject(new Error('Error de red al subir el APK'));
