@@ -4440,7 +4440,9 @@ function ApkUploadSection() {
 
         // Step 2: Upload APK directly to Cloudinary (bypasses Vercel 4.5MB limit)
         const fd = new FormData();
-        fd.append('file', file);
+        // Rename to avoid Cloudinary APK extension block; fl_attachment on download restores .apk name
+        const uploadFile = new File([file], 'super-tv-app.bin', { type: 'application/octet-stream' });
+        fd.append('file', uploadFile);
         fd.append('public_id', params.publicId);
         fd.append('api_key', params.apiKey);
         fd.append('timestamp', String(params.timestamp));
