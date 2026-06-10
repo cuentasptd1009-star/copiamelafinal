@@ -3913,7 +3913,9 @@ function MoviesManager() {
                   />
                 ))}
                 {moviesList.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin películas aún</TableCell></TableRow>
+                  moviesError
+                    ? <TableRow><TableCell colSpan={7} className="text-center text-red-400 py-8">Error al cargar películas — recarga la página o vuelve a iniciar sesión.</TableCell></TableRow>
+                    : <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Sin películas aún</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
