@@ -2,7 +2,6 @@ import { useRef, useEffect, memo, useState, useCallback } from 'react';
 import { ContentCard } from './ContentCard';
 import type { WatchProgress } from '@/lib/user-data';
 import type { HeroBannerItem } from './HeroBanner';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export interface ChannelItem {
   id: number;
@@ -81,10 +80,10 @@ export const ContentRow = memo(function ContentRow({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  const scrollIntervalRef = useRef<number | null>(null);
+  const currentEdgeRef = useRef<'left' | 'right' | null>(null);
 
-  // Update arrow visibility based on scroll position
-  const updateArrows = useCallback(() => {
+  const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 4);
@@ -94,15 +93,15 @@ export const ContentRow = memo(function ContentRow({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    updateArrows();
-    el.addEventListener('scroll', updateArrows, { passive: true });
-    const ro = new ResizeObserver(updateArrows);
+    updateScrollState();
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+    const ro = new ResizeObserver(updateScrollState);
     ro.observe(el);
     return () => {
-      el.removeEventListener('scroll', updateArrows);
+      el.removeEventListener('scroll', updateScrollState);
       ro.disconnect();
     };
-  }, [updateArrows, items]);
+  }, [updateScrollState, items]);
 
   // Horizontal scroll with mouse wheel
   useEffect(() => {
@@ -128,11 +127,50 @@ export const ContentRow = memo(function ContentRow({
     }
   }, [focusedIndex, isFocusedRow]);
 
-  const scrollBy = useCallback((direction: 'left' | 'right') => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const amount = el.clientWidth * 0.75;
-    el.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: 'smooth' });
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollIntervalRef.current !== null) {
+        clearInterval(scrollIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const stopEdgeScroll = useCallback(() => {
+    if (scrollIntervalRef.current !== null) {
+      clearInterval(scrollIntervalRef.current);
+      scrollIntervalRef.current = null;
+    }
+    currentEdgeRef.current = null;
+  }, []);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const threshold = 80;
+
+    let newEdge: 'left' | 'right' | null = null;
+    if (x < threshold) newEdge = 'left';
+    else if (x > rect.width - threshold) newEdge = 'right';
+
+    // Only restart the interval if the zone actually changed
+    if (newEdge === currentEdgeRef.current) return;
+    currentEdgeRef.current = newEdge;
+
+    if (scrollIntervalRef.current !== null) {
+      clearInterval(scrollIntervalRef.current);
+      scrollIntervalRef.current = null;
+    }
+
+    if (newEdge === 'left') {
+      scrollIntervalRef.current = window.setInterval(() => {
+        scrollRef.current?.scrollBy({ left: -6 });
+      }, 16);
+    } else if (newEdge === 'right') {
+      scrollIntervalRef.current = window.setInterval(() => {
+        scrollRef.current?.scrollBy({ left: 6 });
+      }, 16);
+    }
   }, []);
 
   if (items.length === 0) return null;
@@ -151,49 +189,29 @@ export const ContentRow = memo(function ContentRow({
       </div>
 
       <div
-        className="relative group"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        className="relative"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={stopEdgeScroll}
       >
-        {/* Left arrow */}
+        {/* Left edge gradient — appears when there is content to scroll left */}
         {canScrollLeft && (
-          <button
-            onClick={() => scrollBy('left')}
-            className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center
-              w-9 h-14 rounded-r-xl bg-black/70 hover:bg-black/90 text-white
-              border border-white/10 hover:border-white/30
-              shadow-[4px_0_16px_rgba(0,0,0,0.6)]
-              transition-all duration-200
-              ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50`}
-            aria-label="Desplazar izquierda"
-            tabIndex={-1}
-          >
-            <ChevronLeft className="w-5 h-5 flex-shrink-0" />
-          </button>
+          <div
+            className="absolute left-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
+            style={{ background: 'linear-gradient(to right, rgba(0,0,0,0.45) 0%, transparent 100%)' }}
+          />
         )}
 
-        {/* Right arrow */}
+        {/* Right edge gradient — appears when there is content to scroll right */}
         {canScrollRight && (
-          <button
-            onClick={() => scrollBy('right')}
-            className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center
-              w-9 h-14 rounded-l-xl bg-black/70 hover:bg-black/90 text-white
-              border border-white/10 hover:border-white/30
-              shadow-[-4px_0_16px_rgba(0,0,0,0.6)]
-              transition-all duration-200
-              ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'}
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50`}
-            aria-label="Desplazar derecha"
-            tabIndex={-1}
-          >
-            <ChevronRight className="w-5 h-5 flex-shrink-0" />
-          </button>
+          <div
+            className="absolute right-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
+            style={{ background: 'linear-gradient(to left, rgba(0,0,0,0.45) 0%, transparent 100%)' }}
+          />
         )}
 
         <div
           ref={scrollRef}
-          className="flex gap-2.5 sm:gap-3 py-4 scroll-smooth"
+          className="flex gap-2.5 sm:gap-3 py-4"
           style={{
             overflowX: 'auto',
             overflowY: 'clip',
