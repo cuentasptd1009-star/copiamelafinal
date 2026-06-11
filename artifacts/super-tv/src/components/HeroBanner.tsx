@@ -121,17 +121,6 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
         </div>
       </div>
 
-      {!overrideItem && items.length > 1 && (
-        <div className="absolute bottom-4 right-5 flex gap-1.5">
-          {items.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => { setCurrent(i); setLoaded(false); }}
-              className={`h-1 rounded-full transition-all duration-300 ${i === current ? 'w-6 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/60'}`}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
