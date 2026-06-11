@@ -95,11 +95,13 @@ export const ContentRow = memo(function ContentRow({
     if (!el) return;
     updateScrollState();
     el.addEventListener('scroll', updateScrollState, { passive: true });
-    const ro = new ResizeObserver(updateScrollState);
-    ro.observe(el);
+    const ro = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(updateScrollState)
+      : null;
+    if (ro) ro.observe(el);
     return () => {
       el.removeEventListener('scroll', updateScrollState);
-      ro.disconnect();
+      if (ro) ro.disconnect();
     };
   }, [updateScrollState, items]);
 
