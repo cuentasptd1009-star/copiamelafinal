@@ -805,10 +805,17 @@ export default function Home() {
   }, [activeTab, allChannels, categoriesFromApi, channelsByCategory, searchQuery]);
 
   const activeRows = useMemo(() => {
-    if (activeTab === 'channels') return channelRows.map(r => ({ id: r.id, title: r.title, emoji: '📺', items: r.items as ContentItem[] }));
+    if (activeTab === 'channels') {
+      // Return a single flat row matching exactly what the grid renders.
+      // This ensures rowIndex stays at 0 and colIndex maps 1:1 to the visible grid items.
+      const flatItems = selectedChannelCategory
+        ? (channelRows.find(r => r.title === selectedChannelCategory)?.items ?? [])
+        : channelRows.flatMap(r => r.items);
+      return [{ id: 'channels-flat', title: 'Canales', emoji: '📺', items: flatItems as ContentItem[] }];
+    }
     if (activeTab === 'series') return seriesRows.map(r => ({ id: r.id, title: r.title, emoji: '🎬', items: r.items as unknown as ContentItem[] }));
     return contentRows;
-  }, [activeTab, channelRows, seriesRows, contentRows]);
+  }, [activeTab, channelRows, seriesRows, contentRows, selectedChannelCategory]);
 
   useEffect(() => { setRowIndex(0); setColIndex(0); setSelectedChannelCategory(null); setRowsFocusActive(false); }, [activeTab, searchQuery]);
   useEffect(() => {
