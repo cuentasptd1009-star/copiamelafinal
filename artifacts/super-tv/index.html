@@ -212,6 +212,89 @@
           window.CustomEvent = CustomEvent;
         }
 
+
+        /* ResizeObserver polyfill stub — prevents crashes on Chrome 38-47 TVs */
+        if (typeof ResizeObserver === 'undefined') {
+          window.ResizeObserver = function(cb) {
+            var self = this;
+            self._cb = cb; self._els = [];
+            self.observe = function(el) {
+              self._els.push(el);
+              var last = { w: el.offsetWidth, h: el.offsetHeight };
+              (function poll() {
+                if (self._els.indexOf(el) === -1) return;
+                var cur = { w: el.offsetWidth, h: el.offsetHeight };
+                if (cur.w !== last.w || cur.h !== last.h) {
+                  last = cur;
+                  try { self._cb([{ contentRect: cur, target: el }], self); } catch(e) {}
+                }
+                setTimeout(poll, 500);
+              })();
+            };
+            self.unobserve = function(el) { self._els = self._els.filter(function(e){return e!==el;}); };
+            self.disconnect = function() { self._els = []; };
+          };
+        }
+
+        /* IntersectionObserver polyfill stub */
+        if (typeof IntersectionObserver === 'undefined') {
+          window.IntersectionObserver = function(cb) {
+            this.observe = function() {};
+            this.unobserve = function() {};
+            this.disconnect = function() {};
+          };
+          window.IntersectionObserverEntry = function() {};
+        }
+
+        /* Object.fromEntries (ES2019) */
+        if (!Object.fromEntries) {
+          Object.fromEntries = function(entries) {
+            var obj = {};
+            for (var i = 0; i < entries.length; i++) obj[entries[i][0]] = entries[i][1];
+            return obj;
+          };
+        }
+
+        /* Array.prototype.flat / flatMap */
+        if (!Array.prototype.flat) {
+          Array.prototype.flat = function(depth) {
+            depth = depth === undefined ? 1 : Math.floor(depth);
+            return (function flatten(arr, d) {
+              return arr.reduce(function(acc, val) {
+                return acc.concat(d > 0 && Array.isArray(val) ? flatten(val, d-1) : val);
+              }, []);
+            })(this, depth);
+          };
+        }
+        if (!Array.prototype.flatMap) {
+          Array.prototype.flatMap = function(fn, ctx) {
+            return Array.prototype.map.call(this, fn, ctx).flat(1);
+          };
+        }
+
+        /* Element.prototype.matches / closest */
+        if (!Element.prototype.matches) {
+          Element.prototype.matches = Element.prototype.msMatchesSelector ||
+            Element.prototype.webkitMatchesSelector || function(s) {
+              var m = (this.document || this.ownerDocument).querySelectorAll(s), i = m.length;
+              while (--i >= 0 && m.item(i) !== this) {}
+              return i > -1;
+            };
+        }
+        if (!Element.prototype.closest) {
+          Element.prototype.closest = function(sel) {
+            var el = this;
+            while (el && el.nodeType === 1) {
+              if (el.matches(sel)) return el;
+              el = el.parentElement || el.parentNode;
+            }
+            return null;
+          };
+        }
+        if (!Element.prototype.remove) {
+          Element.prototype.remove = function() { if (this.parentNode) this.parentNode.removeChild(this); };
+        }
+
         /* ===== LEGACY BROWSER DETECTION ===== */
         /* Sets window.__legacyBrowser and adds .legacy-tv to <html> for old Samsung/LG TVs */
         var __isLegacy = (function() {
@@ -466,13 +549,14 @@
       }
       /* Only show error on script errors — NOT on unhandled promise rejections
          (React Query and other libs produce benign rejections on old TV browsers) */
-      window.onerror = function(msg, src, line, col, err) {
-        /* Ignore errors from extensions or SW */
-        if (src && (src.indexOf('chrome-extension') !== -1 || src.indexOf('moz-extension') !== -1)) return;
-        __showAppError();
-      };
+      /* window.onerror does NOT show error screen.
+         Old TV browsers produce minor JS errors from polyfills / libraries.
+         React mount failures are caught in main.tsx which calls showError() directly.
+         We only rely on the timeout below for the truly broken case. */
+      window.onerror = function() { return false; };
       /* Extend timeout to 40s for slow TV browsers */
-      setTimeout(__showAppError, 40000);
+      /* 90s — old smart TV browsers (2015-era, Chrome 38-53) need 60-80s to parse React */
+      setTimeout(__showAppError, 90000);
     </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>
