@@ -530,18 +530,14 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.redirect(302, segUrl.replace("http://", "https://"));
       } else {
-        // HTTP-only origin — must proxy through Vercel to avoid mixed-content blocking
-        const upstream = await fetch(segUrl, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!upstream.ok) { res.status(502).send("Segment unavailable"); return; }
-        const segBuf = await upstream.arrayBuffer();
-        const segCt = upstream.headers.get("content-type") || "video/MP2T";
-        res.setHeader("Content-Type", segCt);
-        res.setHeader("Cache-Control", "no-cache");
+        // HTTP-only origin: redirecting to HTTPS to avoid proxying video data through Vercel.
+        // Proxying full video segments causes massive "Fast Origin Transfer" bandwidth consumption
+        // (the previous deployment was suspended at 50 GB). A redirect costs zero Vercel bandwidth.
+        // If the host truly doesn't support HTTPS the segment will fail and the player retries —
+        // that is preferable to consuming all available bandwidth and suspending the service.
+        const httpsUrl = segUrl.replace("http://", "https://");
         res.setHeader("Access-Control-Allow-Origin", "*");
-        res.send(Buffer.from(segBuf));
+        res.redirect(302, httpsUrl);
       }
     }
   } catch {
