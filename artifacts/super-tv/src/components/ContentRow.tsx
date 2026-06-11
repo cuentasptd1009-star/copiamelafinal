@@ -103,20 +103,6 @@ export const ContentRow = memo(function ContentRow({
     };
   }, [updateScrollState, items]);
 
-  // Horizontal scroll with mouse wheel
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        el.scrollBy({ left: e.deltaY * 2.5, behavior: 'smooth' });
-      }
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
-
   useEffect(() => {
     if (isFocusedRow && focusedIndex >= 0 && cardRefs.current[focusedIndex]) {
       cardRefs.current[focusedIndex]?.scrollIntoView({
