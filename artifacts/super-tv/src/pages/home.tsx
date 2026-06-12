@@ -985,13 +985,13 @@ export default function Home() {
     try {
       const res = await fetch(`${apiBase}/api/apk/info`);
       const data = await res.json();
-      if (data.available) {
-        window.location.href = `${apiBase}/api/apk/download`;
+      if (data.available && data.url) {
+        window.open(data.url, '_blank');
       } else {
-        setApkMsg('No hay APK disponible por el momento. El administrador aún no ha subido el archivo.');
+        setApkMsg('No hay enlace de descarga disponible por el momento. El administrador aún no ha configurado el enlace.');
       }
     } catch {
-      setApkMsg('No se pudo verificar la disponibilidad del APK. Intenta de nuevo más tarde.');
+      setApkMsg('No se pudo verificar la disponibilidad. Intenta de nuevo más tarde.');
     }
   }, []);
   const handleShortcut = () => { if (canInstall) { install(); return; } setShowShortcutHint(true); };
