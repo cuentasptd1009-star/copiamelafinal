@@ -188,13 +188,13 @@ export default function Login() {
     try {
       const res = await fetch(`${apiBase}/api/apk/info`);
       const data = await res.json();
-      if (data.available) {
-        window.location.href = `${apiBase}/api/apk/download`;
+      if (data.available && data.url) {
+        window.open(data.url, '_blank');
       } else {
-        setShowApkMsg('No hay APK disponible por el momento. El administrador aún no ha subido el archivo.');
+        setShowApkMsg('No hay enlace de descarga disponible por el momento. El administrador aún no ha configurado el enlace.');
       }
     } catch {
-      setShowApkMsg('No se pudo verificar la disponibilidad del APK. Intenta de nuevo más tarde.');
+      setShowApkMsg('No se pudo verificar la disponibilidad. Intenta de nuevo más tarde.');
     }
   };
 
