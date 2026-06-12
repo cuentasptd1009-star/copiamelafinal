@@ -10,10 +10,10 @@ export default function DescargarPage() {
     fetch(`${apiBase}/api/apk/info`)
       .then(r => r.json())
       .then(d => {
-        if (d.available) {
+        if (d.available && d.url) {
           setStatus('available');
           setTimeout(() => {
-            window.location.href = `${apiBase}/api/apk/download`;
+            window.open(d.url, '_blank');
           }, 800);
         } else {
           setStatus('unavailable');
@@ -37,7 +37,12 @@ export default function DescargarPage() {
         <div className="flex flex-col items-center gap-4">
           <p className="text-white/60 text-sm">La descarga iniciará automáticamente. Si no inicia:</p>
           <a
-            href={`${apiBase}/api/apk/download`}
+            href="#"
+            onClick={async e => {
+              e.preventDefault();
+              const res = await fetch(`${apiBase}/api/apk/info`).then(r => r.json()).catch(() => ({}));
+              if (res.url) window.open(res.url, '_blank');
+            }}
             className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-white rounded-xl font-semibold text-lg hover:bg-primary/90 transition-colors shadow-lg"
           >
             <Download className="w-5 h-5" />
@@ -49,8 +54,8 @@ export default function DescargarPage() {
       {status === 'unavailable' && (
         <div className="flex flex-col items-center gap-3 text-yellow-400">
           <AlertCircle className="w-10 h-10" />
-          <p className="text-lg font-medium">APK no disponible</p>
-          <p className="text-sm text-white/50">El administrador aún no ha subido el archivo APK.</p>
+          <p className="text-lg font-medium">Enlace no disponible</p>
+          <p className="text-sm text-white/50">El administrador aún no ha configurado el enlace de descarga.</p>
         </div>
       )}
     </div>
