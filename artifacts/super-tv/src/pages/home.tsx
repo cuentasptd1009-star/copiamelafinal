@@ -835,7 +835,11 @@ export default function Home() {
     return contentRows;
   }, [activeTab, channelRows, seriesRows, contentRows, selectedChannelCategory]);
 
-  useEffect(() => { setRowIndex(0); setColIndex(0); setSelectedChannelCategory(null); setRowsFocusActive(false); }, [activeTab, searchQuery]);
+  useEffect(() => {
+    setRowIndex(0); setColIndex(0); setSelectedChannelCategory(null); setRowsFocusActive(false);
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [activeTab, searchQuery]);
   useEffect(() => {
     if (zone === 'hero') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
