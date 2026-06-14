@@ -1022,13 +1022,10 @@ export default function Home() {
 
   const showSidebar = zone === 'sidebar' || sidebarMouseOpen;
 
-  useEffect(() => {
-    if (zone !== 'sidebar') return;
-    const si = sidebarItems[sidebarIdx];
-    if (si?.kind === 'tab') {
-      startTransition(() => { setActiveTab(si.key); setTabIndex(si.tabIdx); });
-    }
-  }, [sidebarIdx, zone]); // eslint-disable-line react-hooks/exhaustive-deps
+  // NOTE: We intentionally do NOT change activeTab while the user navigates
+  // the sidebar with arrow keys. Changing it on every arrow press triggers API
+  // fetches mid-navigation and freezes the sidebar (especially on Películas/Series
+  // which have heavy data). Content loads only on Enter / ArrowRight / mouse click.
 
   const isLoading = channelsLoading || moviesLoading || ((activeTab === 'series' || activeTab === 'home') && seriesLoading);
   const showHero = !searchQuery && heroBannerItems.length > 0 && activeTab !== 'channels';
