@@ -1,15 +1,13 @@
-import { lazy, Suspense, useState, useCallback } from "react";
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, useSearch } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { getToken } from "@/lib/auth";
-import { SplashScreen } from "@/components/SplashScreen";
 
 import Login from "@/pages/login";
 import Home from "@/pages/home";
-import { isLegacyBrowser } from "@/lib/browser-compat";
 import PlayerPage from "@/pages/player";
 import VodPlayerPage from "@/pages/vod-player";
 import ActivarPage from "@/pages/activar";
@@ -42,28 +40,8 @@ const queryClient = new QueryClient({
   },
 });
 
-function splashAlreadyShown(): boolean {
-  try { return !!sessionStorage.getItem('supertv_splash_shown'); } catch { return false; }
-}
-
-function markSplashShown() {
-  try { sessionStorage.setItem('supertv_splash_shown', '1'); } catch {}
-}
-
 function HomeRoute() {
-  const [showSplash, setShowSplash] = useState(() => !splashAlreadyShown() && !isLegacyBrowser() && !(window as any).__isTvBrowser);
-
-  const handleSplashDone = useCallback(() => {
-    markSplashShown();
-    setShowSplash(false);
-  }, []);
-
-  return (
-    <>
-      <Home />
-      {showSplash && <SplashScreen onDone={handleSplashDone} />}
-    </>
-  );
+  return <Home />;
 }
 
 function PlayerRoute() {
