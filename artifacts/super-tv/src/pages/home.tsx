@@ -127,7 +127,7 @@ function SeriesCard({ series, onClick, focused, onHover, onHoverEnd }: { series:
       onMouseLeave={onHoverEnd}
       tabIndex={0}
       data-tv-focused={focused ? 'true' : undefined}
-      className={`flex-shrink-0 w-36 sm:w-40 md:w-44 cursor-pointer group rounded-xl overflow-hidden border transition-all duration-200 ${focused ? 'border-primary ring-2 ring-primary scale-105 shadow-[0_0_15px_rgba(220,38,38,0.5)] z-10' : 'border-border hover:border-primary/60 hover:scale-[1.03]'}`}
+      className={`relative flex-shrink-0 w-36 sm:w-40 md:w-44 cursor-pointer group rounded-xl overflow-hidden border transition-all duration-200 ${focused ? 'border-primary ring-2 ring-primary scale-105 shadow-[0_0_15px_rgba(220,38,38,0.5)] z-10' : 'border-border hover:border-primary/60 hover:scale-[1.03]'}`}
     >
       <div className="relative aspect-[2/3] bg-muted overflow-hidden">
         {series.poster ? (
@@ -177,7 +177,7 @@ function ContinueWatchingCard({ item, onClick, focused, onRemove }: { item: Cont
       data-tv-focused={focused ? 'true' : undefined}
       className={`flex-shrink-0 w-36 sm:w-40 md:w-44 cursor-pointer group rounded-xl overflow-hidden border transition-all duration-200 ${focused ? 'border-primary ring-2 ring-primary scale-105 shadow-[0_0_15px_rgba(220,38,38,0.5)] z-10' : 'border-border hover:border-primary/60 hover:scale-[1.03]'}`}
     >
-      <div className={`relative bg-muted overflow-hidden ${isExternal ? 'aspect-video' : 'aspect-[2/3]'}`}>
+      <div className={`relative bg-muted overflow-hidden aspect-video`}>
         {poster ? (
           <img src={poster} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         ) : (
@@ -212,7 +212,7 @@ function ContinueWatchingCard({ item, onClick, focused, onRemove }: { item: Cont
       {onRemove && (
         <button
           onClick={e => { e.stopPropagation(); onRemove(); }}
-          className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-black/70 text-white/50 hover:text-white hover:bg-black/85 hover:scale-110 opacity-0 group-hover:opacity-100 transition-[opacity,transform] duration-150 z-10"
+          className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-black/70 text-white/70 hover:text-white hover:bg-black/85 hover:scale-110 transition-[opacity,transform] duration-150 z-10"
           title="Eliminar de Seguir viendo"
           tabIndex={-1}
         >
