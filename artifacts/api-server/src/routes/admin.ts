@@ -11,6 +11,7 @@ import {
 import { count, sql, desc } from "drizzle-orm";
 import { requireSuperAdmin } from "../lib/auth.js";
 import { channelTracker } from "../lib/tracker.js";
+import { getSegmentCacheStats } from "./channels.js";
 import { cache } from "../lib/cache.js";
 
 const router = Router();
@@ -104,6 +105,16 @@ router.get("/admin/stats", requireSuperAdmin, async (req: Request, res: Response
   };
   cache.set("admin:stats", payload, 60_000);
   res.json(payload);
+});
+
+
+router.get("/admin/stream-stats", requireSuperAdmin, (req: Request, res: Response) => {
+  const seg = getSegmentCacheStats();
+  res.json({
+    segmentCache: seg,
+    topChannels: channelTracker.getTop(10),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 export default router;
