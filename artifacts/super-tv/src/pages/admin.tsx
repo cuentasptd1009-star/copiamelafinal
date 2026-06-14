@@ -333,6 +333,100 @@ function ActivityPanel({ stats, lastRefreshed, onRefresh }: {
   );
 }
 
+
+function StreamStatsCard() {
+  const adminToken = getToken("admin") ?? "";
+  const [stats, setStats] = useState<{
+    segmentCache: { totalEntries: number; activeEntries: number; maxEntries: number; totalMB: string; ttlSeconds: number };
+    topChannels: { channelId: number; name: string; views: number }[];
+    timestamp: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchStats = () => {
+    setLoading(true);
+    fetch(BASE_URL + "/api/admin/stream-stats", {
+      headers: { Authorization: "Bearer " + adminToken },
+    })
+      .then(r => r.json())
+      .then(d => { setStats(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchStats(); }, []);
+
+  const fillPct = stats ? Math.round((stats.segmentCache.activeEntries / stats.segmentCache.maxEntries) * 100) : 0;
+  const fillColor = fillPct > 80 ? "bg-red-500" : fillPct > 50 ? "bg-yellow-500" : "bg-green-500";
+
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <MonitorPlay className="w-4 h-4 text-primary" /> Cache de segmentos HLS
+            <span className="text-xs font-normal text-muted-foreground">(HTTP streams via VPS)</span>
+          </CardTitle>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchStats} disabled={loading}>
+            <RefreshCw className={loading ? "w-3.5 h-3.5 animate-spin" : "w-3.5 h-3.5"} />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center justify-center py-6 text-muted-foreground text-xs">Cargando…</div>
+        ) : !stats ? (
+          <div className="text-xs text-muted-foreground">No se pudieron cargar los stats.</div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center">
+                <div className="text-xl font-bold text-primary">{stats.segmentCache.activeEntries}</div>
+                <div className="text-[10px] text-muted-foreground">Segmentos activos</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold">{stats.segmentCache.totalMB} MB</div>
+                <div className="text-[10px] text-muted-foreground">Memoria usada</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold">{stats.segmentCache.ttlSeconds}s</div>
+                <div className="text-[10px] text-muted-foreground">TTL por segmento</div>
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                <span>Ocupación del cache</span>
+                <span>{stats.segmentCache.activeEntries}/{stats.segmentCache.maxEntries} ({fillPct}%)</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div className={fillColor + " h-2 rounded-full"} style={{ width: fillPct + "%" }} />
+              </div>
+            </div>
+            {stats.topChannels.length > 0 && (
+              <div>
+                <div className="text-[11px] font-medium text-muted-foreground mb-2">Top canales (desde reinicio)</div>
+                <div className="space-y-1">
+                  {stats.topChannels.slice(0, 5).map((ch, i) => (
+                    <div key={ch.channelId} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-muted-foreground w-4 text-right flex-shrink-0">{i + 1}</span>
+                        <span className="truncate">{ch.name}</span>
+                      </div>
+                      <span className="font-mono text-muted-foreground ml-2 flex-shrink-0">{ch.views.toLocaleString()} vistas</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="text-[10px] text-muted-foreground text-right">
+              Actualizado: {new Date(stats.timestamp).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function WhatsappAlertsSection() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
