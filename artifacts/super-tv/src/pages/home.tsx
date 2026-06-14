@@ -485,6 +485,7 @@ export default function Home() {
   const rowRefs = useRef<(HTMLElement | null)[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
+  const tabJustChangedRef = useRef(false);
 
   const sectionConfig = useSectionConfig();
 
@@ -839,8 +840,11 @@ export default function Home() {
     setRowIndex(0); setColIndex(0); setSelectedChannelCategory(null); setRowsFocusActive(false);
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     if (mainRef.current) mainRef.current.scrollTop = 0;
+    tabJustChangedRef.current = true;
+    setTimeout(() => { tabJustChangedRef.current = false; }, 50);
   }, [activeTab, searchQuery]);
   useEffect(() => {
+    if (tabJustChangedRef.current) return;
     if (zone === 'hero') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (zone === 'rows' && rowRefs.current[rowIndex]) {
@@ -848,6 +852,7 @@ export default function Home() {
     }
   }, [rowIndex, zone]);
   useEffect(() => {
+    if (tabJustChangedRef.current) return;
     if (zone !== 'rows') return;
     const el = document.querySelector('[data-tv-focused="true"]') as HTMLElement | null;
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
