@@ -543,9 +543,11 @@ export default function PlayerPage() {
       if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
       setIsFullscreen(true);
     } else {
+      fsExitByToggleRef.current = true;
       const exit = (document as any).exitFullscreen || (document as any).webkitExitFullscreen;
       if (exit) { try { exit.call(document); return; } catch {} }
       if (vid?.webkitExitFullscreen) { try { vid.webkitExitFullscreen(); return; } catch {} }
+      fsExitByToggleRef.current = false;
       setIsFullscreen(false);
     }
     showControlsTemporarily();
@@ -553,9 +555,22 @@ export default function PlayerPage() {
 
   useEffect(() => {
     const vid = videoRef.current as any;
-    const onFsChange = () => setIsFullscreen(!!(document.fullscreenElement || (document as any).webkitFullscreenElement));
+    const onFsChange = () => {
+      const isNowFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsFullscreen(isNowFull);
+      if (!isNowFull && !fsExitByToggleRef.current) {
+        handleMinimizeRef.current();
+      }
+      fsExitByToggleRef.current = false;
+    };
     const onIosEnter = () => setIsFullscreen(true);
-    const onIosExit = () => setIsFullscreen(false);
+    const onIosExit = () => {
+      setIsFullscreen(false);
+      if (!fsExitByToggleRef.current) {
+        handleMinimizeRef.current();
+      }
+      fsExitByToggleRef.current = false;
+    };
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
     vid?.addEventListener('webkitbeginfullscreen', onIosEnter);
@@ -576,6 +591,10 @@ export default function PlayerPage() {
       setLocation(backUrl);
     }
   }, [type, currentUrl, currentTitle, backUrl, setLocation]);
+
+  const handleMinimizeRef = useRef(handleMinimize);
+  handleMinimizeRef.current = handleMinimize;
+  const fsExitByToggleRef = useRef(false);
 
   const showOsdBriefly = useCallback(() => {
     setShowOsd(true);
@@ -676,8 +695,11 @@ export default function PlayerPage() {
         case 'Escape':
         case 'Backspace':
           e.preventDefault();
-          if (document.fullscreenElement) { document.exitFullscreen(); }
-          handleMinimize();
+          if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+            document.exitFullscreen?.().catch(() => handleMinimize());
+          } else {
+            handleMinimize();
+          }
           break;
         case ' ':
         case 'MediaPlayPause':
