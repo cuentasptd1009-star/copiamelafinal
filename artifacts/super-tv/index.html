@@ -330,6 +330,10 @@
           if (/PhilipsTV/i.test(ua)) return true;
           if (/AFT[A-Z]/i.test(ua)) return true;
           if (/CrKey/i.test(ua)) return true;
+          if (/WebAppManager/i.test(ua)) return true;  // LG webOS 2019+ built-in browser
+          if (/NetCast/i.test(ua)) return true;           // LG older NetCast TVs
+          if (/NETTV/i.test(ua)) return true;             // Philips NetTV
+          if (/Maple/i.test(ua)) return true;             // Samsung older TVs
           return false;
         })();
         if (__isModernTv && !window.__legacyBrowser) {
