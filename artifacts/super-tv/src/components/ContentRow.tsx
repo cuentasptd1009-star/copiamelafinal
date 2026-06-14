@@ -124,14 +124,34 @@ export const ContentRow = memo(function ContentRow({
   }, [updateScrollState, items]);
 
   useEffect(() => {
-    if (isFocusedRow && focusedIndex >= 0 && cardRefs.current[focusedIndex]) {
-      cardRefs.current[focusedIndex]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'center',
-      });
+    if (!isFocusedRow || focusedIndex < 0) return;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // Try card ref first (reliable if card is in DOM)
+    const card = cardRefs.current[focusedIndex];
+    if (card) {
+      // Use scrollLeft math instead of scrollIntoView for TV browser compatibility
+      // scrollIntoView can fail on old WebKit or when card is at the virtual edge
+      const cardLeft = card.offsetLeft;
+      const cardRight = cardLeft + card.offsetWidth;
+      const containerLeft = el.scrollLeft;
+      const containerRight = containerLeft + el.clientWidth;
+
+      if (cardLeft < containerLeft + 16) {
+        // Card hidden/cut off on the left
+        el.scrollTo({ left: Math.max(0, cardLeft - 16), behavior: 'smooth' });
+      } else if (cardRight > containerRight - 16) {
+        // Card hidden/cut off on the right — scroll to show it with padding
+        el.scrollTo({ left: cardRight - el.clientWidth + 16, behavior: 'smooth' });
+      }
+    } else {
+      // Card not yet in DOM (virtualized out) — scroll to virtual position directly
+      const targetLeft = focusedIndex * itemW;
+      const centeredLeft = targetLeft - (el.clientWidth / 2) + (itemW / 2);
+      el.scrollTo({ left: Math.max(0, centeredLeft), behavior: 'smooth' });
     }
-  }, [focusedIndex, isFocusedRow]);
+  }, [focusedIndex, isFocusedRow, itemW]);
 
   // Clean up interval on unmount
   useEffect(() => {
