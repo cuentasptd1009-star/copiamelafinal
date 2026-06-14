@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Super TV - Modo Ligero</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#090E17;color:#fff;font-family:Arial,sans-serif;min-height:100vh}
+header{background:#0d1420;padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem;border-bottom:2px solid #e50914}
+header img{width:40px;border-radius:8px}
+header h1{color:#e50914;font-size:1.5rem}
+header span{color:#aaa;font-size:0.85rem;margin-left:auto}
+nav{background:#111827;display:flex;overflow-x:auto;padding:0 1rem;border-bottom:1px solid #1f2937;-webkit-overflow-scrolling:touch}
+nav a{display:inline-block;padding:0.85rem 1.25rem;color:#9ca3af;text-decoration:none;white-space:nowrap;font-size:0.95rem;border-bottom:3px solid transparent;-webkit-transition:color 0.2s;transition:color 0.2s}
+nav a.active,nav a:hover{color:#fff;border-bottom-color:#e50914}
+#status{padding:0.75rem 1.5rem;background:#1f2937;color:#9ca3af;font-size:0.85rem;text-align:center}
+#grid{padding:1rem 1.5rem;display:-webkit-box;display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;gap:0.75rem}
+.card{background:#1a2235;border-radius:8px;overflow:hidden;width:calc(25% - 0.75rem);min-width:140px;cursor:pointer;border:2px solid transparent;-webkit-transition:border-color 0.15s;transition:border-color 0.15s}
+.card:hover,.card:focus{border-color:#e50914;outline:none}
+.card img{width:100%;aspect-ratio:16/9;object-fit:cover;background:#111;display:block}
+.card-info{padding:0.4rem 0.5rem}
+.card-title{font-size:0.75rem;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-badge{display:inline-block;background:#e50914;color:#fff;font-size:0.6rem;padding:1px 5px;border-radius:3px;margin-bottom:2px;text-transform:uppercase}
+.empty{text-align:center;padding:3rem;color:#6b7280;width:100%}
+.loading-bar{height:3px;background:#e50914;width:0;-webkit-transition:width 0.3s;transition:width 0.3s;position:fixed;top:0;left:0;z-index:999}
+@media(max-width:600px){.card{width:calc(50% - 0.75rem)}}
+</style>
+</head>
+<body>
+<div class="loading-bar" id="bar"></div>
+<header>
+  <img src="/icon-192.png" alt="Super TV">
+  <h1>Super TV</h1>
+  <span id="hdr-info">Modo Ligero</span>
+</header>
+<nav id="tabs">
+  <a href="#" class="active" data-tab="channels">En Vivo</a>
+  <a href="#" data-tab="movies">Películas</a>
+  <a href="#" data-tab="series">Series</a>
+</nav>
+<div id="status">Cargando...</div>
+<div id="grid"></div>
+<script>
+var API = '/api';
+var currentTab = 'channels';
+var allData = {channels: null, movies: null, series: null};
+
+function xhr(url, cb) {
+  var r = new XMLHttpRequest();
+  r.open('GET', url);
+  r.onreadystatechange = function() {
+    if (r.readyState === 4) {
+      if (r.status >= 200 && r.status < 300) {
+        try { cb(null, JSON.parse(r.responseText)); } catch(e) { cb(e); }
+      } else { cb(new Error('HTTP ' + r.status)); }
+    }
+  };
+  r.send();
+}
+
+function setBar(pct) {
+  var bar = document.getElementById('bar');
+  if (bar) bar.style.width = pct + '%';
+}
+
+function setStatus(msg) {
+  var s = document.getElementById('status');
+  if (s) s.textContent = msg;
+}
+
+function playStream(url, title) {
+  if (!url) return;
+  var ok = false;
+  // Try HLS in native video
+  if (window.MediaSource || url.indexOf('.m3u8') === -1) {
+    var win = window.open('', '_blank');
+    if (win) {
+      win.document.write('<html><head><title>' + title + '</title><style>*{margin:0;padding:0;background:#000}video{width:100vw;height:100vh}</style></head><body><video src="' + url + '" autoplay controls></video></body></html>');
+      win.document.close();
+      ok = true;
+    }
+  }
+  if (!ok) window.location.href = url;
+}
+
+function renderChannels(items) {
+  var grid = document.getElementById('grid');
+  if (!items || !items.length) { grid.innerHTML = '<div class="empty">Sin canales disponibles</div>'; return; }
+  var html = '';
+  for (var i = 0; i < items.length; i++) {
+    var ch = items[i];
+    var name = ch.name || ch.title || 'Canal';
+    var logo = ch.logo || ch.thumbnail || '/channel-default.png';
+    var streamUrl = ch.stream_url || ch.url || ch.hls_url || '';
+    var cat = ch.category || '';
+    html += '<div class="card" tabindex="0" data-url="' + encodeURIComponent(streamUrl) + '" data-title="' + name.replace(/"/g,'') + '">';
+    html += '<img src="' + logo + '" onerror="this.src=\'/channel-default.png\'" loading="lazy" alt="' + name + '">';
+    html += '<div class="card-info">';
+    if (cat) html += '<span class="card-badge">' + cat + '</span><br>';
+    html += '<span class="card-title">' + name + '</span></div></div>';
+  }
+  grid.innerHTML = html;
+  grid.onclick = function(e) {
+    var card = e.target;
+    while (card && card !== grid) {
+      if (card.classList.contains('card')) break;
+      card = card.parentNode;
+    }
+    if (card && card.dataset.url) playStream(decodeURIComponent(card.dataset.url), card.dataset.title || '');
+  };
+}
+
+function renderMovies(items) {
+  var grid = document.getElementById('grid');
+  if (!items || !items.length) { grid.innerHTML = '<div class="empty">Sin películas disponibles</div>'; return; }
+  var html = '';
+  for (var i = 0; i < items.length; i++) {
+    var m = items[i];
+    var title = m.title || m.name || 'Película';
+    var thumb = m.thumbnail || m.poster || m.backdrop_path || '/channel-default.png';
+    var streamUrl = m.stream_url || m.url || m.hls_url || '';
+    var cat = m.category || m.genre || '';
+    html += '<div class="card" tabindex="0" data-url="' + encodeURIComponent(streamUrl) + '" data-title="' + title.replace(/"/g,'') + '">';
+    html += '<img src="' + thumb + '" onerror="this.src=\'/channel-default.png\'" loading="lazy" alt="' + title + '">';
+    html += '<div class="card-info">';
+    if (cat) html += '<span class="card-badge">' + cat + '</span><br>';
+    html += '<span class="card-title">' + title + '</span></div></div>';
+  }
+  grid.innerHTML = html;
+  grid.onclick = function(e) {
+    var card = e.target;
+    while (card && card !== grid) {
+      if (card.classList.contains('card')) break;
+      card = card.parentNode;
+    }
+    if (card && card.dataset.url) playStream(decodeURIComponent(card.dataset.url), card.dataset.title || '');
+  };
+}
+
+function loadTab(tab) {
+  currentTab = tab;
+  var tabs = document.querySelectorAll('nav a');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].className = tabs[i].dataset.tab === tab ? 'active' : '';
+  }
+  document.getElementById('grid').innerHTML = '';
+  setBar(10);
+
+  if (tab === 'channels') {
+    if (allData.channels) { setBar(100); setStatus(allData.channels.length + ' canales'); renderChannels(allData.channels); return; }
+    setStatus('Cargando canales...');
+    xhr(API + '/channels', function(err, data) {
+      setBar(100);
+      if (err) { setStatus('Error cargando canales'); return; }
+      var items = Array.isArray(data) ? data : (data.channels || data.data || []);
+      allData.channels = items;
+      setStatus(items.length + ' canales en vivo');
+      renderChannels(items);
+    });
+  } else if (tab === 'movies') {
+    if (allData.movies) { setBar(100); setStatus(allData.movies.length + ' películas'); renderMovies(allData.movies); return; }
+    setStatus('Cargando películas...');
+    xhr(API + '/movies?limit=200', function(err, data) {
+      setBar(100);
+      if (err) { setStatus('Error cargando películas'); return; }
+      var items = Array.isArray(data) ? data : (data.movies || data.data || []);
+      allData.movies = items;
+      setStatus(items.length + ' películas');
+      renderMovies(items);
+    });
+  } else if (tab === 'series') {
+    if (allData.series) { setBar(100); setStatus(allData.series.length + ' series'); renderMovies(allData.series); return; }
+    setStatus('Cargando series...');
+    xhr(API + '/series?limit=200', function(err, data) {
+      setBar(100);
+      if (err) { setStatus('Error cargando series'); return; }
+      var items = Array.isArray(data) ? data : (data.series || data.data || []);
+      allData.series = items;
+      setStatus(items.length + ' series');
+      renderMovies(items);
+    });
+  }
+}
+
+// Tab navigation
+document.getElementById('tabs').onclick = function(e) {
+  if (e.target && e.target.dataset.tab) {
+    e.preventDefault();
+    loadTab(e.target.dataset.tab);
+  }
+};
+
+// Check auth / session info
+xhr(API + '/auth/session', function(err, data) {
+  if (!err && data && data.username) {
+    var info = document.getElementById('hdr-info');
+    if (info) info.textContent = data.username + ' · Modo Ligero';
+  }
+});
+
+// Initial load
+loadTab('channels');
+</script>
+</body>
+</html>
