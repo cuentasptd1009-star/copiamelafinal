@@ -53,6 +53,41 @@ function detectStreamFormat(url: string): string {
   return "native";
 }
 
+// ---------------------------------------------------------------------------
+// Segment cache: bounded in-memory store for HTTP-only .ts segments.
+// Avoids proxying the same segment N times when N clients watch simultaneously.
+// Max 200 entries × ~400 KB avg = ~80 MB peak, well within 4 GB VPS RAM.
+// ---------------------------------------------------------------------------
+interface SegmentEntry { data: Buffer; contentType: string; expiresAt: number; }
+const segmentCache = new Map<string, SegmentEntry>();
+const SEG_CACHE_MAX = 200;
+const SEG_CACHE_TTL_MS = 30_000; // 30 seconds — HLS segments are immutable
+
+function segCacheGet(key: string): SegmentEntry | undefined {
+  const entry = segmentCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) { segmentCache.delete(key); return undefined; }
+  return entry;
+}
+
+function segCacheSet(key: string, data: Buffer, contentType: string): void {
+  // Evict oldest entries if at capacity
+  if (segmentCache.size >= SEG_CACHE_MAX) {
+    const firstKey = segmentCache.keys().next().value;
+    if (firstKey !== undefined) segmentCache.delete(firstKey);
+  }
+  segmentCache.set(key, { data, contentType, expiresAt: Date.now() + SEG_CACHE_TTL_MS });
+}
+
+// Cleanup stale entries every 60 s to avoid memory creep
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of segmentCache) {
+    if (now > v.expiresAt) segmentCache.delete(k);
+  }
+}, 60_000);
+
+// ---------------------------------------------------------------------------
 
 async function checkHlsAuth(req: Request, res: Response): Promise<{ ok: boolean; token?: string }> {
   const token = (req.query.token as string) || extractToken(req);
@@ -83,7 +118,6 @@ function looksLikeUrl(line: string): boolean {
 }
 
 function parseM3U(content: string) {
-  // Strip BOM if present
   const cleaned = content.replace(/^\uFEFF/, "");
   const lines = cleaned.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const channels: { name: string; logo?: string; category?: string; streamUrl: string }[] = [];
@@ -101,7 +135,6 @@ function parseM3U(content: string) {
       currentCategory = groupMatch ? groupMatch[1] : "";
     } else if (looksLikeUrl(line)) {
       if (!currentName) currentName = "Canal";
-      // Strip any trailing comment or whitespace from URL
       const streamUrl = line.split(/\s+#/)[0].trim();
       channels.push({
         name: currentName,
@@ -179,7 +212,6 @@ router.get("/channels", async (req: Request, res: Response) => {
     return;
   }
 
-  // Enforce code expiry for user sessions
   if (userSession) {
     const [code] = await db.select().from(accessCodesTable).where(eq(accessCodesTable.id, userSession.codeId)).limit(1);
     if (!code || !code.isActive) { res.status(401).json({ error: "Code inactive" }); return; }
@@ -213,7 +245,7 @@ router.get("/channels", async (req: Request, res: Response) => {
     return {
       ...c,
       createdAt: c.createdAt.toISOString(),
-      streamUrl: c.streamUrl, // Direct URL returned to all authenticated users
+      streamUrl: c.streamUrl,
       streamFormat,
     };
   });
@@ -376,13 +408,11 @@ function rewriteM3u8(
       } catch {
         return line;
       }
-      // Sub-manifests (.m3u8) still go through the relay so they can be rewritten too
       const lower = absolute.toLowerCase().split("?")[0];
       if (lower.endsWith(".m3u8") || lower.includes("manifest")) {
         const encoded = Buffer.from(absolute).toString("base64url");
         return `/api/channels/${channelId}/hls-relay?s=${encoded}&token=${encodeURIComponent(token)}`;
       }
-      // Route all segment URLs through hls-relay — relay handles HTTPS upgrade or proxy
       const encoded = Buffer.from(absolute).toString("base64url");
       return `/api/channels/${channelId}/hls-relay?s=${encoded}&token=${encodeURIComponent(token)}`;
     })
@@ -401,29 +431,42 @@ router.get("/channels/:id/hls-proxy", async (req: Request, res: Response) => {
 
   channelTracker.record(channel.id, channel.name);
 
-    // HTTP streams: fetch manifest server-side (KB only) → rewrite all URLs to HTTPS relay
-    if (channel.streamUrl.startsWith("http://")) {
-      try {
-        const streamUpstream = await fetch(channel.streamUrl, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
-          signal: AbortSignal.timeout(15000),
-          redirect: "follow",
-        });
-        if (!streamUpstream.ok) { res.status(502).send("Upstream error"); return; }
-        const manifestText = await streamUpstream.text();
-        const manifestBaseUrl = new URL(channel.streamUrl);
-        const rewritten = rewriteM3u8(manifestText, manifestBaseUrl, String(channel.id), auth.token!);
-        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-        res.setHeader("Cache-Control", "no-cache");
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.send(rewritten);
-      } catch {
-        res.status(502).send("Failed to fetch stream");
-      }
-    } else {
-      res.redirect(302, channel.streamUrl);
+  if (channel.streamUrl.startsWith("http://")) {
+    // Cache the rewritten manifest for 3 s — all clients watching the same channel
+    // share a single origin fetch instead of hammering the source server.
+    const manifestCacheKey = `hls:manifest:${channel.id}`;
+    const cachedManifest = cache.get<string>(manifestCacheKey);
+    if (cachedManifest) {
+      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.send(cachedManifest);
+      return;
     }
-  });
+
+    try {
+      const streamUpstream = await fetch(channel.streamUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
+        signal: AbortSignal.timeout(15000),
+        redirect: "follow",
+      });
+      if (!streamUpstream.ok) { res.status(502).send("Upstream error"); return; }
+      const manifestText = await streamUpstream.text();
+      const manifestBaseUrl = new URL(channel.streamUrl);
+      const rewritten = rewriteM3u8(manifestText, manifestBaseUrl, String(channel.id), auth.token!);
+      // Store for 3 s — short enough to pick up playlist updates, long enough to deduplicate bursts
+      cache.set(manifestCacheKey, rewritten, 3_000);
+      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.send(rewritten);
+    } catch {
+      res.status(502).send("Failed to fetch stream");
+    }
+  } else {
+    res.redirect(302, channel.streamUrl);
+  }
+});
 
 router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
   const auth = await checkHlsAuth(req, res);
@@ -451,15 +494,14 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
   const urlClean = segUrl.toLowerCase().split("?")[0];
   const looksLikeManifest = urlClean.endsWith(".m3u8") || urlClean.includes("manifest");
 
-  // FAST PATH: HTTPS segment (not a manifest) — redirect immediately.
-  // Browser fetches directly from the origin: ZERO Vercel bandwidth, full playback speed.
+  // HTTPS segment (not a manifest) — redirect directly; zero VPS bandwidth.
   if (segUrl.startsWith("https://") && !looksLikeManifest) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.redirect(302, segUrl);
     return;
   }
 
-  // HTTPS manifest — fetch and rewrite URLs (manifests are only ~2–10 KB, negligible).
+  // HTTPS manifest — fetch and rewrite URLs (manifests are tiny, ~2–10 KB).
   if (segUrl.startsWith("https://") && looksLikeManifest) {
     try {
       const upstream = await fetch(segUrl, {
@@ -488,11 +530,10 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
     return;
   }
 
-  // HTTP URL: try to upgrade to HTTPS first — redirect costs zero bandwidth.
-  // Only fall back to proxying if the origin truly does not support HTTPS.
+  // HTTP URL handling
   try {
     if (looksLikeManifest) {
-      // HTTP manifest: must fetch + rewrite so segment URLs get upgraded/proxied correctly.
+      // HTTP manifest: fetch + rewrite so segment URLs get upgraded/proxied correctly.
       const upstream = await fetch(segUrl, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
         signal: AbortSignal.timeout(15000),
@@ -507,7 +548,7 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.send(rewritten);
     } else {
-      // HTTP segment: probe once per host whether HTTPS is available, then redirect.
+      // HTTP segment: probe once per host whether HTTPS is available.
       const hostKey = `https_ok:${new URL(segUrl).hostname}`;
       let httpsOk = cache.get<boolean>(hostKey);
       if (httpsOk === undefined) {
@@ -526,11 +567,22 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
       }
 
       if (httpsOk) {
-        // Host supports HTTPS — redirect browser to fetch directly (zero Vercel bandwidth)
+        // Host supports HTTPS — redirect browser to fetch directly (zero VPS bandwidth).
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.redirect(302, segUrl.replace("http://", "https://"));
       } else {
-        // HTTP-only origin — must proxy through Vercel to avoid mixed-content blocking on HTTPS pages.
+        // HTTP-only origin — must proxy. Use segment cache so N simultaneous clients
+        // share a single origin fetch instead of triggering N independent downloads.
+        const segCacheKey = `seg:${segUrl}`;
+        const cached = segCacheGet(segCacheKey);
+        if (cached) {
+          res.setHeader("Content-Type", cached.contentType);
+          res.setHeader("Cache-Control", "no-cache");
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.send(cached.data);
+          return;
+        }
+
         try {
           const upstream = await fetch(segUrl, {
             headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
@@ -539,10 +591,12 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
           if (!upstream.ok) { res.status(502).send("Segment unavailable"); return; }
           const segBuf = await upstream.arrayBuffer();
           const segCt = upstream.headers.get("content-type") || "video/MP2T";
+          const buf = Buffer.from(segBuf);
+          segCacheSet(segCacheKey, buf, segCt);
           res.setHeader("Content-Type", segCt);
           res.setHeader("Cache-Control", "no-cache");
           res.setHeader("Access-Control-Allow-Origin", "*");
-          res.send(Buffer.from(segBuf));
+          res.send(buf);
         } catch {
           res.status(502).send("Failed to fetch segment");
         }
@@ -762,5 +816,28 @@ router.post("/channels/:id/test-stream", requireAdminAuth, async (req: Request, 
     });
   }
 });
+
+
+// ---------------------------------------------------------------------------
+// Export segment cache stats for the admin panel
+// ---------------------------------------------------------------------------
+export function getSegmentCacheStats() {
+  const now = Date.now();
+  let active = 0;
+  let totalBytes = 0;
+  for (const [, v] of segmentCache) {
+    if (now <= v.expiresAt) {
+      active++;
+      totalBytes += v.data.length;
+    }
+  }
+  return {
+    totalEntries: segmentCache.size,
+    activeEntries: active,
+    maxEntries: SEG_CACHE_MAX,
+    totalMB: (totalBytes / 1024 / 1024).toFixed(2),
+    ttlSeconds: SEG_CACHE_TTL_MS / 1000,
+  };
+}
 
 export default router;
