@@ -212,7 +212,7 @@ function ContinueWatchingCard({ item, onClick, focused, onRemove }: { item: Cont
       {onRemove && (
         <button
           onClick={e => { e.stopPropagation(); onRemove(); }}
-          className={}
+          className="absolute top-1.5 right-1.5 p-1.5 rounded-full bg-black/70 text-white/50 hover:text-white hover:bg-black/85 hover:scale-110 opacity-0 group-hover:opacity-100 transition-[opacity,transform] duration-150 z-10"
           title="Eliminar de Seguir viendo"
           tabIndex={-1}
         >
