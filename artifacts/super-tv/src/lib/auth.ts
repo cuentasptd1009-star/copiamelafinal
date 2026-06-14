@@ -17,4 +17,5 @@ export const getToken = (type: 'user' | 'admin' | 'subadmin' = 'user') => {
 export const clearTokens = () => {
   localStorage.removeItem('supertv_token');
   localStorage.removeItem('supertv_admin_token');
+  localStorage.removeItem('supertv_remembered_code');
 };
