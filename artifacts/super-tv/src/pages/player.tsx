@@ -559,7 +559,7 @@ export default function PlayerPage() {
       const isNowFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
       setIsFullscreen(isNowFull);
       if (!isNowFull && !fsExitByToggleRef.current) {
-        handleMinimizeRef.current();
+        handleBackRef.current();
       }
       fsExitByToggleRef.current = false;
     };
@@ -567,7 +567,7 @@ export default function PlayerPage() {
     const onIosExit = () => {
       setIsFullscreen(false);
       if (!fsExitByToggleRef.current) {
-        handleMinimizeRef.current();
+        handleBackRef.current();
       }
       fsExitByToggleRef.current = false;
     };
@@ -592,8 +592,14 @@ export default function PlayerPage() {
     }
   }, [type, currentUrl, currentTitle, backUrl, setLocation]);
 
+  const handleBack = useCallback(() => {
+    setLocation(backUrl);
+  }, [backUrl, setLocation]);
+
   const handleMinimizeRef = useRef(handleMinimize);
   handleMinimizeRef.current = handleMinimize;
+  const handleBackRef = useRef(handleBack);
+  handleBackRef.current = handleBack;
   const fsExitByToggleRef = useRef(false);
 
   const showOsdBriefly = useCallback(() => {
@@ -696,9 +702,9 @@ export default function PlayerPage() {
         case 'Backspace':
           e.preventDefault();
           if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
-            document.exitFullscreen?.().catch(() => handleMinimize());
+            document.exitFullscreen?.().catch(() => handleBack());
           } else {
-            handleMinimize();
+            handleBack();
           }
           break;
         case ' ':
@@ -743,7 +749,7 @@ export default function PlayerPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [ctrlIndex, backUrl, togglePlay, toggleMute, toggleFullscreen, skip, handleVolumeChange, showControlsTemporarily, hasChannels, goPrevChannel, goNextChannel, handleMinimize, controls]);
+  }, [ctrlIndex, backUrl, togglePlay, toggleMute, toggleFullscreen, skip, handleVolumeChange, showControlsTemporarily, hasChannels, goPrevChannel, goNextChannel, handleMinimize, handleBack, controls]);
 
   useEffect(() => {
     showControlsTemporarily();
