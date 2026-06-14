@@ -238,3 +238,54 @@
 .legacy-tv [class*="rounded-2xl"] { border-radius: 8px !important; }
 .legacy-tv [class*="rounded-3xl"] { border-radius: 8px !important; }
 .legacy-tv [class*="rounded-full"] { border-radius: 50% !important; }
+
+/* ============================================================
+   MODERN SLOW TV OVERRIDES (Samsung 2019+, LG webOS 4+, Sony BRAVIA,
+   Android TV, Amazon Fire TV — Chromium 56-85 era)
+   Applied when html.slow-tv is set by TV UA detection in index.html
+   ============================================================ */
+
+/* Kill transitions and animations — CPU is slow even on modern Chromium TV engines */
+.slow-tv *,
+.slow-tv *::before,
+.slow-tv *::after {
+  -webkit-transition-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+  -webkit-transition-delay: 0s !important;
+  transition-delay: 0s !important;
+  -webkit-animation-duration: 0.001ms !important;
+  animation-duration: 0.001ms !important;
+  -webkit-animation-delay: 0s !important;
+  animation-delay: 0s !important;
+}
+
+/* Keep loading spinner working */
+.slow-tv #app-loading .spinner {
+  -webkit-animation: spin 0.9s linear infinite !important;
+  animation: spin 0.9s linear infinite !important;
+  -webkit-animation-duration: 0.9s !important;
+  animation-duration: 0.9s !important;
+}
+
+/* Kill backdrop-blur — GPU-heavy on TV chips */
+.slow-tv [class*='backdrop-blur'],
+.slow-tv [class*='backdrop-saturate'],
+.slow-tv [class*='backdrop-brightness'] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: rgba(9,14,23,0.92) !important;
+}
+
+/* Simplify expensive shadows */
+.slow-tv .shadow-2xl,
+.slow-tv .shadow-xl,
+.slow-tv [class*='shadow-['] {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5) !important;
+}
+
+/* Scale transforms on hover — remove them for TV (no hover anyway) */
+.slow-tv [class*='hover:scale'],
+.slow-tv [class*='group-hover:scale'] {
+  -webkit-transform: none !important;
+  transform: none !important;
+}
