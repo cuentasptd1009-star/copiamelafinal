@@ -74,6 +74,7 @@ export default function Login() {
   const installRef = useRef<HTMLButtonElement>(null);
   const shortcutRef = useRef<HTMLButtonElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedAtRef = useRef(Date.now());
 
   const openQrModal = useCallback(async () => {
     setQrActivated(false);
@@ -128,6 +129,12 @@ export default function Login() {
     else if (focusZone === 'install') installRef.current?.focus();
     else if (focusZone === 'shortcut') shortcutRef.current?.focus();
   }, [focusZone]);
+
+  // TV browsers ignore autoFocus — re-attempt focus after a short delay
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 400);
+    return () => clearTimeout(t);
+  }, []);
 
   const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
@@ -205,6 +212,8 @@ export default function Login() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore key events arriving within 600ms of mount — prevents logout "Enter" from re-submitting
+      if (Date.now() - mountedAtRef.current < 600) return;
       const nk = normalizeKey(e);
       const isBack = nk === 'Escape' || e.key === 'Backspace';
       if (showHint || showShortcutHint || showApkMsg) {
