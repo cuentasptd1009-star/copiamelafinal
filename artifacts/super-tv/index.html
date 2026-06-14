@@ -305,7 +305,7 @@
           if (/Web0S\/[12]\.|webOS\/[12]\./i.test(ua)) return true;
           /* Chrome version < 56 (released 2017) */
           var cm = ua.match(/Chrom(?:e|ium)\/(\d+)/);
-          if (cm && parseInt(cm[1], 10) < 56) return true;
+          if (cm && parseInt(cm[1], 10) < 67) return true;  // Chrome < 67 (pre-2018) = slow on TVs
           /* No CSS Grid = very old browser */
           try { if (!window.CSS || !window.CSS.supports || !window.CSS.supports('display', 'grid')) return true; } catch(e) { return true; }
           return false;
@@ -586,7 +586,18 @@
     </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      if ('serviceWorker' in navigator) {
+      // LITE MODE: if React fails to boot in 10s, show fallback for very old TVs
+      (function() {
+        var liteTimer = setTimeout(function() {
+          var root = document.getElementById('root');
+          if (root && root.children.length === 0) {
+            document.documentElement.className += ' lite-mode';
+            root.innerHTML = '<div style="font-family:sans-serif;background:#090E17;color:#fff;min-height:100vh;padding:2rem;text-align:center"><img src="/icon-192.png" style="width:80px;border-radius:16px;margin-bottom:1rem"><h1 style="color:#e50914;font-size:2rem">Super TV</h1><p style="color:#aaa;font-size:1.2rem;margin:1rem 0">Tu navegador es muy antiguo para esta versión.<br>Usa el modo ligero:</p><a href="/lite.html" style="display:inline-block;background:#e50914;color:#fff;padding:1rem 2rem;border-radius:8px;text-decoration:none;font-size:1.2rem;margin:1rem">Abrir Modo Ligero</a><p style="color:#666;font-size:0.9rem;margin-top:2rem">O intenta actualizar el navegador de tu TV.</p></div>';
+          }
+        }, 10000);
+        window.__clearLiteTimer = function() { clearTimeout(liteTimer); };
+      })();
+            if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js')
             .then(function(reg) { console.log('SW registered:', reg.scope); })
