@@ -677,7 +677,7 @@ export default function PlayerPage() {
         case 'Backspace':
           e.preventDefault();
           if (document.fullscreenElement) { document.exitFullscreen(); }
-          else handleMinimize();
+          handleMinimize();
           break;
         case ' ':
         case 'MediaPlayPause':
