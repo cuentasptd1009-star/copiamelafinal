@@ -62,6 +62,19 @@ export default defineConfig({
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     target: ['es2015', 'chrome47', 'safari9'],
+    rollupOptions: {
+      output: {
+        // Split vendor libs into separate cached chunks:
+        // React/ReactDOM rarely change = TV browser caches them permanently
+        // App code changes often = only small chunk re-downloads
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-router': ['wouter'],
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
   },
   server: {
     port,
