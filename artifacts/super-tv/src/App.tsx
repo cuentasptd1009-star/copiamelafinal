@@ -51,7 +51,7 @@ function markSplashShown() {
 }
 
 function HomeRoute() {
-  const [showSplash, setShowSplash] = useState(() => !splashAlreadyShown() && !isLegacyBrowser());
+  const [showSplash, setShowSplash] = useState(() => !splashAlreadyShown() && !isLegacyBrowser() && !(window as any).__isTvBrowser);
 
   const handleSplashDone = useCallback(() => {
     markSplashShown();
