@@ -39,6 +39,15 @@ export function isChannel(item: ContentItem): item is ChannelItem {
   return 'streamUrl' in item;
 }
 
+// ---------------------------------------------------------------------------
+// Horizontal virtualisation: only render cards visible in the scroll container
+// plus a buffer on each side. Reduces DOM nodes from 300 → ~20 on large lists.
+// ---------------------------------------------------------------------------
+const ITEM_W_LANDSCAPE = 156; // w-36 + gap-2.5 at sm breakpoint (approx)
+const ITEM_W_PORTRAIT  = 172; // w-40 + gap-2.5 at sm breakpoint (approx)
+const RENDER_BUFFER    = 6;   // extra cards to render outside the visible area
+
+
 interface ContentRowProps {
   title: string;
   emoji?: string;
@@ -80,15 +89,24 @@ export const ContentRow = memo(function ContentRow({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  // Virtualisation state
+  const [renderStart, setRenderStart] = useState(0);
+  const [containerW, setContainerW]   = useState(800); // default safe value
   const scrollIntervalRef = useRef<number | null>(null);
   const currentEdgeRef = useRef<'left' | 'right' | null>(null);
+
+  const itemW = portrait ? ITEM_W_PORTRAIT : ITEM_W_LANDSCAPE;
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     setCanScrollLeft(el.scrollLeft > 4);
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }, []);
+    // Update virtual window
+    const first = Math.floor(el.scrollLeft / itemW);
+    setRenderStart(Math.max(0, first - RENDER_BUFFER));
+    setContainerW(el.clientWidth);
+  }, [itemW]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -209,7 +227,25 @@ export const ContentRow = memo(function ContentRow({
             paddingRight: '4px',
           }}
         >
-          {items.map((item, idx) => {
+          {/* Virtualised rendering: only render visible + buffer items */}
+        {(() => {
+          const visibleCount = Math.ceil(containerW / itemW) + 1;
+          // Ensure the focused item is always in the render window
+          let vStart = renderStart;
+          let vEnd   = renderStart + visibleCount + RENDER_BUFFER * 2;
+          if (isFocusedRow && focusedIndex >= 0) {
+            vStart = Math.min(vStart, Math.max(0, focusedIndex - RENDER_BUFFER));
+            vEnd   = Math.max(vEnd, focusedIndex + RENDER_BUFFER + 1);
+          }
+          vStart = Math.max(0, vStart);
+          vEnd   = Math.min(items.length, vEnd);
+          const leftW  = vStart * itemW;
+          const rightW = Math.max(0, items.length - vEnd) * itemW;
+          return (
+            <>
+              {leftW  > 0 && <div aria-hidden style={{ width: leftW,  flexShrink: 0 }} />}
+              {items.slice(vStart, vEnd).map((item, relIdx) => {
+                const idx = vStart + relIdx;
             const ch = isChannel(item);
             const itemTitle = ch ? item.name : item.title;
             const image = ch ? item.logo : item.poster;
@@ -263,6 +299,10 @@ export const ContentRow = memo(function ContentRow({
               />
             );
           })}
+              {rightW > 0 && <div aria-hidden style={{ width: rightW, flexShrink: 0 }} />}
+            </>
+          );
+        })()}
         </div>
       </div>
     </section>
