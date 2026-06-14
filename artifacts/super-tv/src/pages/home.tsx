@@ -46,7 +46,7 @@ import { setMiniPlayerState, updateMiniPlayerState, getMiniPlayerState, subscrib
 import { useTvKeyboard } from '@/hooks/use-tv-keyboard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Play, Pause, LogOut, Search, Tv, Film, Tv2, X, Download, Share2, UserCircle2, AlertTriangle, Lock, Mic, MicOff, Home as HomeIcon, Smartphone, Menu, Heart, Clock, Trash2, Youtube, Maximize2, Minimize2 } from 'lucide-react';
-import { getFavorites, getAllProgress, getHistory, toggleFavorite, getAllSeriesProgress, getExternalFavorites, getExternalHistory, toggleExternalFavorite, addExternalHistory, isExternalFavorite, removeExternalHistory, clearExternalHistory, type ExternalItem, getSearchHistory, addSearchHistory, removeSearchHistory, clearSearchHistory, getSeriesFavorites, toggleSeriesFavorite, getExternalProgress, getChannelFavorites, toggleChannelFavorite } from '@/lib/user-data';
+import { getFavorites, getAllProgress, getHistory, toggleFavorite, getAllSeriesProgress, getExternalFavorites, getExternalHistory, toggleExternalFavorite, addExternalHistory, isExternalFavorite, removeExternalHistory, clearExternalHistory, type ExternalItem, getSearchHistory, addSearchHistory, removeSearchHistory, clearSearchHistory, getSeriesFavorites, toggleSeriesFavorite, getExternalProgress, getChannelFavorites, toggleChannelFavorite, removeProgress, removeSeriesProgress } from '@/lib/user-data';
 import { useVoiceSearch } from '@/hooks/use-voice-search';
 import logo from '@assets/logo_supertv.png';
 import lettersLogo from '@assets/super-tv-letters-logo.png';
@@ -165,7 +165,7 @@ interface ContinueItemData {
   externalItem?: { id: string; source: 'youtube' | 'archive'; videoId?: string; url?: string; thumbnail?: string };
 }
 
-function ContinueWatchingCard({ item, onClick, focused }: { item: ContinueItemData; onClick: () => void; focused?: boolean }) {
+function ContinueWatchingCard({ item, onClick, focused, onRemove }: { item: ContinueItemData; onClick: () => void; focused?: boolean; onRemove?: () => void }) {
   const isExternal = item.type === 'external';
   const pct = !isExternal && item.duration > 0 ? Math.min((item.time / item.duration) * 100, 100) : 0;
   const remaining = !isExternal && item.duration > item.time ? Math.round((item.duration - item.time) / 60) : 0;
@@ -209,6 +209,16 @@ function ContinueWatchingCard({ item, onClick, focused }: { item: ContinueItemDa
         <p className="text-xs font-medium truncate leading-tight">{item.title}</p>
         <p className="text-[10px] text-muted-foreground truncate mt-0.5">{item.episodeInfo ?? (isExternal ? '' : item.type === 'movie' ? 'Película' : '')}</p>
       </div>
+      {onRemove && (
+        <button
+          onClick={e => { e.stopPropagation(); onRemove(); }}
+          className={}
+          title="Eliminar de Seguir viendo"
+          tabIndex={-1}
+        >
+          <X className="w-3 h-3 text-white" />
+        </button>
+      )}
     </div>
   );
 }
@@ -441,8 +451,8 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
   const [zone, setZone] = useState<NavZone>('rows');
-  const [inputMode, setInputMode] = useState<'mouse' | 'keyboard'>('mouse');
-  const inputModeRef = useRef<'mouse' | 'keyboard'>('mouse');
+  const [inputMode, setInputMode] = useState<'mouse' | 'keyboard'>(() => (window as any).__isTvBrowser ? 'keyboard' : 'mouse');
+  const inputModeRef = useRef<'mouse' | 'keyboard'>((window as any).__isTvBrowser ? 'keyboard' : 'mouse');
 
   type YtResult = { videoId: string; title: string; thumbnail: string; channel: string; year?: string; duration: string };
   type ArchiveResult = { identifier: string; title: string; year?: string; creator?: string; thumbnail: string };
@@ -463,7 +473,7 @@ export default function Home() {
   });
   const [rowIndex, setRowIndex] = useState(0);
   const [colIndex, setColIndex] = useState(0);
-  const [rowsFocusActive, setRowsFocusActive] = useState(false);
+  const [rowsFocusActive, setRowsFocusActive] = useState(() => !!(window as any).__isTvBrowser);
   const [sidebarIdx, setSidebarIdx] = useState(0);
   const [heroBtnIndex, setHeroBtnIndex] = useState(0);
   const [heroBannerIdx, setHeroBannerIdx] = useState(() => 0);
@@ -506,12 +516,13 @@ export default function Home() {
   const [channelFavIds, setChannelFavIds] = useState<number[]>(() => getChannelFavorites());
 
   const [allProgress, setAllProgress] = useState(() => getAllProgress());
+  const [continueVersion, setContinueVersion] = useState(0);
   const [watchHistory, setWatchHistory] = useState(() => getHistory());
   const [externalFavs, setExternalFavs] = useState<ExternalItem[]>(() => getExternalFavorites());
   const [externalHistory, setExternalHistory] = useState<ExternalItem[]>(() => getExternalHistory());
   const [searchHistory, setSearchHistory] = useState<string[]>(() => getSearchHistory());
 
-  const { data: session, isError: sessionError } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false, refetchInterval: 30000 } });
+  const { data: session, isError: sessionError } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: 2, retryDelay: 1000, refetchInterval: 30000 } });
   const { data: avatars = [] } = useListAvatars({ query: { queryKey: getListAvatarsQueryKey() } });
   const updateProfileMutation = useUpdateProfile();
   const { data: allChannels = [], isLoading: channelsLoading } = useListChannels(undefined, { query: { queryKey: getListChannelsQueryKey() } });
@@ -560,7 +571,8 @@ export default function Home() {
     }
     items.sort((a, b) => b.updatedAt - a.updatedAt);
     return items.slice(0, 14);
-  }, [allProgress, movies, seriesList, externalHistory]);
+    void continueVersion;
+  }, [allProgress, movies, seriesList, externalHistory, continueVersion]);
 
   const favoriteMovies = useMemo(() => {
     if (!movies.length || !favorites.length) return [];
@@ -689,7 +701,7 @@ export default function Home() {
 
       // 1. Continuar viendo
       if (combinedContinueWatching.length > 0) {
-        rows.push({ id: 'continue', title: 'Continuar viendo', emoji: '▶', items: [] as ContentItem[], showProgress: true });
+        rows.push({ id: 'continue', title: 'Continuar viendo', emoji: '▶', items: combinedContinueWatching as unknown as ContentItem[], showProgress: true });
       }
 
       // 2. En vivo — primeros 14 canales
@@ -979,6 +991,20 @@ export default function Home() {
       setDetailMovie({ id: mv.id, title: mv.title, poster: mv.poster, description: mv.description, genre: mv.genre, year: mv.year, category: mv.category, duration: mv.duration });
     }
   }, []);
+  const handleRemoveContinue = useCallback((item: ContinueItemData) => {
+    if (item.type === 'movie') {
+      removeProgress(item.id);
+      setAllProgress(getAllProgress());
+      setWatchHistory(getHistory());
+    } else if (item.type === 'series') {
+      removeSeriesProgress(item.id);
+      setContinueVersion(v => v + 1);
+    } else if (item.type === 'external' && item.externalItem) {
+      removeExternalHistory(item.externalItem.id);
+      setExternalHistory(getExternalHistory());
+    }
+  }, []);
+
   const handleLogout = () => { clearTokens(); setLocation('/'); };
   const [apkMsg, setApkMsg] = useState<string | null>(null);
   const handleInstall = useCallback(async () => {
@@ -1300,19 +1326,33 @@ export default function Home() {
             if (activeTab === 'series') {
               const item = seriesRows[rowIndex]?.items[colIndex];
               if (item) playSeriesItem(item);
+            } else if (currentRow?.id === 'continue') {
+              const contItem = combinedContinueWatching[colIndex];
+              if (contItem) {
+                if (isExpired) { setShowExpiredOverlay(true); return; }
+                if (contItem.type === 'external' && contItem.externalItem) {
+                  setExternalPlayer({ title: contItem.title, type: contItem.externalItem.source, videoId: contItem.externalItem.videoId, url: contItem.externalItem.url, thumbnail: contItem.externalItem.thumbnail });
+                } else if (contItem.type === 'series') setLocation();
+                else setLocation();
+              }
             } else {
               const item = currentRow?.items[colIndex];
               if (item) playItem(item);
             }
             break;
           }
-          case 'Escape': case 'Backspace': e.preventDefault(); break;
+          case 'Escape': case 'Backspace':
+            e.preventDefault();
+            if ((currentRow?.id === 'continue') && combinedContinueWatching[colIndex]) {
+              handleRemoveContinue(combinedContinueWatching[colIndex]);
+            }
+            break;
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [zone, sidebarIdx, sidebarItems, rowIndex, colIndex, rowsFocusActive, heroBtnIndex, heroBannerIdx, activeRows, seriesRows, activeTab, playItem, playSeriesItem, actionButtons, showProfile, showHint, showShortcutHint, isListening, startListening, stopListening, showHero, hoveredHero, heroBannerItems, openKeyboard, searchQuery, openProfile, catFilterIdx, channelRows, selectedChannelCategory, apkMsg, sidebarMouseOpen]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [zone, sidebarIdx, sidebarItems, rowIndex, colIndex, rowsFocusActive, heroBtnIndex, heroBannerIdx, activeRows, seriesRows, activeTab, playItem, playSeriesItem, actionButtons, showProfile, showHint, showShortcutHint, isListening, startListening, stopListening, showHero, hoveredHero, heroBannerItems, openKeyboard, searchQuery, openProfile, catFilterIdx, channelRows, selectedChannelCategory, apkMsg, sidebarMouseOpen, combinedContinueWatching, handleRemoveContinue, isExpired, setExternalPlayer, setShowExpiredOverlay]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-background text-white flex select-none" onMouseMove={() => { if (inputModeRef.current !== 'mouse') { inputModeRef.current = 'mouse'; setInputMode('mouse'); } }}>
@@ -1826,6 +1866,7 @@ export default function Home() {
                               key={`${item.type}-${item.id}`}
                               item={item}
                               focused={inputMode === 'keyboard' && rowsFocusActive && zone === 'rows' && rowIndex === rIdx && colIndex === cIdx}
+                              onRemove={() => handleRemoveContinue(item)}
                               onClick={() => {
                                 if (isExpired) { setShowExpiredOverlay(true); return; }
                                 if (item.type === 'external' && item.externalItem) {
