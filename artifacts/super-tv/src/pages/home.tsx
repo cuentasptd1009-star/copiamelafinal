@@ -532,6 +532,12 @@ export default function Home() {
   useEffect(() => { if (sessionError) { clearTokens(); setLocation('/'); } }, [sessionError, setLocation]);
 
   useEffect(() => {
+    try { window.focus(); } catch {}
+    const t = setTimeout(() => { try { window.focus(); } catch {} }, 200);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
     if ((activeTab === 'series' || activeTab === 'home' || activeTab === 'favorites') && seriesList.length === 0) {
       setSeriesLoading(true);
       fetchSeries().then(s => { setSeriesList(s); setSeriesLoading(false); }).catch(() => setSeriesLoading(false));
