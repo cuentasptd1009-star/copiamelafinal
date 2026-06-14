@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'wouter';
-import { X, Maximize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
+import { Maximize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
 import { getMiniPlayerState, setMiniPlayerState, subscribeMiniPlayer, updateMiniPlayerState } from '@/lib/mini-player-state';
 import { getToken } from '@/lib/auth';
 import { apiBase } from '@/lib/api';
@@ -189,9 +189,7 @@ export function MiniPlayer() {
           <button onClick={handleMaximize} className="p-1 rounded text-white/80 hover:text-white hover:bg-white/10 transition-all" title="Maximizar">
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
-          <button onClick={handleClose} className="p-1 rounded text-white/80 hover:text-white hover:bg-white/10 transition-all" title="Cerrar">
-            <X className="w-3.5 h-3.5" />
-          </button>
+
         </div>
       </div>
       {state.type === 'channel' && state.channels.length > 1 && (
