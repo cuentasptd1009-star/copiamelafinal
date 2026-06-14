@@ -99,10 +99,12 @@ export const ContentCard = memo(function ContentCard({
 
   const isTouchDevice = typeof window !== 'undefined' &&
     window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+  // TV browsers: skip video preview panel (saves CPU + memory)
+  const isTvBrowser = typeof window !== 'undefined' && !!(window as any).__isTvBrowser;
 
   const ytId = previewUrl ? extractYouTubeId(previewUrl) : null;
   const isDirectVideo = !!(previewUrl && !ytId);
-  const canPreview = !!(isDirectVideo || ytId) && !isTouchDevice;
+  const canPreview = !!(isDirectVideo || ytId) && !isTouchDevice && !isTvBrowser;
 
   // YouTube iframe: autoplay with sound, skip to 10 min for a good scene, hide all branding/controls
   const ytSrc = ytId
