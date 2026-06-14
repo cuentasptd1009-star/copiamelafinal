@@ -509,7 +509,7 @@ export default function VodPlayerPage() {
         case 'Escape': case 'Backspace':
           e.preventDefault();
           if (document.fullscreenElement) document.exitFullscreen();
-          else setLocation(backUrl);
+          setLocation(backUrl);
           break;
       }
     };
