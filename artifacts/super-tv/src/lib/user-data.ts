@@ -117,6 +117,20 @@ export function getAllSeriesProgress(): SeriesProgress[] {
   } catch { return []; }
 }
 
+export function removeProgress(movieId: number): void {
+  try {
+    localStorage.removeItem(`${P}prog_${movieId}`);
+    const hist = getHistory().filter(r => r.movieId !== movieId);
+    localStorage.setItem(`${P}history`, JSON.stringify(hist));
+  } catch {}
+}
+
+export function removeSeriesProgress(seriesId: number): void {
+  try {
+    localStorage.removeItem(`${P}sprog_${seriesId}`);
+  } catch {}
+}
+
 export function addToHistory(movieId: number, category: string | null): void {
   try {
     const existing = getHistory();
