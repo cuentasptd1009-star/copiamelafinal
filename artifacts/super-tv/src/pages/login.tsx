@@ -160,8 +160,8 @@ export default function Login() {
           try { localStorage.setItem('supertv_remembered_code', codeToSubmit); } catch {}
           setIsRemembered(true);
           if (data.sessionConflict) {
-            setConflictMessage('Tu código está abierto en otro dispositivo, al iniciar aquí los otros dispositivos se cerrarán.');
-            setTimeout(() => { setToken(data.token, 'user'); setLocation('/home'); }, 2000);
+            setConflictMessage('Tu código solamente se puede usar en un solo dispositivo.');
+            setTimeout(() => { setToken(data.token, 'user'); setLocation('/home'); }, 1500);
           } else {
             setToken(data.token, 'user');
             setLocation('/home');
@@ -236,23 +236,8 @@ export default function Login() {
         case 'Enter':
           if (focusZone === 'input') {
             e.preventDefault();
-            if (isTV) {
-              inputRef.current?.blur();
-              openKeyboard(inputRef.current, {
-                value: code,
-                onChange: (v) => {
-                  const clean = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
-                  codeRef.current = clean;
-                  setCode(clean);
-                  setErrorMsg('');
-                },
-                onConfirm: handleSubmit,
-                label: 'Código de acceso',
-                maxLength: 5,
-              });
-            } else {
-              handleSubmit();
-            }
+            // Let native TV browser keyboard handle input — just submit on Enter
+            handleSubmit();
           } else if (focusZone === 'remember' && !isTyping) {
             e.preventDefault();
             handleRemember();
