@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { channelsTable, settingsTable } from "@workspace/db";
+import { channelsTable, settingsTable, sessionsTable } from "@workspace/db";
 import { eq, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { cache, TTL } from "../lib/cache.js";
-import { channelTracker } from "../lib/tracker.js";
+import { channelTracker, liveTracker } from "../lib/tracker.js";
 import {
   CreateChannelBody,
   UpdateChannelBody,
@@ -62,6 +62,18 @@ interface SegmentEntry { data: Buffer; contentType: string; expiresAt: number; }
 const segmentCache = new Map<string, SegmentEntry>();
 const SEG_CACHE_MAX = 200;
 const SEG_CACHE_TTL_MS = 30_000; // 30 seconds — HLS segments are immutable
+
+// ---------------------------------------------------------------------------
+// Deleted channel grace period: keep serving deleted channels for 10 minutes
+// so viewers already watching aren't immediately cut off.
+// ---------------------------------------------------------------------------
+interface GraceEntry { channel: { id: number; name: string; logo: string | null; category: string | null; streamUrl: string; order: number; createdAt: Date }; deletedAt: number; }
+const deletedGrace = new Map<number, GraceEntry>();
+const GRACE_MS = 10 * 60_000;
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, e] of deletedGrace.entries()) { if (now - e.deletedAt > GRACE_MS) deletedGrace.delete(id); }
+}, 60_000);
 
 function segCacheGet(key: string): SegmentEntry | undefined {
   const entry = segmentCache.get(key);
@@ -625,7 +637,13 @@ router.get("/channels/:id/stream", async (req: Request, res: Response) => {
   const parsed = GetChannelParams.safeParse(req.params);
   if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [channel] = await db.select().from(channelsTable).where(eq(channelsTable.id, parsed.data.id));
+  let [channel] = await db.select().from(channelsTable).where(eq(channelsTable.id, parsed.data.id));
+  if (!channel) {
+    const grace = deletedGrace.get(parsed.data.id);
+    if (grace && Date.now() - grace.deletedAt < GRACE_MS) {
+      channel = grace.channel as typeof channelsTable.$inferSelect;
+    }
+  }
   if (!channel) { res.status(404).json({ error: "Not found" }); return; }
 
   res.redirect(302, channel.streamUrl);
@@ -637,10 +655,16 @@ router.get("/channels/:id", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [channel] = await db
+  let [channel] = await db
     .select()
     .from(channelsTable)
     .where(eq(channelsTable.id, parsed.data.id));
+  if (!channel) {
+    const grace = deletedGrace.get(parsed.data.id);
+    if (grace && Date.now() - grace.deletedAt < GRACE_MS) {
+      channel = grace.channel as typeof channelsTable.$inferSelect;
+    }
+  }
   if (!channel) {
     res.status(404).json({ error: "Not found" });
     return;
@@ -731,6 +755,9 @@ router.delete("/channels/bulk", requireAdminAuth, async (req: Request, res: Resp
     res.status(400).json({ error: "ids must be a non-empty array of numbers" });
     return;
   }
+  const toGrace = await db.select().from(channelsTable).where(inArray(channelsTable.id, ids as number[]));
+  const graceNow = Date.now();
+  for (const ch of toGrace) { deletedGrace.set(ch.id, { channel: ch, deletedAt: graceNow }); }
   await db.delete(channelsTable).where(inArray(channelsTable.id, ids as number[]));
   cache.invalidatePrefix("channels:");
   res.json({ success: true, deleted: ids.length });
@@ -742,9 +769,46 @@ router.delete("/channels/:id", requireAdminAuth, async (req: Request, res: Respo
     res.status(400).json({ error: "Invalid id" });
     return;
   }
+  const [toGraceSingle] = await db.select().from(channelsTable).where(eq(channelsTable.id, parsed.data.id));
+  if (toGraceSingle) { deletedGrace.set(toGraceSingle.id, { channel: toGraceSingle, deletedAt: Date.now() }); }
   await db.delete(channelsTable).where(eq(channelsTable.id, parsed.data.id));
   cache.invalidatePrefix("channels:");
   res.json({ success: true, message: "Deleted" });
+});
+
+// Channel status — tells the client if a channel still exists or is in grace period
+router.get("/channels/:id/status", async (req: Request, res: Response) => {
+  const parsed = GetChannelParams.safeParse(req.params);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [ch] = await db.select({ id: channelsTable.id }).from(channelsTable).where(eq(channelsTable.id, parsed.data.id));
+  if (ch) { res.json({ exists: true, deleted: false }); return; }
+  const grace = deletedGrace.get(parsed.data.id);
+  if (grace) {
+    res.json({ exists: true, deleted: true, deletedAt: new Date(grace.deletedAt).toISOString(), gracePeriodEnd: new Date(grace.deletedAt + GRACE_MS).toISOString() });
+    return;
+  }
+  res.json({ exists: false, deleted: true });
+});
+
+// Now-playing heartbeat — client posts this every 30 s while watching a channel
+router.post("/channels/:id/now-playing", async (req: Request, res: Response) => {
+  const token = extractToken(req);
+  if (!token) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const parsed = GetChannelParams.safeParse(req.params);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const userSession = await getUserSession(token);
+  if (!userSession) { res.json({ ok: true }); return; }
+  let channelName: string | undefined;
+  const [ch] = await db.select({ name: channelsTable.name }).from(channelsTable).where(eq(channelsTable.id, parsed.data.id));
+  if (ch) { channelName = ch.name; }
+  else { const g = deletedGrace.get(parsed.data.id); if (g) channelName = g.channel.name; }
+  if (!channelName) { res.json({ ok: true }); return; }
+  const [code] = await db.select({ id: accessCodesTable.id, code: accessCodesTable.code, name: accessCodesTable.name })
+    .from(accessCodesTable).where(eq(accessCodesTable.id, userSession.codeId)).limit(1);
+  if (!code) { res.json({ ok: true }); return; }
+  liveTracker.update(token, { codeId: code.id, codeCode: code.code, codeName: code.name, channelId: parsed.data.id, channelName });
+  await db.update(sessionsTable).set({ lastActiveAt: new Date() }).where(eq(sessionsTable.token, token));
+  res.json({ ok: true });
 });
 
 router.post("/channels/:id/test-stream", requireAdminAuth, async (req: Request, res: Response) => {
