@@ -10,7 +10,7 @@ import {
 } from "@workspace/db";
 import { count, sql, desc } from "drizzle-orm";
 import { requireSuperAdmin } from "../lib/auth.js";
-import { channelTracker } from "../lib/tracker.js";
+import { channelTracker, liveTracker } from "../lib/tracker.js";
 import { getSegmentCacheStats } from "./channels.js";
 import { cache } from "../lib/cache.js";
 
@@ -107,6 +107,22 @@ router.get("/admin/stats", requireSuperAdmin, async (req: Request, res: Response
   res.json(payload);
 });
 
+// Live activity endpoint — returns who is actively playing what right now.
+// Not cached; refreshed every 30 s by the admin dashboard.
+router.get("/admin/live", requireSuperAdmin, (_req: Request, res: Response) => {
+  const live = liveTracker.getLive();
+  res.json({
+    liveNow: live.map(s => ({
+      codeCode: s.codeCode,
+      codeName: s.codeName ?? null,
+      channelId: s.channelId,
+      channelName: s.channelName,
+    })),
+    liveChannels: liveTracker.getChannelViewers(),
+    total: live.length,
+    timestamp: new Date().toISOString(),
+  });
+});
 
 router.get("/admin/stream-stats", requireSuperAdmin, (req: Request, res: Response) => {
   const seg = getSegmentCacheStats();
