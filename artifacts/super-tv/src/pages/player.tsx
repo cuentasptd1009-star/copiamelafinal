@@ -169,6 +169,55 @@ export default function PlayerPage() {
   const autoFullscreenDoneRef = useRef(false);
   const userMutedRef = useRef(false);
 
+  // Grace period: set when backend reports the channel was deleted
+  const [channelDeletedInfo, setChannelDeletedInfo] = useState<{ gracePeriodEnd: string } | null>(null);
+  const [graceStopped, setGraceStopped] = useState(false);
+
+  // Heartbeat: report "now playing" to backend every 30s so admin can see live activity.
+  // Also polls channel status to detect if the channel was deleted (10-min grace period).
+  useEffect(() => {
+    if (type !== 'channel' || !channelId || !authToken) return;
+
+    const sendHeartbeat = () => {
+      fetch(`${apiBase}/api/channels/${channelId}/now-playing`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+      }).catch(() => {});
+    };
+
+    const checkStatus = () => {
+      fetch(`${apiBase}/api/channels/${channelId}/status`, {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+      })
+        .then(r => r.json())
+        .then((data: { exists: boolean; deleted: boolean; gracePeriodEnd?: string }) => {
+          if (data.deleted && data.gracePeriodEnd) {
+            setChannelDeletedInfo({ gracePeriodEnd: data.gracePeriodEnd });
+          }
+          if (!data.exists) {
+            setGraceStopped(true);
+          }
+        })
+        .catch(() => {});
+    };
+
+    sendHeartbeat();
+    checkStatus();
+    const hbInterval = setInterval(sendHeartbeat, 30_000);
+    const statusInterval = setInterval(checkStatus, 30_000);
+    return () => { clearInterval(hbInterval); clearInterval(statusInterval); };
+  }, [type, channelId, authToken]);
+
+  // Redirect to channels when grace period expires
+  useEffect(() => {
+    if (!channelDeletedInfo) return;
+    const end = new Date(channelDeletedInfo.gracePeriodEnd).getTime();
+    const remaining = end - Date.now();
+    if (remaining <= 0) { setLocation('/home?tab=channels'); return; }
+    const timer = setTimeout(() => setLocation('/home?tab=channels'), remaining);
+    return () => clearTimeout(timer);
+  }, [channelDeletedInfo, setLocation]);
+
   const showControlsTemporarily = useCallback(() => {
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
@@ -901,6 +950,20 @@ export default function PlayerPage() {
           </div>
         </div>
       )}
+
+      {channelDeletedInfo && !graceStopped && (() => {
+        const end = new Date(channelDeletedInfo.gracePeriodEnd).getTime();
+        const minsLeft = Math.max(0, Math.ceil((end - Date.now()) / 60_000));
+        return (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-orange-600/90 text-white rounded-xl px-5 py-3 text-sm flex items-center gap-3 backdrop-blur shadow-lg max-w-[90vw]">
+            <span className="text-orange-200">⚠</span>
+            <div>
+              <div className="font-semibold">Canal eliminado</div>
+              <div className="text-xs text-orange-100">Seguirás viendo durante {minsLeft > 1 ? `${minsLeft} minutos más` : 'menos de 1 minuto'}. Luego volverás a los canales.</div>
+            </div>
+          </div>
+        );
+      })()}
 
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 text-center p-6 gap-4">
