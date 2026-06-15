@@ -193,6 +193,25 @@ function ActivityPanel({ stats, lastRefreshed, onRefresh }: {
     return `hace ${Math.floor(diff / 86400)}d`;
   }
 
+  const adminToken = getToken('admin') ?? '';
+  const [liveData, setLiveData] = useState<{
+    liveNow: { codeCode: string; codeName: string | null; channelId: number; channelName: string }[];
+    liveChannels: { channelId: number; name: string; count: number }[];
+    total: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const fetchLive = () => {
+      fetch(BASE_URL + '/api/admin/live', { headers: { Authorization: 'Bearer ' + adminToken } })
+        .then(r => r.json()).then(setLiveData).catch(() => {});
+    };
+    fetchLive();
+    const interval = setInterval(fetchLive, 30_000);
+    return () => clearInterval(interval);
+  }, [adminToken]);
+
+  const liveCount = liveData?.total ?? stats?.onlineNow ?? 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -214,8 +233,8 @@ function ActivityPanel({ stats, lastRefreshed, onRefresh }: {
             <Signal className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl sm:text-2xl font-bold text-green-500">{stats?.onlineNow ?? 0}</div>
-            <p className="text-xs text-muted-foreground">últimos 2 min</p>
+            <div className="text-xl sm:text-2xl font-bold text-green-500">{liveCount}</div>
+            <p className="text-xs text-muted-foreground">reproduciendo en vivo</p>
           </CardContent>
         </Card>
         <Card className="bg-card border-border">
@@ -246,6 +265,81 @@ function ActivityPanel({ stats, lastRefreshed, onRefresh }: {
           <CardContent>
             <div className="text-xl sm:text-2xl font-bold">{stats?.expiringSoon ?? 0}</div>
             <p className="text-xs text-muted-foreground">códigos activos</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* En vivo ahora */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="bg-card border-border border-green-500/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              Códigos reproduciendo ahora
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!liveData?.liveNow?.length ? (
+              <p className="text-xs text-muted-foreground px-4 pb-4">Ningún código reproduciendo en este momento.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Código</TableHead>
+                    <TableHead className="text-xs">Canal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {liveData.liveNow.map((s, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                          <span className="font-mono font-semibold">{s.codeCode}</span>
+                          {s.codeName && <span className="text-muted-foreground truncate max-w-[70px]">{s.codeName}</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{s.channelName}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <MonitorPlay className="w-4 h-4 text-primary" /> Canales en vivo ahora
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!liveData?.liveChannels?.length ? (
+              <p className="text-xs text-muted-foreground px-4 pb-4">Sin canales en reproducción activa.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Canal</TableHead>
+                    <TableHead className="text-xs text-right">Viendo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {liveData.liveChannels.map((ch) => (
+                    <TableRow key={ch.channelId}>
+                      <TableCell className="text-xs font-medium">{ch.name}</TableCell>
+                      <TableCell className="text-xs text-right">
+                        <span className="inline-flex items-center gap-1 font-mono font-semibold text-green-500">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
+                          {ch.count}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
