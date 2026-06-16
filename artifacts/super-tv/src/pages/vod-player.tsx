@@ -4,6 +4,7 @@ import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
 import logo from '@assets/logo_supertv.png';
 import { getProgress, saveProgress, addToHistory, saveEpisodeProgress, getEpisodeProgress } from '@/lib/user-data';
+import { getMiniPlayerState, updateMiniPlayerState } from '@/lib/mini-player-state';
 import { normalizeKey } from '@/lib/tv-remote';
 
 type VideoFormat = 'hls' | 'dash' | 'flv' | 'native' | 'youtube';
@@ -98,6 +99,12 @@ export default function VodPlayerPage() {
   const [errorBtnIndex, setErrorBtnIndex] = useState(0);
   // D-pad control focus index: matches vodControls array below
   const [ctrlFocusIdx, setCtrlFocusIdx] = useState(2); // default: play button
+
+  // Bug 3/4 fix: close mini-player when vod-player opens (prevents overlay during movie)
+  useEffect(() => {
+    const mini = getMiniPlayerState();
+    if (mini?.isMinimized) updateMiniPlayerState({ isMinimized: false });
+  }, []);
 
   useEffect(() => {
     showNextEpRef.current = showNextEp;
