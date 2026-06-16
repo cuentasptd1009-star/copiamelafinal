@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
@@ -696,7 +696,7 @@ export default function PlayerPage() {
     setLocation(`/player?${params.toString()}`);
   }, [nextEpisodeId, nextEpisodeUrl, nextEpisodeTitle, nextSeasonId, nextSeasonNumber, nextEpisodeNumber, nextEpisodeFormat, seriesId, seasonId, seasonNumber, seriesTitle]);
 
-  const controls = ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'minimize', 'fullscreen'];
+  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'minimize', 'fullscreen'], [hasChannels]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
