@@ -6,54 +6,83 @@
 <title>Super TV - Modo Ligero</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#090E17;color:#fff;font-family:Arial,sans-serif;min-height:100vh}
-header{background:#0d1420;padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem;border-bottom:2px solid #e50914}
-header img{width:40px;border-radius:8px}
-header h1{color:#e50914;font-size:1.5rem}
-header span{color:#aaa;font-size:0.85rem;margin-left:auto}
-#logout-btn{background:transparent;border:1px solid #4b5563;color:#9ca3af;font-size:0.8rem;padding:0.3rem 0.75rem;border-radius:4px;cursor:pointer;margin-left:0.75rem;display:none}
+body{background:#090E17;color:#fff;font-family:Arial,sans-serif;min-height:100vh;overflow-x:hidden}
+header{background:#0d1420;padding:0.8rem 1rem;display:-webkit-box;display:-webkit-flex;display:flex;-webkit-box-align:center;-webkit-align-items:center;align-items:center;gap:0.6rem;border-bottom:2px solid #e50914;-webkit-flex-wrap:wrap;flex-wrap:wrap}
+header img{width:34px;border-radius:7px;-webkit-flex-shrink:0;flex-shrink:0}
+header h1{color:#e50914;font-size:1.2rem;-webkit-flex-shrink:0;flex-shrink:0}
+#search-wrap{display:-webkit-box;display:-webkit-flex;display:flex;-webkit-flex:1;flex:1;min-width:120px;max-width:340px;position:relative}
+#search-inp{width:100%;background:#1a2235;border:1px solid #374151;color:#fff;font-size:0.88rem;padding:0.42rem 1.8rem 0.42rem 0.65rem;border-radius:6px;outline:none;-webkit-appearance:none}
+#search-inp:focus{border-color:#e50914}
+#search-x{position:absolute;right:0.4rem;top:50%;-webkit-transform:translateY(-50%);transform:translateY(-50%);background:none;border:none;color:#6b7280;font-size:1rem;cursor:pointer;display:none;padding:0 0.15rem;line-height:1}
+#hdr-info{color:#aaa;font-size:0.78rem;margin-left:auto;white-space:nowrap}
+#logout-btn{background:transparent;border:1px solid #4b5563;color:#9ca3af;font-size:0.72rem;padding:0.22rem 0.55rem;border-radius:4px;cursor:pointer;display:none;-webkit-flex-shrink:0;flex-shrink:0}
 #logout-btn:hover{border-color:#e50914;color:#fff}
-nav{background:#111827;display:flex;overflow-x:auto;padding:0 1rem;border-bottom:1px solid #1f2937;-webkit-overflow-scrolling:touch}
-nav a{display:inline-block;padding:0.85rem 1.25rem;color:#9ca3af;text-decoration:none;white-space:nowrap;font-size:0.95rem;border-bottom:3px solid transparent;-webkit-transition:color 0.2s;transition:color 0.2s}
+nav{background:#111827;display:-webkit-box;display:-webkit-flex;display:flex;overflow-x:auto;padding:0 0.75rem;border-bottom:1px solid #1f2937;-webkit-overflow-scrolling:touch}
+nav a{display:inline-block;padding:0.75rem 1rem;color:#9ca3af;text-decoration:none;white-space:nowrap;font-size:0.88rem;border-bottom:3px solid transparent;-webkit-transition:color 0.2s;transition:color 0.2s}
 nav a.active,nav a:hover{color:#fff;border-bottom-color:#e50914}
-#status{padding:0.75rem 1.5rem;background:#1f2937;color:#9ca3af;font-size:0.85rem;text-align:center}
-#grid{padding:1rem 1.5rem;display:-webkit-box;display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;gap:0.75rem}
-.card{background:#1a2235;border-radius:8px;overflow:hidden;width:calc(25% - 0.75rem);min-width:140px;cursor:pointer;border:2px solid transparent;-webkit-transition:border-color 0.15s;transition:border-color 0.15s}
+#status{padding:0.55rem 1rem;background:#1f2937;color:#9ca3af;font-size:0.78rem;text-align:center}
+#grid{padding:0.75rem 1rem;display:-webkit-box;display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;gap:0.55rem}
+.card{background:#1a2235;border-radius:8px;overflow:hidden;width:calc(25% - 0.55rem);min-width:125px;cursor:pointer;border:2px solid transparent;-webkit-transition:border-color 0.15s;transition:border-color 0.15s}
 .card:hover,.card:focus{border-color:#e50914;outline:none}
-.card img{width:100%;aspect-ratio:16/9;object-fit:cover;background:#111;display:block}
-.card-info{padding:0.4rem 0.5rem}
-.card-title{font-size:0.75rem;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card-badge{display:inline-block;background:#e50914;color:#fff;font-size:0.6rem;padding:1px 5px;border-radius:3px;margin-bottom:2px;text-transform:uppercase}
-.empty{text-align:center;padding:3rem;color:#6b7280;width:100%}
-.loading-bar{height:3px;background:#e50914;width:0;-webkit-transition:width 0.3s;transition:width 0.3s;position:fixed;top:0;left:0;z-index:999}
-@media(max-width:600px){.card{width:calc(50% - 0.75rem)}}
+.card img{width:100%;aspect-ratio:16/9;object-fit:cover;background:#0d1420;display:block}
+.card-info{padding:0.32rem 0.42rem}
+.card-title{font-size:0.7rem;color:#d1d5db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-badge{display:inline-block;background:#e50914;color:#fff;font-size:0.56rem;padding:1px 4px;border-radius:3px;margin-bottom:2px;text-transform:uppercase}
+.card-badge.arch{background:#2563eb}
+.empty{text-align:center;padding:2.5rem;color:#6b7280;width:100%;font-size:0.9rem}
+.loading-bar{height:3px;background:#e50914;width:0;-webkit-transition:width 0.3s;transition:width 0.3s;position:fixed;top:0;left:0;z-index:998}
+@media(max-width:600px){.card{width:calc(50% - 0.55rem)} header h1{display:none} #search-wrap{max-width:none}}
 
-/* Login overlay */
+/* ── In-page video player overlay ── */
+#player-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9998;-webkit-box-orient:vertical;-webkit-box-direction:normal;-webkit-flex-direction:column;flex-direction:column}
+#player-overlay.open{display:-webkit-box;display:-webkit-flex;display:flex}
+#player-topbar{background:rgba(0,0,0,0.7);padding:0.6rem 1rem;display:-webkit-box;display:-webkit-flex;display:flex;-webkit-box-align:center;-webkit-align-items:center;align-items:center;gap:0.75rem;-webkit-flex-shrink:0;flex-shrink:0}
+#player-back{background:#e50914;border:none;color:#fff;font-size:0.85rem;padding:0.4rem 0.9rem;border-radius:6px;cursor:pointer}
+#player-title{color:#fff;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-flex:1;flex:1}
+#player-video{width:100%;-webkit-flex:1;flex:1;background:#000;display:block}
+#player-error{display:none;-webkit-flex:1;flex:1;-webkit-box-align:center;-webkit-align-items:center;align-items:center;-webkit-box-pack:center;-webkit-justify-content:center;justify-content:center;-webkit-box-orient:vertical;-webkit-box-direction:normal;-webkit-flex-direction:column;flex-direction:column;text-align:center;padding:2rem;gap:1rem}
+#player-error p{color:#9ca3af;font-size:0.9rem;line-height:1.5}
+#player-open-btn{background:#e50914;border:none;color:#fff;padding:0.6rem 1.4rem;border-radius:8px;font-size:0.9rem;cursor:pointer;margin-top:0.5rem}
+
+/* ── Login overlay ── */
 #login-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:#090E17;z-index:9999;display:-webkit-box;display:-webkit-flex;display:flex;-webkit-box-align:center;-webkit-align-items:center;align-items:center;-webkit-box-pack:center;-webkit-justify-content:center;justify-content:center}
-#login-box{background:#0d1420;border:1px solid #1f2937;border-radius:12px;padding:2rem 2.5rem;width:100%;max-width:360px;text-align:center}
-#login-box img{width:60px;border-radius:12px;margin-bottom:1rem}
-#login-box h2{color:#e50914;font-size:1.4rem;margin-bottom:0.4rem}
-#login-box p{color:#6b7280;font-size:0.85rem;margin-bottom:1.5rem}
-#code-input{width:100%;background:#111827;border:1px solid #374151;color:#fff;font-size:1rem;padding:0.75rem 1rem;border-radius:8px;outline:none;text-align:center;letter-spacing:0.05em;-webkit-appearance:none}
-#code-input:focus{border-color:#e50914}
-#login-btn{width:100%;margin-top:0.75rem;background:#e50914;border:none;color:#fff;font-size:1rem;font-weight:bold;padding:0.75rem;border-radius:8px;cursor:pointer;-webkit-transition:background 0.2s;transition:background 0.2s}
+#login-box{background:#0d1420;border:1px solid #1f2937;border-radius:12px;padding:2rem 2.25rem;width:100%;max-width:340px;text-align:center}
+#login-box img{width:56px;border-radius:11px;margin-bottom:0.85rem}
+#login-box h2{color:#e50914;font-size:1.3rem;margin-bottom:0.35rem}
+#login-box p{color:#6b7280;font-size:0.82rem;margin-bottom:1.3rem}
+#code-inp{width:100%;background:#111827;border:1px solid #374151;color:#fff;font-size:1rem;padding:0.7rem 0.9rem;border-radius:8px;outline:none;text-align:center;letter-spacing:0.1em;text-transform:uppercase;-webkit-appearance:none}
+#code-inp:focus{border-color:#e50914}
+#login-btn{width:100%;margin-top:0.65rem;background:#e50914;border:none;color:#fff;font-size:0.95rem;font-weight:bold;padding:0.7rem;border-radius:8px;cursor:pointer}
 #login-btn:hover{background:#c0060f}
 #login-btn:disabled{background:#4b0a0a;cursor:default;opacity:0.7}
-#login-error{margin-top:0.75rem;color:#f87171;font-size:0.85rem;min-height:1.2em}
+#login-err{margin-top:0.65rem;color:#f87171;font-size:0.82rem;min-height:1.1em}
 </style>
 </head>
 <body>
 <div class="loading-bar" id="bar"></div>
 
-<!-- Login Overlay -->
+<!-- Video player overlay -->
+<div id="player-overlay">
+  <div id="player-topbar">
+    <button id="player-back">← Volver</button>
+    <span id="player-title">Reproduciendo</span>
+  </div>
+  <video id="player-video" controls autoplay playsinline webkit-playsinline></video>
+  <div id="player-error">
+    <p id="player-err-msg">No se pudo cargar el video en el navegador.<br>Intenta abrirlo directamente.</p>
+    <button id="player-open-btn">Abrir en reproductor externo</button>
+  </div>
+</div>
+
+<!-- Login overlay -->
 <div id="login-overlay">
   <div id="login-box">
     <img src="/icon-192.png" alt="Super TV">
     <h2>Super TV</h2>
     <p>Ingresa tu código de acceso para continuar</p>
-    <input type="text" id="code-input" placeholder="Código de acceso" autocomplete="off" autocorrect="off" spellcheck="false">
+    <input type="text" id="code-inp" placeholder="Código de acceso" autocomplete="off" autocorrect="off" spellcheck="false">
     <button id="login-btn">Entrar</button>
-    <div id="login-error"></div>
+    <div id="login-err"></div>
   </div>
 </div>
 
@@ -61,6 +90,10 @@ nav a.active,nav a:hover{color:#fff;border-bottom-color:#e50914}
 <header>
   <img src="/icon-192.png" alt="Super TV">
   <h1>Super TV</h1>
+  <div id="search-wrap">
+    <input type="text" id="search-inp" placeholder="Buscar..." autocomplete="off">
+    <button id="search-x" title="Limpiar">✕</button>
+  </div>
   <span id="hdr-info">Modo Ligero</span>
   <button id="logout-btn">Salir</button>
 </header>
@@ -77,140 +110,106 @@ var API = '/api';
 var currentTab = 'channels';
 var allData = {channels: null, movies: null, series: null};
 var authToken = null;
+var searchTimer = null;
+var currentSearch = '';
+var currentStreamUrl = '';
 
-/* ---- Storage helpers ---- */
+/* ── Storage ── */
 function getDeviceId() {
-  var id = null;
-  try { id = localStorage.getItem('lite_device_id'); } catch(e){}
-  if (!id) {
-    id = 'lite_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    try { localStorage.setItem('lite_device_id', id); } catch(e){}
-  }
+  var id; try { id = localStorage.getItem('lite_did'); } catch(e){}
+  if (!id) { id = 'lite_' + Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem('lite_did', id); } catch(e){} }
   return id;
 }
-function saveToken(t) {
-  authToken = t;
-  try { localStorage.setItem('lite_token', t); } catch(e){}
-}
-function loadToken() {
-  try { return localStorage.getItem('lite_token'); } catch(e){ return null; }
-}
-function clearToken() {
-  authToken = null;
-  try { localStorage.removeItem('lite_token'); } catch(e){}
-}
+function saveToken(t) { authToken = t; try { localStorage.setItem('lite_token', t); } catch(e){} }
+function loadToken() { try { return localStorage.getItem('lite_token'); } catch(e){ return null; } }
+function clearToken() { authToken = null; try { localStorage.removeItem('lite_token'); } catch(e){} }
 
-/* ---- XHR helper (with optional auth) ---- */
-function xhr(url, cb, options) {
+/* ── XHR ── */
+function xhr(url, cb, opts) {
   var r = new XMLHttpRequest();
-  var method = (options && options.method) || 'GET';
-  r.open(method, url);
+  r.open((opts && opts.method) || 'GET', url);
   if (authToken) r.setRequestHeader('Authorization', 'Bearer ' + authToken);
-  if (options && options.json) r.setRequestHeader('Content-Type', 'application/json');
+  if (opts && opts.json) r.setRequestHeader('Content-Type', 'application/json');
   r.onreadystatechange = function() {
-    if (r.readyState === 4) {
-      if (r.status >= 200 && r.status < 300) {
-        try { cb(null, JSON.parse(r.responseText)); } catch(e) { cb(e); }
-      } else {
-        var errMsg = 'HTTP ' + r.status;
-        try {
-          var body = JSON.parse(r.responseText);
-          if (body && body.error) errMsg = body.error;
-        } catch(e){}
-        cb(new Error(errMsg), null, r.status);
-      }
+    if (r.readyState !== 4) return;
+    if (r.status >= 200 && r.status < 300) {
+      try { cb(null, JSON.parse(r.responseText)); } catch(e) { cb(e); }
+    } else {
+      var msg = 'HTTP ' + r.status;
+      try { var b = JSON.parse(r.responseText); if (b && b.error) msg = b.error; } catch(e){}
+      cb(new Error(msg), null, r.status);
     }
   };
-  r.send(options && options.body ? JSON.stringify(options.body) : null);
+  r.send(opts && opts.body ? JSON.stringify(opts.body) : null);
 }
 
-/* ---- Login / Logout ---- */
-function showLogin(errMsg) {
-  allData = {channels: null, movies: null, series: null};
-  document.getElementById('grid').innerHTML = '';
-  document.getElementById('login-error').textContent = errMsg || '';
-  document.getElementById('login-overlay').style.display = '-webkit-flex';
-  document.getElementById('login-overlay').style.display = 'flex';
-  document.getElementById('logout-btn').style.display = 'none';
-  document.getElementById('code-input').value = '';
-  document.getElementById('code-input').focus();
+/* ── Player ── */
+function openPlayer(url, title) {
+  if (!url) { alert('Este elemento no tiene URL de reproducción.'); return; }
+  currentStreamUrl = url;
+  var overlay = document.getElementById('player-overlay');
+  var video = document.getElementById('player-video');
+  var errDiv = document.getElementById('player-error');
+  var errMsg = document.getElementById('player-err-msg');
+  var openBtn = document.getElementById('player-open-btn');
+
+  document.getElementById('player-title').textContent = title || 'Reproduciendo';
+  errDiv.style.display = 'none';
+  video.style.display = 'block';
+  overlay.className = 'open';
+  document.body.style.overflow = 'hidden';
+
+  video.src = url;
+  video.load();
+
+  var played = false;
+  video.oncanplay = function() { played = true; };
+  video.onerror = function() {
+    if (!played) {
+      video.style.display = 'none';
+      errDiv.style.display = '-webkit-flex';
+      errDiv.style.display = 'flex';
+      errMsg.textContent = 'Tu navegador no puede reproducir este stream directamente.\nIntenta abrirlo en el reproductor del sistema.';
+      openBtn.onclick = function() { window.location.href = url; };
+    }
+  };
+
+  var p = video.play();
+  if (p && p['catch']) { p['catch'](function(){}); }
 }
 
-function hideLogin(displayName) {
-  document.getElementById('login-overlay').style.display = 'none';
-  document.getElementById('logout-btn').style.display = 'inline-block';
-  if (displayName) {
-    document.getElementById('hdr-info').textContent = displayName + ' · Modo Ligero';
-  }
+function closePlayer() {
+  var overlay = document.getElementById('player-overlay');
+  var video = document.getElementById('player-video');
+  overlay.className = '';
+  video.pause();
+  video.src = '';
+  video.load();
+  document.body.style.overflow = '';
+  currentStreamUrl = '';
 }
 
-function doLogin(code) {
-  var btn = document.getElementById('login-btn');
-  var errEl = document.getElementById('login-error');
-  btn.disabled = true;
-  btn.textContent = 'Verificando...';
-  errEl.textContent = '';
-  xhr(API + '/auth/login', function(err, data, status) {
-    btn.disabled = false;
-    btn.textContent = 'Entrar';
-    if (err) {
-      var msg = err.message || 'Error al iniciar sesión';
-      if (msg === 'El código no existe' || msg === 'NOT_FOUND') msg = 'Código incorrecto. Inténtalo de nuevo.';
-      if (msg === 'El código está inactivo' || msg === 'INACTIVE') msg = 'Este código está desactivado.';
-      if (msg === 'El código ha expirado' || msg === 'EXPIRED') msg = 'Este código ha expirado.';
-      errEl.textContent = msg;
+document.getElementById('player-back').onclick = closePlayer;
+
+/* ── Archive video loader ── */
+function playArchiveItem(id, title) {
+  setStatus('Obteniendo enlace…');
+  xhr(API + '/user-search/archive/video/' + encodeURIComponent(id), function(err, data, status) {
+    if (err || !data || !data.url) {
+      if (status === 401) { clearToken(); showLogin('Tu sesión expiró.'); return; }
+      setStatus('No se encontró video reproducible para ese título');
       return;
     }
-    if (data && data.token) {
-      saveToken(data.token);
-      var name = (data.code && (data.code.name || data.code.displayName)) || '';
-      hideLogin(name);
-      loadTab('channels');
-    } else {
-      errEl.textContent = 'Respuesta inesperada del servidor.';
-    }
-  }, { method: 'POST', json: true, body: { code: code, deviceId: getDeviceId() } });
-}
-
-function doLogout() {
-  xhr(API + '/auth/logout', function() {}, { method: 'POST', json: true, body: {} });
-  clearToken();
-  showLogin();
-}
-
-/* ---- Verify existing session ---- */
-function checkSession(token, onOk, onFail) {
-  authToken = token;
-  xhr(API + '/auth/me', function(err, data) {
-    if (err || !data) { authToken = null; onFail(); return; }
-    onOk(data);
+    setStatus('');
+    openPlayer(data.url, data.title || title);
   });
 }
 
-/* ---- UI helpers ---- */
-function setBar(pct) {
-  var bar = document.getElementById('bar');
-  if (bar) bar.style.width = pct + '%';
-}
-function setStatus(msg) {
-  var s = document.getElementById('status');
-  if (s) s.textContent = msg;
-}
+/* ── UI helpers ── */
+function setBar(pct) { var b = document.getElementById('bar'); if (b) b.style.width = pct + '%'; }
+function setStatus(msg) { var s = document.getElementById('status'); if (s) s.textContent = msg; }
 
-function playStream(url, title) {
-  if (!url) return;
-  var ok = false;
-  if (window.MediaSource || url.indexOf('.m3u8') === -1) {
-    var win = window.open('', '_blank');
-    if (win) {
-      win.document.write('<html><head><title>' + title + '</title><style>*{margin:0;padding:0;background:#000}video{width:100vw;height:100vh}</style></head><body><video src="' + url + '" autoplay controls></video></body></html>');
-      win.document.close();
-      ok = true;
-    }
-  }
-  if (!ok) window.location.href = url;
-}
-
+/* ── Render channels ── */
 function renderChannels(items) {
   var grid = document.getElementById('grid');
   if (!items || !items.length) { grid.innerHTML = '<div class="empty">Sin canales disponibles</div>'; return; }
@@ -219,9 +218,9 @@ function renderChannels(items) {
     var ch = items[i];
     var name = ch.name || ch.title || 'Canal';
     var logo = ch.logo || ch.thumbnail || '/channel-default.png';
-    var streamUrl = ch.stream_url || ch.url || ch.hls_url || '';
+    var url = ch.streamUrl || ch.stream_url || ch.url || '';
     var cat = ch.category || '';
-    html += '<div class="card" tabindex="0" data-url="' + encodeURIComponent(streamUrl) + '" data-title="' + name.replace(/"/g,'') + '">';
+    html += '<div class="card" tabindex="0" data-url="' + encodeURIComponent(url) + '" data-title="' + name.replace(/"/g,'') + '">';
     html += '<img src="' + logo + '" onerror="this.src=\'/channel-default.png\'" loading="lazy" alt="' + name + '">';
     html += '<div class="card-info">';
     if (cat) html += '<span class="card-badge">' + cat + '</span><br>';
@@ -229,26 +228,24 @@ function renderChannels(items) {
   }
   grid.innerHTML = html;
   grid.onclick = function(e) {
-    var card = e.target;
-    while (card && card !== grid) {
-      if (card.classList.contains('card')) break;
-      card = card.parentNode;
-    }
-    if (card && card.dataset.url) playStream(decodeURIComponent(card.dataset.url), card.dataset.title || '');
+    var card = e.target; while(card && card !== grid){ if(card.classList && card.classList.contains('card')) break; card = card.parentNode; }
+    if (card && card.dataset && card.dataset.url) openPlayer(decodeURIComponent(card.dataset.url), card.dataset.title || '');
   };
 }
 
-function renderMovies(items) {
+/* ── Render movies/series ── */
+function renderContent(items) {
   var grid = document.getElementById('grid');
-  if (!items || !items.length) { grid.innerHTML = '<div class="empty">Sin películas disponibles</div>'; return; }
+  if (!items || !items.length) { grid.innerHTML = '<div class="empty">Sin contenido disponible</div>'; return; }
   var html = '';
   for (var i = 0; i < items.length; i++) {
     var m = items[i];
-    var title = m.title || m.name || 'Película';
-    var thumb = m.thumbnail || m.poster || m.backdrop_path || '/channel-default.png';
-    var streamUrl = m.stream_url || m.url || m.hls_url || '';
+    var title = m.title || m.name || 'Título';
+    /* movies use filePath; series episodes use similar structure */
+    var url = m.filePath || m.streamUrl || m.stream_url || m.url || m.hls_url || '';
+    var thumb = m.poster || m.thumbnail || m.backdrop_path || '/channel-default.png';
     var cat = m.category || m.genre || '';
-    html += '<div class="card" tabindex="0" data-url="' + encodeURIComponent(streamUrl) + '" data-title="' + title.replace(/"/g,'') + '">';
+    html += '<div class="card" tabindex="0" data-url="' + encodeURIComponent(url) + '" data-title="' + title.replace(/"/g,'') + '">';
     html += '<img src="' + thumb + '" onerror="this.src=\'/channel-default.png\'" loading="lazy" alt="' + title + '">';
     html += '<div class="card-info">';
     if (cat) html += '<span class="card-badge">' + cat + '</span><br>';
@@ -256,107 +253,187 @@ function renderMovies(items) {
   }
   grid.innerHTML = html;
   grid.onclick = function(e) {
-    var card = e.target;
-    while (card && card !== grid) {
-      if (card.classList.contains('card')) break;
-      card = card.parentNode;
-    }
-    if (card && card.dataset.url) playStream(decodeURIComponent(card.dataset.url), card.dataset.title || '');
+    var card = e.target; while(card && card !== grid){ if(card.classList && card.classList.contains('card')) break; card = card.parentNode; }
+    if (card && card.dataset && card.dataset.url) openPlayer(decodeURIComponent(card.dataset.url), card.dataset.title || '');
   };
 }
 
+/* ── Render archive results (appended) ── */
+function renderArchive(items) {
+  if (!items || !items.length) return;
+  var grid = document.getElementById('grid');
+  var sp = document.getElementById('arch-spinner');
+  if (sp) sp.parentNode.removeChild(sp);
+  var html = grid.innerHTML;
+  for (var i = 0; i < items.length; i++) {
+    var m = items[i];
+    var title = m.title || m.identifier || 'Título';
+    var year = m.year ? ' (' + m.year + ')' : '';
+    var thumb = m.thumbnail || ('https://archive.org/services/img/' + m.identifier);
+    html += '<div class="card" tabindex="0" data-arch="1" data-id="' + m.identifier + '" data-title="' + title.replace(/"/g,'') + '">';
+    html += '<img src="' + thumb + '" onerror="this.src=\'/channel-default.png\'" loading="lazy" alt="' + title + '">';
+    html += '<div class="card-info"><span class="card-badge arch">Archive</span><br>';
+    html += '<span class="card-title">' + title + year + '</span></div></div>';
+  }
+  grid.innerHTML = html;
+  grid.onclick = function(e) {
+    var card = e.target; while(card && card !== grid){ if(card.classList && card.classList.contains('card')) break; card = card.parentNode; }
+    if (!card || !card.dataset) return;
+    if (card.dataset.arch) { playArchiveItem(card.dataset.id, card.dataset.title || ''); }
+    else if (card.dataset.url) { openPlayer(decodeURIComponent(card.dataset.url), card.dataset.title || ''); }
+  };
+}
+
+/* ── Search ── */
+function filterLocal(q) {
+  var q2 = q.toLowerCase();
+  var key = currentTab === 'channels' ? 'channels' : currentTab === 'movies' ? 'movies' : 'series';
+  var items = allData[key] || [];
+  return items.filter(function(item) {
+    var n = (item.name || item.title || '').toLowerCase();
+    var c = (item.category || item.genre || '').toLowerCase();
+    return n.indexOf(q2) !== -1 || c.indexOf(q2) !== -1;
+  });
+}
+
+function doSearch(q) {
+  q = q.trim();
+  currentSearch = q;
+  var grid = document.getElementById('grid');
+  if (!q) { loadTab(currentTab); return; }
+  setBar(20);
+  var local = filterLocal(q);
+  if (local.length > 0) {
+    if (currentTab === 'channels') renderChannels(local);
+    else renderContent(local);
+    setStatus(local.length + ' resultado(s) local(es) para "' + q + '"');
+  } else {
+    grid.innerHTML = '<div class="empty">Sin resultados locales para "' + q + '"</div>';
+    setStatus('Sin resultados locales…');
+  }
+  if (currentTab !== 'channels') {
+    grid.innerHTML += '<div id="arch-spinner" style="text-align:center;padding:1rem;width:100%;color:#6b7280;font-size:0.82rem">Buscando en archive.org…</div>';
+    xhr(API + '/user-search/archive?q=' + encodeURIComponent(q) + '&type=' + (currentTab === 'series' ? 'series' : 'movie'), function(err, data, status) {
+      setBar(100);
+      var sp = document.getElementById('arch-spinner');
+      if (sp) sp.parentNode.removeChild(sp);
+      if (err) { if (status === 401) { clearToken(); showLogin('Tu sesión expiró.'); } return; }
+      var items = (data && data.items) || [];
+      renderArchive(items);
+      setStatus(local.length + ' local(es) + ' + items.length + ' en archive.org para "' + q + '"');
+    });
+  } else {
+    setBar(100);
+  }
+}
+
+/* ── Load tab ── */
 function loadTab(tab) {
   currentTab = tab;
   var tabs = document.querySelectorAll('nav a');
-  for (var i = 0; i < tabs.length; i++) {
-    tabs[i].className = tabs[i].dataset.tab === tab ? 'active' : '';
-  }
+  for (var i = 0; i < tabs.length; i++) tabs[i].className = tabs[i].dataset.tab === tab ? 'active' : '';
   document.getElementById('grid').innerHTML = '';
   setBar(10);
-
-  if (tab === 'channels') {
-    if (allData.channels) { setBar(100); setStatus(allData.channels.length + ' canales'); renderChannels(allData.channels); return; }
-    setStatus('Cargando canales...');
-    xhr(API + '/channels', function(err, data, status) {
-      setBar(100);
-      if (err) {
-        if (status === 401) { clearToken(); showLogin('Tu sesión expiró. Vuelve a iniciar sesión.'); return; }
-        setStatus('Error cargando canales'); return;
-      }
-      var items = Array.isArray(data) ? data : (data.channels || data.data || []);
-      allData.channels = items;
-      setStatus(items.length + ' canales en vivo');
-      renderChannels(items);
-    });
-  } else if (tab === 'movies') {
-    if (allData.movies) { setBar(100); setStatus(allData.movies.length + ' películas'); renderMovies(allData.movies); return; }
-    setStatus('Cargando películas...');
-    xhr(API + '/movies?limit=200', function(err, data, status) {
-      setBar(100);
-      if (err) {
-        if (status === 401) { clearToken(); showLogin('Tu sesión expiró. Vuelve a iniciar sesión.'); return; }
-        setStatus('Error cargando películas'); return;
-      }
-      var items = Array.isArray(data) ? data : (data.movies || data.data || []);
-      allData.movies = items;
-      setStatus(items.length + ' películas');
-      renderMovies(items);
-    });
-  } else if (tab === 'series') {
-    if (allData.series) { setBar(100); setStatus(allData.series.length + ' series'); renderMovies(allData.series); return; }
-    setStatus('Cargando series...');
-    xhr(API + '/series?limit=200', function(err, data, status) {
-      setBar(100);
-      if (err) {
-        if (status === 401) { clearToken(); showLogin('Tu sesión expiró. Vuelve a iniciar sesión.'); return; }
-        setStatus('Error cargando series'); return;
-      }
-      var items = Array.isArray(data) ? data : (data.series || data.data || []);
-      allData.series = items;
-      setStatus(items.length + ' series');
-      renderMovies(items);
-    });
-  }
-}
-
-/* ---- Event listeners ---- */
-document.getElementById('tabs').onclick = function(e) {
-  if (e.target && e.target.dataset.tab) {
-    e.preventDefault();
-    loadTab(e.target.dataset.tab);
-  }
-};
-
-document.getElementById('logout-btn').onclick = doLogout;
-
-document.getElementById('login-btn').onclick = function() {
-  var code = document.getElementById('code-input').value.trim();
-  if (!code) { document.getElementById('login-error').textContent = 'Ingresa tu código de acceso.'; return; }
-  doLogin(code);
-};
-
-document.getElementById('code-input').onkeydown = function(e) {
-  if (e.keyCode === 13) {
-    var code = this.value.trim();
-    if (!code) { document.getElementById('login-error').textContent = 'Ingresa tu código de acceso.'; return; }
-    doLogin(code);
-  }
-};
-
-/* ---- Boot ---- */
-var savedToken = loadToken();
-if (savedToken) {
-  checkSession(savedToken, function(data) {
-    var name = data.displayName || data.codeName || '';
-    hideLogin(name);
-    loadTab('channels');
-  }, function() {
-    clearToken();
-    showLogin();
+  if (currentSearch) { doSearch(currentSearch); return; }
+  var key = tab === 'channels' ? 'channels' : tab === 'movies' ? 'movies' : 'series';
+  var ep = tab === 'channels' ? '/channels' : tab === 'movies' ? '/movies?limit=200' : '/series?limit=200';
+  var lbl = tab === 'channels' ? 'canales en vivo' : tab === 'movies' ? 'películas' : 'series';
+  if (allData[key]) { setBar(100); setStatus(allData[key].length + ' ' + lbl); if (tab==='channels') renderChannels(allData[key]); else renderContent(allData[key]); return; }
+  setStatus('Cargando ' + lbl + '…');
+  xhr(API + ep, function(err, data, status) {
+    setBar(100);
+    if (err) { if (status === 401) { clearToken(); showLogin('Tu sesión expiró. Vuelve a iniciar sesión.'); return; } setStatus('Error cargando ' + lbl); return; }
+    var items = Array.isArray(data) ? data : (data[key] || data.data || []);
+    allData[key] = items;
+    setStatus(items.length + ' ' + lbl);
+    if (tab === 'channels') renderChannels(items); else renderContent(items);
   });
-} else {
-  showLogin();
 }
+
+/* ── Login / Logout ── */
+function showLogin(msg) {
+  allData = {channels: null, movies: null, series: null};
+  document.getElementById('grid').innerHTML = '';
+  document.getElementById('login-err').textContent = msg || '';
+  document.getElementById('login-overlay').style.display = '-webkit-flex';
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('logout-btn').style.display = 'none';
+  document.getElementById('code-inp').value = '';
+  document.getElementById('code-inp').focus();
+}
+function hideLogin(name) {
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('logout-btn').style.display = 'inline-block';
+  if (name) document.getElementById('hdr-info').textContent = name + ' · Modo Ligero';
+}
+function doLogin(code) {
+  var btn = document.getElementById('login-btn');
+  var errEl = document.getElementById('login-err');
+  btn.disabled = true; btn.textContent = 'Verificando…'; errEl.textContent = '';
+  xhr(API + '/auth/login', function(err, data) {
+    btn.disabled = false; btn.textContent = 'Entrar';
+    if (err) {
+      var msg = err.message || 'Error al iniciar sesión';
+      if (/no existe|NOT_FOUND/i.test(msg)) msg = 'Código incorrecto. Inténtalo de nuevo.';
+      else if (/inactivo|INACTIVE/i.test(msg)) msg = 'Este código está desactivado.';
+      else if (/expirado|EXPIRED/i.test(msg)) msg = 'Este código ha expirado.';
+      errEl.textContent = msg; return;
+    }
+    if (data && data.token) {
+      saveToken(data.token);
+      var name = (data.code && (data.code.name || data.code.displayName)) || '';
+      hideLogin(name);
+      loadTab('channels');
+    } else { errEl.textContent = 'Respuesta inesperada del servidor.'; }
+  }, { method: 'POST', json: true, body: { code: code, deviceId: getDeviceId() } });
+}
+function doLogout() {
+  xhr(API + '/auth/logout', function(){}, { method: 'POST', json: true, body: {} });
+  clearToken(); showLogin();
+}
+function checkSession(token, onOk, onFail) {
+  authToken = token;
+  xhr(API + '/auth/me', function(err, data) {
+    if (err || !data) { authToken = null; onFail(); return; }
+    onOk(data);
+  });
+}
+
+/* ── Events ── */
+document.getElementById('tabs').onclick = function(e) {
+  if (e.target && e.target.dataset && e.target.dataset.tab) { e.preventDefault(); loadTab(e.target.dataset.tab); }
+};
+document.getElementById('logout-btn').onclick = doLogout;
+document.getElementById('login-btn').onclick = function() {
+  var c = document.getElementById('code-inp').value.trim();
+  if (!c) { document.getElementById('login-err').textContent = 'Ingresa tu código de acceso.'; return; }
+  doLogin(c);
+};
+document.getElementById('code-inp').oninput = function() { var v = this.value.toUpperCase(); if (this.value !== v) this.value = v; };
+document.getElementById('code-inp').onkeydown = function(e) {
+  if (e.keyCode === 13) { var c = this.value.trim(); if (!c) { document.getElementById('login-err').textContent = 'Ingresa tu código de acceso.'; return; } doLogin(c); }
+};
+document.getElementById('search-inp').oninput = function() {
+  var q = this.value;
+  document.getElementById('search-x').style.display = q ? 'block' : 'none';
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(function() { doSearch(q); }, 450);
+};
+document.getElementById('search-inp').onkeydown = function(e) { if (e.keyCode === 13) { clearTimeout(searchTimer); doSearch(this.value); } };
+document.getElementById('search-x').onclick = function() {
+  document.getElementById('search-inp').value = '';
+  this.style.display = 'none';
+  currentSearch = ''; loadTab(currentTab);
+};
+
+/* ── Boot ── */
+var saved = loadToken();
+if (saved) {
+  checkSession(saved, function(data) {
+    hideLogin(data.displayName || data.codeName || '');
+    loadTab('channels');
+  }, function() { clearToken(); showLogin(); });
+} else { showLogin(); }
 </script>
 </body>
 </html>
