@@ -477,10 +477,6 @@ export default function Home() {
   const colRef = useRef(0);
   const [colIndex, _setColIndex] = useState(0);
   const setColIndex = useCallback((v) => { const nv = typeof v === 'function' ? v(colRef.current) : v; colRef.current = nv; _setColIndex(nv); }, []);
-  // These refs are kept in sync via useLayoutEffect (runs after every COMMITTED render,
-  // synchronously before paint — safe in React 18 concurrent mode unlike inline render mutations)
-  const channelRowsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
-  const selectedCategoryRef = useRef<string | null>(null);
   const [rowsFocusActive, setRowsFocusActive] = useState(() => !!(window as any).__isTvBrowser);
   const [sidebarIdx, setSidebarIdx] = useState(0);
   const [heroBtnIndex, setHeroBtnIndex] = useState(0);
@@ -843,13 +839,6 @@ export default function Home() {
     if (activeTab === 'series') return seriesRows.map(r => ({ id: r.id, title: r.title, emoji: '🎬', items: r.items as unknown as ContentItem[] }));
     return contentRows;
   }, [activeTab, channelRows, seriesRows, contentRows, selectedChannelCategory]);
-
-  // useLayoutEffect (no deps) — runs after every COMMITTED render, synchronously before paint.
-  // This is the safe React 18 pattern for keeping refs current in event handlers.
-  useLayoutEffect(() => {
-    channelRowsRef.current = channelRows;
-    selectedCategoryRef.current = selectedChannelCategory;
-  });
 
   useEffect(() => {
     setRowIndex(0); setColIndex(0); setSelectedChannelCategory(null); setRowsFocusActive(false);
@@ -1359,14 +1348,7 @@ export default function Home() {
           case 'MediaPlayPause':
           case 'Enter': {
             e.preventDefault();
-            if (activeTab === 'channels') {
-              // Use refs (updated inline on every render) — completely closure-free, always current
-              const flatCh = selectedCategoryRef.current
-                ? (channelRowsRef.current.find((r: any) => r.title === selectedCategoryRef.current)?.items ?? [])
-                : channelRowsRef.current.flatMap((r: any) => r.items);
-              const item = flatCh[colRef.current] as ContentItem | undefined;
-              if (item) playItem(item);
-            } else if (activeTab === 'series') {
+            if (activeTab === 'series') {
               const item = seriesRows[rowRef.current]?.items[colRef.current];
               if (item) playSeriesItem(item);
             } else if (currentRow?.id === 'continue') {
