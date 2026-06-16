@@ -477,7 +477,8 @@ export default function Home() {
   const colRef = useRef(0);
   const [colIndex, _setColIndex] = useState(0);
   const setColIndex = useCallback((v) => { const nv = typeof v === 'function' ? v(colRef.current) : v; colRef.current = nv; _setColIndex(nv); }, []);
-  // Refs kept in sync on every render (before effects) so handlers never see stale channel data
+  // These refs are kept in sync via useLayoutEffect (runs after every COMMITTED render,
+  // synchronously before paint — safe in React 18 concurrent mode unlike inline render mutations)
   const channelRowsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
   const selectedCategoryRef = useRef<string | null>(null);
   const [rowsFocusActive, setRowsFocusActive] = useState(() => !!(window as any).__isTvBrowser);
@@ -830,10 +831,6 @@ export default function Home() {
     return rows;
   }, [activeTab, allChannels, categoriesFromApi, channelsByCategory, searchQuery]);
 
-  // Inline update — runs during render, before effects — guarantees no stale closure in keyboard handler
-  channelRowsRef.current = channelRows;
-  selectedCategoryRef.current = selectedChannelCategory;
-
   const activeRows = useMemo(() => {
     if (activeTab === 'channels') {
       // Return a single flat row matching exactly what the grid renders.
@@ -846,6 +843,13 @@ export default function Home() {
     if (activeTab === 'series') return seriesRows.map(r => ({ id: r.id, title: r.title, emoji: '🎬', items: r.items as unknown as ContentItem[] }));
     return contentRows;
   }, [activeTab, channelRows, seriesRows, contentRows, selectedChannelCategory]);
+
+  // useLayoutEffect (no deps) — runs after every COMMITTED render, synchronously before paint.
+  // This is the safe React 18 pattern for keeping refs current in event handlers.
+  useLayoutEffect(() => {
+    channelRowsRef.current = channelRows;
+    selectedCategoryRef.current = selectedChannelCategory;
+  });
 
   useEffect(() => {
     setRowIndex(0); setColIndex(0); setSelectedChannelCategory(null); setRowsFocusActive(false);
