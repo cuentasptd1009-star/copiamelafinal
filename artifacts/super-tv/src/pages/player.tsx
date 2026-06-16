@@ -50,12 +50,12 @@ function formatTime(s: number): string {
 
 export default function PlayerPage() {
   const [, setLocation] = useLocation();
-  const { data: session } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false } });
+  const { data: session, isLoading: sessionLoading } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: false } });
   const daysLeft = (() => {
     if (!session?.expiresAt) return null;
     return Math.ceil((new Date(session.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   })();
-  const isExpired = session?.type === 'user' && daysLeft !== null && daysLeft <= 0;
+  const isExpired = !sessionLoading && session?.type === 'user' && daysLeft !== null && daysLeft <= 0;
 
 
   const searchParams = new URLSearchParams(window.location.search);
