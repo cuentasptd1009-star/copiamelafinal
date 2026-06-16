@@ -1279,7 +1279,7 @@ export default function Home() {
 
       } else {
         // rows zone
-        const currentRow = activeRows[rowIndex];
+        const currentRow = activeRows[rowRef.current];
         const currentLen = currentRow?.items?.length ?? 0;
         switch (normalizeKey(e)) {
           case 'ArrowRight':
@@ -1293,7 +1293,7 @@ export default function Home() {
             const gridColsLeft = activeTab === 'channels'
               ? getChannelGridCols()
               : isGridRow(currentRow?.id ?? '') ? getSearchGridCols() : null;
-            const atLeftEdge = colIndex === 0 || (gridColsLeft !== null && colIndex % gridColsLeft === 0);
+            const atLeftEdge = colRef.current === 0 || (gridColsLeft !== null && colRef.current % gridColsLeft === 0);
             if (atLeftEdge) goToSidebar();
             else setColIndex(p => Math.max(p - 1, 0));
             break;
@@ -1305,17 +1305,17 @@ export default function Home() {
               ? getChannelGridCols()
               : isGridRow(currentRow?.id ?? '') ? getSearchGridCols() : null;
             if (gridColsDown !== null) {
-              const newCol = colIndex + gridColsDown;
+              const newCol = colRef.current + gridColsDown;
               if (newCol < currentLen) {
                 setColIndex(newCol);
-              } else if (rowIndex < activeRows.length - 1) {
+              } else if (rowRef.current < activeRows.length - 1) {
                 setRowIndex(p => p + 1); setColIndex(0);
               } else {
                 const _mini = getMiniPlayerState();
                 if (_mini?.isMinimized) { updateMiniPlayerState({ isFocused: true }); setZone('miniplayer'); }
               }
             } else {
-              if (rowIndex < activeRows.length - 1) { setRowIndex(p => p + 1); setColIndex(0); }
+              if (rowRef.current < activeRows.length - 1) { setRowIndex(p => p + 1); setColIndex(0); }
               else { const _mini = getMiniPlayerState(); if (_mini?.isMinimized) { updateMiniPlayerState({ isFocused: true }); setZone('miniplayer'); } }
             }
             break;
@@ -1327,10 +1327,10 @@ export default function Home() {
               ? getChannelGridCols()
               : isGridRow(currentRow?.id ?? '') ? getSearchGridCols() : null;
             if (gridColsUp !== null) {
-              const newCol = colIndex - gridColsUp;
+              const newCol = colRef.current - gridColsUp;
               if (newCol >= 0) {
                 setColIndex(newCol);
-              } else if (rowIndex > 0) {
+              } else if (rowRef.current > 0) {
                 setRowIndex(p => p - 1); setColIndex(0);
               } else if (activeTab === 'channels' && channelRows.length > 1 && !searchQuery) {
                 const curIdx = selectedChannelCategory === null ? 0 : (channelRows.findIndex(r => r.title === selectedChannelCategory) + 1);
@@ -1340,7 +1340,7 @@ export default function Home() {
                 if (showHero) { setZone('hero'); setHeroBtnIndex(0); }
               }
             } else {
-              if (rowIndex > 0) { setRowIndex(p => p - 1); setColIndex(0); }
+              if (rowRef.current > 0) { setRowIndex(p => p - 1); setColIndex(0); }
               else if (showHero) { setZone('hero'); setHeroBtnIndex(0); }
             }
             break;
