@@ -477,6 +477,9 @@ export default function Home() {
   const colRef = useRef(0);
   const [colIndex, _setColIndex] = useState(0);
   const setColIndex = useCallback((v) => { const nv = typeof v === 'function' ? v(colRef.current) : v; colRef.current = nv; _setColIndex(nv); }, []);
+  // Refs kept in sync on every render (before effects) so handlers never see stale channel data
+  const channelRowsRef = useRef<ReturnType<typeof Array.prototype.map>>([]);
+  const selectedCategoryRef = useRef<string | null>(null);
   const [rowsFocusActive, setRowsFocusActive] = useState(() => !!(window as any).__isTvBrowser);
   const [sidebarIdx, setSidebarIdx] = useState(0);
   const [heroBtnIndex, setHeroBtnIndex] = useState(0);
@@ -826,6 +829,10 @@ export default function Home() {
     if (rows.length === 0 && allChannels.length > 0) rows.push({ id: 'ch-all', title: 'Todos los canales', items: allChannels });
     return rows;
   }, [activeTab, allChannels, categoriesFromApi, channelsByCategory, searchQuery]);
+
+  // Inline update — runs during render, before effects — guarantees no stale closure in keyboard handler
+  channelRowsRef.current = channelRows;
+  selectedCategoryRef.current = selectedChannelCategory;
 
   const activeRows = useMemo(() => {
     if (activeTab === 'channels') {
@@ -1349,10 +1356,10 @@ export default function Home() {
           case 'Enter': {
             e.preventDefault();
             if (activeTab === 'channels') {
-              // Compute flat list exactly as the grid renders — avoids stale-closure mismatch
-              const flatCh = selectedChannelCategory
-                ? (channelRows.find(r => r.title === selectedChannelCategory)?.items ?? [])
-                : channelRows.flatMap(r => r.items);
+              // Use refs (updated inline on every render) — completely closure-free, always current
+              const flatCh = selectedCategoryRef.current
+                ? (channelRowsRef.current.find((r: any) => r.title === selectedCategoryRef.current)?.items ?? [])
+                : channelRowsRef.current.flatMap((r: any) => r.items);
               const item = flatCh[colRef.current] as ContentItem | undefined;
               if (item) playItem(item);
             } else if (activeTab === 'series') {
