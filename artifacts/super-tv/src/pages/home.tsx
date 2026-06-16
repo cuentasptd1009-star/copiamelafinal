@@ -1348,7 +1348,14 @@ export default function Home() {
           case 'MediaPlayPause':
           case 'Enter': {
             e.preventDefault();
-            if (activeTab === 'series') {
+            if (activeTab === 'channels') {
+              // Compute flat list exactly as the grid renders — avoids stale-closure mismatch
+              const flatCh = selectedChannelCategory
+                ? (channelRows.find(r => r.title === selectedChannelCategory)?.items ?? [])
+                : channelRows.flatMap(r => r.items);
+              const item = flatCh[colRef.current] as ContentItem | undefined;
+              if (item) playItem(item);
+            } else if (activeTab === 'series') {
               const item = seriesRows[rowRef.current]?.items[colRef.current];
               if (item) playSeriesItem(item);
             } else if (currentRow?.id === 'continue') {
