@@ -471,8 +471,12 @@ export default function Home() {
     if (initialTab === 'favorites') return 4;
     return 0;
   });
-  const [rowIndex, setRowIndex] = useState(0);
-  const [colIndex, setColIndex] = useState(0);
+  const rowRef = useRef(0);
+  const [rowIndex, _setRowIndex] = useState(0);
+  const setRowIndex = useCallback((v) => { const nv = typeof v === 'function' ? v(rowRef.current) : v; rowRef.current = nv; _setRowIndex(nv); }, []);
+  const colRef = useRef(0);
+  const [colIndex, _setColIndex] = useState(0);
+  const setColIndex = useCallback((v) => { const nv = typeof v === 'function' ? v(colRef.current) : v; colRef.current = nv; _setColIndex(nv); }, []);
   const [rowsFocusActive, setRowsFocusActive] = useState(() => !!(window as any).__isTvBrowser);
   const [sidebarIdx, setSidebarIdx] = useState(0);
   const [heroBtnIndex, setHeroBtnIndex] = useState(0);
@@ -523,7 +527,7 @@ export default function Home() {
   const [externalHistory, setExternalHistory] = useState<ExternalItem[]>(() => getExternalHistory());
   const [searchHistory, setSearchHistory] = useState<string[]>(() => getSearchHistory());
 
-  const { data: session, isError: sessionError } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: 2, retryDelay: 1000, refetchInterval: 30000 } });
+  const { data: session, isError: sessionError, isLoading: sessionLoading } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: 2, retryDelay: 1000, refetchInterval: 30000 } });
   const { data: avatars = [] } = useListAvatars({ query: { queryKey: getListAvatarsQueryKey() } });
   const updateProfileMutation = useUpdateProfile();
   const { data: allChannels = [], isLoading: channelsLoading } = useListChannels(undefined, { query: { queryKey: getListChannelsQueryKey() } });
@@ -632,7 +636,7 @@ export default function Home() {
     if (!session?.expiresAt) return null;
     return Math.ceil((new Date(session.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   })();
-  const isExpired = session?.type === 'user' && daysLeft !== null && daysLeft <= 0;
+  const isExpired = !sessionLoading && session?.type === 'user' && daysLeft !== null && daysLeft <= 0;
   const [showExpiredOverlay, setShowExpiredOverlay] = useState(true);
   useEffect(() => { if (isExpired) setShowExpiredOverlay(true); }, [isExpired]);
 
@@ -940,6 +944,9 @@ export default function Home() {
       const p = new URLSearchParams({ url, title: mv.title, type: 'movie', movieId: String(mv.id), category: mv.category || '' });
       if ((mv as any).videoFormat) p.set('format', (mv as any).videoFormat);
       if (saved && saved.time > 10) p.set('startFrom', String(Math.floor(saved.time)));
+      // Bug 3: close mini-player before movie playback to prevent overlay
+      const _ms = getMiniPlayerState();
+      if (_ms?.isMinimized) updateMiniPlayerState({ isMinimized: false });
       setLocation(`/vod-player?${p.toString()}`);
     }
   }, [setLocation, isExpired, allChannels, progressMap]);
@@ -969,6 +976,9 @@ export default function Home() {
           ...(item.category ? { category: item.category } : {}),
           ...(item.streamFormat ? { format: item.streamFormat } : {}),
         });
+        // Bug 3: close mini-player before movie playback to prevent overlay
+        const _ms2 = getMiniPlayerState();
+        if (_ms2?.isMinimized) updateMiniPlayerState({ isMinimized: false });
         setLocation(`/vod-player?${params.toString()}`);
       } else {
         setLocation(`/pelicula/${item.id}`);
@@ -1339,27 +1349,27 @@ export default function Home() {
           case 'Enter': {
             e.preventDefault();
             if (activeTab === 'series') {
-              const item = seriesRows[rowIndex]?.items[colIndex];
+              const item = seriesRows[rowRef.current]?.items[colRef.current];
               if (item) playSeriesItem(item);
             } else if (currentRow?.id === 'continue') {
-              const contItem = combinedContinueWatching[colIndex];
+              const contItem = combinedContinueWatching[colRef.current];
               if (contItem) {
                 if (isExpired) { setShowExpiredOverlay(true); return; }
                 if (contItem.type === 'external' && contItem.externalItem) {
                   setExternalPlayer({ title: contItem.title, type: contItem.externalItem.source, videoId: contItem.externalItem.videoId, url: contItem.externalItem.url, thumbnail: contItem.externalItem.thumbnail });
-                } else if (contItem.type === 'series') setLocation();
-                else setLocation();
+                } else if (contItem.type === 'series') setLocation(`/serie/${contItem.id}?autoplay=1`);
+                else setLocation(`/pelicula/${contItem.id}`);
               }
             } else {
-              const item = currentRow?.items[colIndex];
+              const item = activeRows[rowRef.current]?.items[colRef.current];
               if (item) playItem(item);
             }
             break;
           }
           case 'Escape': case 'Backspace':
             e.preventDefault();
-            if ((currentRow?.id === 'continue') && combinedContinueWatching[colIndex]) {
-              handleRemoveContinue(combinedContinueWatching[colIndex]);
+            if ((currentRow?.id === 'continue') && combinedContinueWatching[colRef.current]) {
+              handleRemoveContinue(combinedContinueWatching[colRef.current]);
             }
             break;
         }
