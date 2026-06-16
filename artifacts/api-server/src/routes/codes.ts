@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { accessCodesTable, sessionsTable, packagesTable } from "@workspace/db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import {
   CreateCodeBody,
   UpdateCodeBody,
@@ -215,6 +215,26 @@ router.post("/codes/:id/adjust-time", requireAdminAuth, async (req: Request, res
     .returning();
 
   res.json(formatCode(updated));
+});
+
+router.delete("/codes/bulk", requireAdminAuth, async (req: Request, res: Response) => {
+  const adminSession = req.adminSession!;
+  if (adminSession.role === "subadmin") {
+    res.status(403).json({ error: "Subadmins cannot bulk delete codes" });
+    return;
+  }
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids must be a non-empty array" });
+    return;
+  }
+  const numIds = ids.map(Number).filter((n) => !isNaN(n));
+  if (numIds.length === 0) {
+    res.status(400).json({ error: "No valid ids provided" });
+    return;
+  }
+  await db.delete(accessCodesTable).where(inArray(accessCodesTable.id, numIds));
+  res.json({ success: true, deleted: numIds.length });
 });
 
 export default router;
