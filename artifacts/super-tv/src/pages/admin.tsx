@@ -717,6 +717,8 @@ function CodesManager() {
   const [reactUnit, setReactUnit] = useState<TimeUnit>('days');
   const [codeSearch, setCodeSearch] = useState('');
   const [codeStatusFilter, setCodeStatusFilter] = useState<'all' | 'active' | 'expired' | 'inactive'>('all');
+  const [selectedExpiredIds, setSelectedExpiredIds] = useState<Set<number>>(new Set());
+  const [bulkDeletingExpired, setBulkDeletingExpired] = useState(false);
 
   const filteredCodes = useMemo(() => {
     let list = codes || [];
@@ -779,6 +781,27 @@ function CodesManager() {
     });
   };
 
+  const handleBulkDeleteExpired = async () => {
+    if (selectedExpiredIds.size === 0 || bulkDeletingExpired) return;
+    if (!confirm(`¿Eliminar ${selectedExpiredIds.size} código${selectedExpiredIds.size !== 1 ? 's' : ''} expirado${selectedExpiredIds.size !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) return;
+    setBulkDeletingExpired(true);
+    try {
+      const token = getToken('admin');
+      await fetch(`${BASE_URL}/api/codes/bulk`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: Array.from(selectedExpiredIds) }),
+      });
+      qc.invalidateQueries({ queryKey: getListCodesQueryKey() });
+      toast({ title: `🗑️ ${selectedExpiredIds.size} código${selectedExpiredIds.size !== 1 ? 's eliminados' : ' eliminado'}` });
+      setSelectedExpiredIds(new Set());
+    } catch {
+      toast({ variant: 'destructive', title: 'Error al eliminar códigos' });
+    } finally {
+      setBulkDeletingExpired(false);
+    }
+  };
+
   if (isLoading) return <div className="text-muted-foreground">Cargando...</div>;
 
   return (
@@ -817,12 +840,42 @@ function CodesManager() {
             inactive: codeStatusFilter === 'inactive' ? 'bg-yellow-600 text-white' : 'bg-muted text-muted-foreground hover:text-foreground',
           };
           return (
-            <button key={s} onClick={() => setCodeStatusFilter(s)} className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${colors[s]}`}>
+            <button key={s} onClick={() => { setCodeStatusFilter(s); setSelectedExpiredIds(new Set()); }} className={`text-xs px-3 py-1 rounded-full font-medium transition-colors ${colors[s]}`}>
               {labels[s]}
             </button>
           );
         })}
       </div>
+
+      {codeStatusFilter === 'expired' && filteredCodes.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap py-1">
+          <button
+            onClick={() => {
+              if (selectedExpiredIds.size === filteredCodes.length) {
+                setSelectedExpiredIds(new Set());
+              } else {
+                setSelectedExpiredIds(new Set(filteredCodes.map(c => c.id)));
+              }
+            }}
+            className="text-xs px-3 py-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground font-medium transition-colors border border-border"
+          >
+            {selectedExpiredIds.size === filteredCodes.length ? 'Deseleccionar todo' : 'Seleccionar todos los expirados'}
+          </button>
+          {selectedExpiredIds.size > 0 && (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleBulkDeleteExpired}
+              disabled={bulkDeletingExpired}
+              className="text-xs"
+            >
+              {bulkDeletingExpired
+                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Eliminando...</>
+                : <><Trash2 className="w-3.5 h-3.5 mr-1.5" />Eliminar seleccionados ({selectedExpiredIds.size})</>}
+            </Button>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <Card className="bg-background border-border p-4 space-y-3">
@@ -907,6 +960,7 @@ function CodesManager() {
         <Table>
           <TableHeader>
             <TableRow>
+              {codeStatusFilter === 'expired' && <TableHead className="w-8 pr-0 pl-3"></TableHead>}
               <TableHead>Código</TableHead>
               <TableHead>Nombre</TableHead>
               <TableHead>Estado</TableHead>
@@ -916,7 +970,21 @@ function CodesManager() {
           </TableHeader>
           <TableBody>
             {filteredCodes.map((code) => (
-              <TableRow key={code.id}>
+              <TableRow key={code.id} className={codeStatusFilter === 'expired' && selectedExpiredIds.has(code.id) ? 'bg-primary/10' : ''}>
+                {codeStatusFilter === 'expired' && (
+                  <TableCell className="w-8 pr-0 pl-3">
+                    <input
+                      type="checkbox"
+                      className="accent-primary w-4 h-4 cursor-pointer"
+                      checked={selectedExpiredIds.has(code.id)}
+                      onChange={() => setSelectedExpiredIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(code.id)) next.delete(code.id); else next.add(code.id);
+                        return next;
+                      })}
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="font-mono font-bold tracking-wider">{code.code}</TableCell>
                 <TableCell>{code.name || '-'}</TableCell>
                 <TableCell>
@@ -945,7 +1013,7 @@ function CodesManager() {
               </TableRow>
             ))}
             {filteredCodes.length === 0 && (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">{codeSearch.trim() ? 'Sin resultados para esa búsqueda' : 'Sin códigos aún'}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={codeStatusFilter === 'expired' ? 6 : 5} className="text-center text-muted-foreground py-8">{codeSearch.trim() ? 'Sin resultados para esa búsqueda' : 'Sin códigos aún'}</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
