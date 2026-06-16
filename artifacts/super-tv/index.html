@@ -468,7 +468,7 @@
             var msgEl = document.getElementById('app-error-message');
             if (loadingEl) loadingEl.style.display = 'none';
             if (errorEl) errorEl.style.display = 'flex';
-            if (msgEl) msgEl.textContent = 'Tu navegador no es compatible. Por favor usa un navegador actualizado o la app de Super TV para Android.';
+            if (msgEl) msgEl.textContent = 'Tu navegador es muy antiguo para esta versión. Usa uno más moderno o la Versión Ligera.';
           }, TIMEOUT);
           /* Cancel if app starts correctly */
           var orig = window.__appStarted;
@@ -558,8 +558,11 @@
       <p>Cargando Super TV…</p>
     </div>
     <div id="app-error">
-      <h2>No se pudo cargar Super TV</h2>
-      <p>Tu navegador puede no ser compatible. Intenta actualizar la página o usar otro navegador.</p>
+      <img src="/icon-192.png" style="width:64px;border-radius:12px;margin-bottom:1rem">
+      <h2>Tu navegador es muy antiguo</h2>
+      <p>Esta versión de Super TV no es compatible con tu navegador. Usa un navegador más moderno, o prueba la Versión Ligera que funciona en navegadores antiguos.</p>
+      <a href="/lite" style="display:inline-block;background:#e11d48;color:#fff;padding:0.65rem 1.6rem;border-radius:8px;text-decoration:none;font-size:0.95rem;font-weight:bold;margin-top:0.5rem">Usar Versión Ligera →</a>
+      <br>
       <button onclick="location.reload()">Reintentar</button>
     </div>
     <div id="root"></div>
