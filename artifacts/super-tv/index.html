@@ -416,6 +416,12 @@
     <script>
       window.__appStarted = false;
       window.onerror = function() { return false; };
+      setTimeout(function() {
+        if (!window.__appStarted) {
+          var el = document.getElementById('app-loading');
+          if (el) el.style.display = 'none';
+        }
+      }, 9000);
     </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>
