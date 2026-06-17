@@ -1,18 +1,8 @@
 # Cloudflare Pages _headers
-# Rules are merged for matching paths; later rules override earlier ones for the same header.
-# Place general catch-all FIRST so specific rules below override it.
+# Note: do NOT set Cache-Control on /* — it merges with specific rules and conflicts.
+# Cloudflare Pages serves HTML with no-cache by default; only override assets.
 
-/*
-  Cache-Control: no-cache, no-store, must-revalidate
-  X-Content-Type-Options: nosniff
-
-/manifest.json
-  Cache-Control: public, max-age=3600
-
-/sw.js
-  Cache-Control: no-cache, no-store, must-revalidate
-
-# Hashed assets — 1 year immutable (MUST come after /* to override it)
+# Hashed JS/CSS/font assets — 1 year, immutable (Vite adds content hash to filenames)
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
   X-Content-Type-Options: nosniff
@@ -22,6 +12,7 @@
 /*.woff
   Cache-Control: public, max-age=31536000, immutable
 
+# Images in public root
 /*.png
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
 /*.jpg
@@ -30,3 +21,11 @@
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
 /*.svg
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
+# Manifest — short cache
+/manifest.json
+  Cache-Control: public, max-age=3600
+
+# Service worker — never cache
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
