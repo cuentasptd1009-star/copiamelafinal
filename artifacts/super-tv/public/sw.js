@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'super-tv-v8';
+const CACHE_VERSION = 'super-tv-v9';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
