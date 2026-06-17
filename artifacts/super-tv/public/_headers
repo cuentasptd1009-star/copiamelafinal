@@ -1,17 +1,27 @@
-# Cloudflare Pages cache headers — aggressive caching for hashed assets
+# Cloudflare Pages _headers
+# Rules are merged for matching paths; later rules override earlier ones for the same header.
+# Place general catch-all FIRST so specific rules below override it.
 
-# Hashed JS/CSS chunks (Vite adds content hash — safe to cache 1 year)
+/*
+  Cache-Control: no-cache, no-store, must-revalidate
+  X-Content-Type-Options: nosniff
+
+/manifest.json
+  Cache-Control: public, max-age=3600
+
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# Hashed assets — 1 year immutable (MUST come after /* to override it)
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
   X-Content-Type-Options: nosniff
 
-# Fonts from public dir
 /*.woff2
   Cache-Control: public, max-age=31536000, immutable
-*.woff
+/*.woff
   Cache-Control: public, max-age=31536000, immutable
 
-# Images
 /*.png
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
 /*.jpg
@@ -20,16 +30,3 @@
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
 /*.svg
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
-
-# Manifest — short cache
-/manifest.json
-  Cache-Control: public, max-age=3600
-
-# Service worker — never cache (must always be fresh)
-/sw.js
-  Cache-Control: no-cache, no-store, must-revalidate
-
-# HTML — never cache (always fetch fresh)
-/*
-  Cache-Control: no-cache, no-store, must-revalidate
-  X-Content-Type-Options: nosniff
