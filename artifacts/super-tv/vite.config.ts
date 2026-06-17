@@ -28,7 +28,7 @@ export default defineConfig({
         'opera >= 30',
       ],
       modernPolyfills: false,
-      renderLegacyChunks: true,
+      renderLegacyChunks: false,
       polyfills: true,
       externalSystemjs: false,
     }),
