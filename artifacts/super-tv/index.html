@@ -28,14 +28,19 @@
     <meta property="og:image" content="/opengraph.jpg" />
     <meta property="og:type" content="website" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- DNS prefetch for faster external connections -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Google Fonts: only needed weights, font-display=swap for instant text render -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+
     <script>
       /* ===== POLYFILLS for old TV browsers (Samsung 2014+, LG 2014+, Chrome 38+) ===== */
       (function() {
 
-        /* Object.assign */
         if (typeof Object.assign !== 'function') {
           Object.assign = function(target) {
             if (target == null) throw new TypeError('Cannot convert undefined or null to object');
@@ -48,45 +53,32 @@
           };
         }
 
-        /* Array.from */
         if (!Array.from) {
-          Array.from = function(arrayLike) {
-            return Array.prototype.slice.call(arrayLike);
-          };
+          Array.from = function(arrayLike) { return Array.prototype.slice.call(arrayLike); };
         }
 
-        /* Array.prototype.includes */
         if (!Array.prototype.includes) {
-          Array.prototype.includes = function(val) {
-            return this.indexOf(val) !== -1;
-          };
+          Array.prototype.includes = function(val) { return this.indexOf(val) !== -1; };
         }
 
-        /* String.prototype.includes */
         if (!String.prototype.includes) {
-          String.prototype.includes = function(search) {
-            return this.indexOf(search) !== -1;
-          };
+          String.prototype.includes = function(search) { return this.indexOf(search) !== -1; };
         }
 
-        /* String.prototype.startsWith */
         if (!String.prototype.startsWith) {
           String.prototype.startsWith = function(s) { return this.slice(0, s.length) === s; };
         }
 
-        /* String.prototype.endsWith */
         if (!String.prototype.endsWith) {
           String.prototype.endsWith = function(s) { return this.slice(-s.length) === s; };
         }
 
-        /* Number.isFinite / Number.isNaN / Number.isInteger */
         if (!Number.isFinite) Number.isFinite = function(v) { return typeof v === 'number' && isFinite(v); };
         if (!Number.isNaN)    Number.isNaN    = function(v) { return typeof v === 'number' && isNaN(v); };
         if (!Number.isInteger) Number.isInteger = function(v) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v; };
         if (!Number.parseInt)  Number.parseInt  = parseInt;
         if (!Number.parseFloat) Number.parseFloat = parseFloat;
 
-        /* Math.sign, Math.trunc, Math.log2 */
         if (!Math.sign)  Math.sign  = function(x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
         if (!Math.trunc) Math.trunc = function(x) { return x < 0 ? Math.ceil(x) : Math.floor(x); };
         if (!Math.log2)  Math.log2  = function(x) { return Math.log(x) / Math.LN2; };
@@ -97,9 +89,7 @@
         if (!Math.fround) Math.fround = function(x) { return new Float32Array([x])[0]; };
         if (!Math.imul)   Math.imul = function(a,b) { var ah=(a>>>16)&0xffff,al=a&0xffff,bh=(b>>>16)&0xffff,bl=b&0xffff; return (al*bl)+((((ah*bl)+(al*bh))<<16)>>>0)|0; };
 
-        /* Promise polyfill (tiny) — required for React on Chrome 38 */
         if (typeof Promise === 'undefined') {
-          /* Minimal Promise/A+ polyfill */
           var PENDING=0,FULFILLED=1,REJECTED=2;
           function P(fn) {
             var state=PENDING,val,cbs=[];
@@ -131,7 +121,6 @@
           };
         }
 
-        /* crypto.randomUUID polyfill */
         if (!window.crypto) window.crypto = {};
         if (!window.crypto.getRandomValues) {
           window.crypto.getRandomValues = function(arr) {
@@ -150,7 +139,6 @@
           };
         }
 
-        /* requestAnimationFrame polyfill */
         var lastTime = 0;
         if (!window.requestAnimationFrame) {
           window.requestAnimationFrame = function(cb) {
@@ -160,7 +148,6 @@
           window.cancelAnimationFrame = clearTimeout;
         }
 
-        /* requestIdleCallback polyfill */
         if (!window.requestIdleCallback) {
           window.requestIdleCallback = function(cb, opts) {
             var start = Date.now();
@@ -171,28 +158,24 @@
           window.cancelIdleCallback = clearTimeout;
         }
 
-        /* queueMicrotask polyfill */
         if (!window.queueMicrotask) {
           window.queueMicrotask = function(fn) {
             Promise.resolve().then(fn).catch(function(e) { setTimeout(function() { throw e; }); });
           };
         }
 
-        /* structuredClone polyfill */
         if (!window.structuredClone) {
           window.structuredClone = function(obj) {
             try { return JSON.parse(JSON.stringify(obj)); } catch(e) { return obj; }
           };
         }
 
-        /* globalThis polyfill */
         if (typeof globalThis === 'undefined') {
           (function() {
             Object.defineProperty(Object.prototype, '__magic__', {
               get: function() { return this; },
               configurable: true
             });
-            /* eslint-disable-next-line no-undef */
             var g = __magic__;
             delete Object.prototype.__magic__;
             if (typeof g === 'undefined') { g = window; }
@@ -200,7 +183,6 @@
           }());
         }
 
-        /* CustomEvent polyfill (IE/old WebKit) */
         if (typeof window.CustomEvent !== 'function') {
           function CustomEvent(event, params) {
             params = params || { bubbles: false, cancelable: false, detail: null };
@@ -212,7 +194,6 @@
           window.CustomEvent = CustomEvent;
         }
 
-        /* ResizeObserver polyfill stub — prevents crashes on Chrome 38-47 TVs */
         if (typeof ResizeObserver === 'undefined') {
           window.ResizeObserver = function(cb) {
             var self = this;
@@ -235,9 +216,8 @@
           };
         }
 
-        /* IntersectionObserver polyfill stub */
         if (typeof IntersectionObserver === 'undefined') {
-          window.IntersectionObserver = function(cb) {
+          window.IntersectionObserver = function() {
             this.observe = function() {};
             this.unobserve = function() {};
             this.disconnect = function() {};
@@ -245,7 +225,6 @@
           window.IntersectionObserverEntry = function() {};
         }
 
-        /* Object.fromEntries (ES2019) */
         if (!Object.fromEntries) {
           Object.fromEntries = function(entries) {
             var obj = {};
@@ -254,7 +233,6 @@
           };
         }
 
-        /* Array.prototype.flat / flatMap */
         if (!Array.prototype.flat) {
           Array.prototype.flat = function(depth) {
             depth = depth === undefined ? 1 : Math.floor(depth);
@@ -271,7 +249,6 @@
           };
         }
 
-        /* Element.prototype.matches / closest */
         if (!Element.prototype.matches) {
           Element.prototype.matches = Element.prototype.msMatchesSelector ||
             Element.prototype.webkitMatchesSelector || function(s) {
@@ -294,41 +271,6 @@
           Element.prototype.remove = function() { if (this.parentNode) this.parentNode.removeChild(this); };
         }
 
-        /* ===== SMART TV DETECTION (solo para deshabilitar transiciones, no para bloquear) ===== */
-        var __isModernTv = (function() {
-          var ua = navigator.userAgent;
-          if (/Tizen/i.test(ua)) return true;
-          if (/Web0S|webOS/i.test(ua)) return true;
-          if (/SMART-TV|SmartTV/i.test(ua)) return true;
-          if (/HbbTV/i.test(ua)) return true;
-          if (/BRAVIA/i.test(ua)) return true;
-          if (/Viera/i.test(ua)) return true;
-          if (/PhilipsTV/i.test(ua)) return true;
-          if (/AFT[A-Z]/i.test(ua)) return true;
-          if (/CrKey/i.test(ua)) return true;
-          if (/WebAppManager/i.test(ua)) return true;
-          if (/NetCast/i.test(ua)) return true;
-          if (/NETTV/i.test(ua)) return true;
-          if (/Maple/i.test(ua)) return true;
-          return false;
-        })();
-        if (__isModernTv) {
-          window.__isTvBrowser = true;
-          document.documentElement.className = (document.documentElement.className || '') + ' slow-tv';
-        }
-
-        /* CSS Variables fallback: older Samsung/LG TVs lack support */
-        var cssVarsOk = (function() {
-          try { return window.CSS && window.CSS.supports && window.CSS.supports('color', 'var(--x)'); } catch(e) { return false; }
-        })();
-        if (!cssVarsOk) {
-          var s = document.createElement('style');
-          s.textContent = 'body,html{background:#090E17;color:#fff;font-family:Inter,sans-serif}' +
-            '#app-loading{background:#090E17}';
-          document.head.appendChild(s);
-        }
-
-        /* ===== fetch polyfill for Chrome 38-42 TV browsers ===== */
         if (!window.fetch) {
           window.fetch = function(url, options) {
             return new Promise(function(resolve, reject) {
@@ -354,9 +296,7 @@
                   },
                   url: String(url),
                   text: function() { return Promise.resolve(resText); },
-                  json: function() {
-                    return Promise.resolve().then(function() { return JSON.parse(resText); });
-                  },
+                  json: function() { return Promise.resolve().then(function() { return JSON.parse(resText); }); },
                   blob: function() { return Promise.resolve(new Blob([resText])); },
                   clone: function() { return this; }
                 };
@@ -370,14 +310,12 @@
                   reject(new Error('The user aborted a request.'));
                 });
               }
-              var body = opts.body !== undefined ? opts.body : null;
-              xhr.send(body);
+              xhr.send(opts.body !== undefined ? opts.body : null);
             });
           };
           window.fetch.polyfill = true;
         }
 
-        /* URLSearchParams polyfill */
         if (!window.URLSearchParams) {
           window.URLSearchParams = function(init) {
             this._p = {};
@@ -400,7 +338,6 @@
           };
         }
 
-        /* AbortController polyfill (stub — prevents crashes) */
         if (!window.AbortController) {
           window.AbortController = function() {
             var listeners = [];
@@ -416,57 +353,59 @@
           };
         }
 
-        document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+        /* Smart TV detection — only disables heavy animations, never blocks loading */
+        var __isModernTv = (function() {
+          var ua = navigator.userAgent;
+          return /Tizen|Web0S|webOS|SMART-TV|SmartTV|HbbTV|BRAVIA|Viera|PhilipsTV|AFT[A-Z]|CrKey|WebAppManager|NetCast|NETTV|Maple/i.test(ua);
+        })();
+        if (__isModernTv) {
+          window.__isTvBrowser = true;
+          document.documentElement.className = (document.documentElement.className || '') + ' slow-tv';
+        }
 
+        /* CSS Variables fallback for very old TVs */
+        var cssVarsOk = (function() {
+          try { return window.CSS && window.CSS.supports && window.CSS.supports('color', 'var(--x)'); } catch(e) { return false; }
+        })();
+        if (!cssVarsOk) {
+          var s = document.createElement('style');
+          s.textContent = 'body,html{background:#090E17;color:#fff;font-family:Inter,sans-serif}#app-loading{background:#090E17}';
+          document.head.appendChild(s);
+        }
+
+        document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
         document.addEventListener('keydown', function(e) {
           if (e.key === 'F12') { e.preventDefault(); return false; }
-          if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i')) { e.preventDefault(); return false; }
-          if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j')) { e.preventDefault(); return false; }
-          if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) { e.preventDefault(); return false; }
-          if (e.ctrlKey && (e.key === 'U' || e.key === 'u')) { e.preventDefault(); return false; }
-          if (e.ctrlKey && (e.key === 'S' || e.key === 's')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && (e.key === 'U' || e.key === 'u' || e.key === 'S' || e.key === 's')) { e.preventDefault(); return false; }
         });
 
       })();
     </script>
     <style>
-    #app-loading {
-      display: -webkit-box;
-      display: -webkit-flex;
-      display: -ms-flexbox;
-      display: flex;
-      -webkit-box-orient: vertical;
-      -webkit-box-direction: normal;
-      -webkit-flex-direction: column;
-      -ms-flex-direction: column;
-      flex-direction: column;
-      -webkit-box-align: center;
-      -webkit-align-items: center;
-      -ms-flex-align: center;
-      align-items: center;
-      -webkit-box-pack: center;
-      -webkit-justify-content: center;
-      -ms-flex-pack: center;
-      justify-content: center;
-      min-height: 100vh;
-      background: #090E17;
-      color: #ffffff;
-      font-family: Inter, sans-serif;
+    *{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+    #app-loading{
+      display:-webkit-box;display:-webkit-flex;display:-ms-flexbox;display:flex;
+      -webkit-box-orient:vertical;-webkit-box-direction:normal;
+      -webkit-flex-direction:column;-ms-flex-direction:column;flex-direction:column;
+      -webkit-box-align:center;-webkit-align-items:center;-ms-flex-align:center;align-items:center;
+      -webkit-box-pack:center;-webkit-justify-content:center;-ms-flex-pack:center;justify-content:center;
+      min-height:100vh;background:#090E17;color:#fff;font-family:Inter,sans-serif;
     }
-    #app-loading .spinner {
-      width: 48px;
-      height: 48px;
-      border: 4px solid rgba(255,255,255,0.15);
-      border-top-color: #e11d48;
-      border-radius: 50%;
-      margin-bottom: 24px;
-      -webkit-animation: spin 0.9s linear infinite;
-      animation: spin 0.9s linear infinite;
+    #app-loading .spinner{
+      width:48px;height:48px;
+      border:4px solid rgba(255,255,255,0.15);
+      border-top-color:#e11d48;
+      border-radius:50%;
+      margin-bottom:24px;
+      will-change:transform;
+      -webkit-animation:spin 0.9s linear infinite;
+      animation:spin 0.9s linear infinite;
     }
-    @-webkit-keyframes spin { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
-    @keyframes spin { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
-    #app-loading p { color: rgba(255,255,255,0.5); font-size: 14px; margin: 0; }
-  </style>
+    @-webkit-keyframes spin{to{-webkit-transform:rotate(360deg);transform:rotate(360deg)}}
+    @keyframes spin{to{-webkit-transform:rotate(360deg);transform:rotate(360deg)}}
+    #app-loading p{color:rgba(255,255,255,0.5);font-size:14px;margin:0}
+    </style>
   </head>
   <body>
     <div id="app-loading">
@@ -483,8 +422,8 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js')
-            .then(function(reg) { console.log('SW registered:', reg.scope); })
-            .catch(function(err) { console.log('SW registration failed:', err); });
+            .then(function(reg) { reg.update(); })
+            .catch(function() {});
         });
       }
     </script>
