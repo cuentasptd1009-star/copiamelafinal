@@ -28,19 +28,14 @@
     <meta property="og:image" content="/opengraph.jpg" />
     <meta property="og:type" content="website" />
 
-    <!-- DNS prefetch for faster external connections -->
-    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
-    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-
-    <!-- Google Fonts: only needed weights, font-display=swap for instant text render -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
-
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
       /* ===== POLYFILLS for old TV browsers (Samsung 2014+, LG 2014+, Chrome 38+) ===== */
       (function() {
 
+        /* Object.assign */
         if (typeof Object.assign !== 'function') {
           Object.assign = function(target) {
             if (target == null) throw new TypeError('Cannot convert undefined or null to object');
@@ -53,32 +48,45 @@
           };
         }
 
+        /* Array.from */
         if (!Array.from) {
-          Array.from = function(arrayLike) { return Array.prototype.slice.call(arrayLike); };
+          Array.from = function(arrayLike) {
+            return Array.prototype.slice.call(arrayLike);
+          };
         }
 
+        /* Array.prototype.includes */
         if (!Array.prototype.includes) {
-          Array.prototype.includes = function(val) { return this.indexOf(val) !== -1; };
+          Array.prototype.includes = function(val) {
+            return this.indexOf(val) !== -1;
+          };
         }
 
+        /* String.prototype.includes */
         if (!String.prototype.includes) {
-          String.prototype.includes = function(search) { return this.indexOf(search) !== -1; };
+          String.prototype.includes = function(search) {
+            return this.indexOf(search) !== -1;
+          };
         }
 
+        /* String.prototype.startsWith */
         if (!String.prototype.startsWith) {
           String.prototype.startsWith = function(s) { return this.slice(0, s.length) === s; };
         }
 
+        /* String.prototype.endsWith */
         if (!String.prototype.endsWith) {
           String.prototype.endsWith = function(s) { return this.slice(-s.length) === s; };
         }
 
+        /* Number.isFinite / Number.isNaN / Number.isInteger */
         if (!Number.isFinite) Number.isFinite = function(v) { return typeof v === 'number' && isFinite(v); };
         if (!Number.isNaN)    Number.isNaN    = function(v) { return typeof v === 'number' && isNaN(v); };
         if (!Number.isInteger) Number.isInteger = function(v) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v; };
         if (!Number.parseInt)  Number.parseInt  = parseInt;
         if (!Number.parseFloat) Number.parseFloat = parseFloat;
 
+        /* Math.sign, Math.trunc, Math.log2 */
         if (!Math.sign)  Math.sign  = function(x) { return x > 0 ? 1 : x < 0 ? -1 : 0; };
         if (!Math.trunc) Math.trunc = function(x) { return x < 0 ? Math.ceil(x) : Math.floor(x); };
         if (!Math.log2)  Math.log2  = function(x) { return Math.log(x) / Math.LN2; };
@@ -89,7 +97,9 @@
         if (!Math.fround) Math.fround = function(x) { return new Float32Array([x])[0]; };
         if (!Math.imul)   Math.imul = function(a,b) { var ah=(a>>>16)&0xffff,al=a&0xffff,bh=(b>>>16)&0xffff,bl=b&0xffff; return (al*bl)+((((ah*bl)+(al*bh))<<16)>>>0)|0; };
 
+        /* Promise polyfill (tiny) — required for React on Chrome 38 */
         if (typeof Promise === 'undefined') {
+          /* Minimal Promise/A+ polyfill */
           var PENDING=0,FULFILLED=1,REJECTED=2;
           function P(fn) {
             var state=PENDING,val,cbs=[];
@@ -121,6 +131,7 @@
           };
         }
 
+        /* crypto.randomUUID polyfill */
         if (!window.crypto) window.crypto = {};
         if (!window.crypto.getRandomValues) {
           window.crypto.getRandomValues = function(arr) {
@@ -139,6 +150,7 @@
           };
         }
 
+        /* requestAnimationFrame polyfill */
         var lastTime = 0;
         if (!window.requestAnimationFrame) {
           window.requestAnimationFrame = function(cb) {
@@ -148,6 +160,7 @@
           window.cancelAnimationFrame = clearTimeout;
         }
 
+        /* requestIdleCallback polyfill */
         if (!window.requestIdleCallback) {
           window.requestIdleCallback = function(cb, opts) {
             var start = Date.now();
@@ -158,24 +171,28 @@
           window.cancelIdleCallback = clearTimeout;
         }
 
+        /* queueMicrotask polyfill */
         if (!window.queueMicrotask) {
           window.queueMicrotask = function(fn) {
             Promise.resolve().then(fn).catch(function(e) { setTimeout(function() { throw e; }); });
           };
         }
 
+        /* structuredClone polyfill */
         if (!window.structuredClone) {
           window.structuredClone = function(obj) {
             try { return JSON.parse(JSON.stringify(obj)); } catch(e) { return obj; }
           };
         }
 
+        /* globalThis polyfill */
         if (typeof globalThis === 'undefined') {
           (function() {
             Object.defineProperty(Object.prototype, '__magic__', {
               get: function() { return this; },
               configurable: true
             });
+            /* eslint-disable-next-line no-undef */
             var g = __magic__;
             delete Object.prototype.__magic__;
             if (typeof g === 'undefined') { g = window; }
@@ -183,6 +200,7 @@
           }());
         }
 
+        /* CustomEvent polyfill (IE/old WebKit) */
         if (typeof window.CustomEvent !== 'function') {
           function CustomEvent(event, params) {
             params = params || { bubbles: false, cancelable: false, detail: null };
@@ -194,6 +212,8 @@
           window.CustomEvent = CustomEvent;
         }
 
+
+        /* ResizeObserver polyfill stub — prevents crashes on Chrome 38-47 TVs */
         if (typeof ResizeObserver === 'undefined') {
           window.ResizeObserver = function(cb) {
             var self = this;
@@ -216,8 +236,9 @@
           };
         }
 
+        /* IntersectionObserver polyfill stub */
         if (typeof IntersectionObserver === 'undefined') {
-          window.IntersectionObserver = function() {
+          window.IntersectionObserver = function(cb) {
             this.observe = function() {};
             this.unobserve = function() {};
             this.disconnect = function() {};
@@ -225,6 +246,7 @@
           window.IntersectionObserverEntry = function() {};
         }
 
+        /* Object.fromEntries (ES2019) */
         if (!Object.fromEntries) {
           Object.fromEntries = function(entries) {
             var obj = {};
@@ -233,6 +255,7 @@
           };
         }
 
+        /* Array.prototype.flat / flatMap */
         if (!Array.prototype.flat) {
           Array.prototype.flat = function(depth) {
             depth = depth === undefined ? 1 : Math.floor(depth);
@@ -249,6 +272,7 @@
           };
         }
 
+        /* Element.prototype.matches / closest */
         if (!Element.prototype.matches) {
           Element.prototype.matches = Element.prototype.msMatchesSelector ||
             Element.prototype.webkitMatchesSelector || function(s) {
@@ -271,165 +295,316 @@
           Element.prototype.remove = function() { if (this.parentNode) this.parentNode.removeChild(this); };
         }
 
-        if (!window.fetch) {
-          window.fetch = function(url, options) {
-            return new Promise(function(resolve, reject) {
-              var opts = options || {};
-              var xhr = new XMLHttpRequest();
-              xhr.open(opts.method || 'GET', String(url), true);
-              var headers = opts.headers || {};
-              if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
-                var headerKeys = Object.keys(headers);
-                for (var hi = 0; hi < headerKeys.length; hi++) {
-                  xhr.setRequestHeader(headerKeys[hi], headers[headerKeys[hi]]);
-                }
-              }
-              xhr.onload = function() {
-                var resText = xhr.responseText;
-                var response = {
-                  status: xhr.status,
-                  statusText: xhr.statusText,
-                  ok: xhr.status >= 200 && xhr.status < 300,
-                  headers: {
-                    get: function(name) { return xhr.getResponseHeader(name); },
-                    has: function(name) { return xhr.getResponseHeader(name) !== null; }
-                  },
-                  url: String(url),
-                  text: function() { return Promise.resolve(resText); },
-                  json: function() { return Promise.resolve().then(function() { return JSON.parse(resText); }); },
-                  blob: function() { return Promise.resolve(new Blob([resText])); },
-                  clone: function() { return this; }
-                };
-                resolve(response);
-              };
-              xhr.onerror = function() { reject(new TypeError('Network request failed')); };
-              xhr.ontimeout = function() { reject(new TypeError('Network request timed out')); };
-              if (opts.signal) {
-                opts.signal.addEventListener('abort', function() {
-                  xhr.abort();
-                  reject(new Error('The user aborted a request.'));
-                });
-              }
-              xhr.send(opts.body !== undefined ? opts.body : null);
-            });
-          };
-          window.fetch.polyfill = true;
+        /* ===== LEGACY BROWSER DETECTION ===== */
+        /* Sets window.__legacyBrowser and adds .legacy-tv to <html> for old Samsung/LG TVs */
+        var __isLegacy = (function() {
+          var ua = navigator.userAgent;
+          /* Samsung Tizen 1.x / 2.x = Chrome 38-47 */
+          if (/Tizen\/[12]\./i.test(ua)) return true;
+          /* LG webOS 1.x / 2.x = Chrome 38-53 */
+          if (/Web0S\/[12]\.|webOS\/[12]\./i.test(ua)) return true;
+          /* Chrome version < 56 (released 2017) */
+          var cm = ua.match(/Chrom(?:e|ium)\/(\d+)/);
+          if (cm && parseInt(cm[1], 10) < 67) return true;  // Chrome < 67 (pre-2018) = slow on TVs
+          /* No CSS Grid = very old browser */
+          try { if (!window.CSS || !window.CSS.supports || !window.CSS.supports('display', 'grid')) return true; } catch(e) { return true; }
+          return false;
+        })();
+        if (__isLegacy) {
+          window.__legacyBrowser = true;
+          document.documentElement.className = (document.documentElement.className || '') + ' legacy-tv';
         }
 
-        if (!window.URLSearchParams) {
-          window.URLSearchParams = function(init) {
-            this._p = {};
-            if (typeof init === 'string') {
-              var s = init.replace(/^\?/, '').split('&');
-              for (var i = 0; i < s.length; i++) {
-                if (!s[i]) continue;
-                var kv = s[i].split('=');
-                this._p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
-              }
-            }
-          };
-          URLSearchParams.prototype.get = function(k) { return Object.prototype.hasOwnProperty.call(this._p, k) ? this._p[k] : null; };
-          URLSearchParams.prototype.set = function(k, v) { this._p[k] = v; };
-          URLSearchParams.prototype.append = function(k, v) { this._p[k] = v; };
-          URLSearchParams.prototype.has = function(k) { return Object.prototype.hasOwnProperty.call(this._p, k); };
-          URLSearchParams.prototype.toString = function() {
-            var r = []; for (var k in this._p) { if (Object.prototype.hasOwnProperty.call(this._p, k)) r.push(encodeURIComponent(k) + '=' + encodeURIComponent(this._p[k])); }
-            return r.join('&');
-          };
-        }
 
-        if (!window.AbortController) {
-          window.AbortController = function() {
-            var listeners = [];
-            this.signal = {
-              aborted: false,
-              addEventListener: function(_, fn) { listeners.push(fn); },
-              removeEventListener: function(_, fn) { listeners = listeners.filter(function(f) { return f !== fn; }); }
-            };
-            this.abort = function() {
-              this.signal.aborted = true;
-              listeners.forEach(function(fn) { fn(); });
-            };
-          };
-        }
-
-        /* Smart TV detection — only disables heavy animations, never blocks loading */
+        /* ===== MODERN SMART TV DETECTION =====
+           Detects modern Smart TVs (Samsung 2019+, LG 2019+, Android TV, Sony, etc.)
+           These have modern Chromium but very slow CPUs — disable transitions for them */
         var __isModernTv = (function() {
           var ua = navigator.userAgent;
-          return /Tizen|Web0S|webOS|SMART-TV|SmartTV|HbbTV|BRAVIA|Viera|PhilipsTV|AFT[A-Z]|CrKey|WebAppManager|NetCast|NETTV|Maple/i.test(ua);
+          if (/Tizen/i.test(ua)) return true;
+          if (/Web0S|webOS/i.test(ua)) return true;
+          if (/SMART-TV|SmartTV/i.test(ua)) return true;
+          if (/HbbTV/i.test(ua)) return true;
+          if (/BRAVIA/i.test(ua)) return true;
+          if (/Viera/i.test(ua)) return true;
+          if (/PhilipsTV/i.test(ua)) return true;
+          if (/AFT[A-Z]/i.test(ua)) return true;
+          if (/CrKey/i.test(ua)) return true;
+          if (/WebAppManager/i.test(ua)) return true;  // LG webOS 2019+ built-in browser
+          if (/NetCast/i.test(ua)) return true;           // LG older NetCast TVs
+          if (/NETTV/i.test(ua)) return true;             // Philips NetTV
+          if (/Maple/i.test(ua)) return true;             // Samsung older TVs
+          return false;
         })();
-        if (__isModernTv) {
+        if (__isModernTv && !window.__legacyBrowser) {
           window.__isTvBrowser = true;
           document.documentElement.className = (document.documentElement.className || '') + ' slow-tv';
         }
 
-        /* CSS Variables fallback for very old TVs */
+        /* CSS Variables fallback: older Samsung/LG TVs lack support */
         var cssVarsOk = (function() {
           try { return window.CSS && window.CSS.supports && window.CSS.supports('color', 'var(--x)'); } catch(e) { return false; }
         })();
         if (!cssVarsOk) {
           var s = document.createElement('style');
-          s.textContent = 'body,html{background:#090E17;color:#fff;font-family:Inter,sans-serif}#app-loading{background:#090E17}';
+          s.textContent = 'body,html{background:#090E17;color:#fff;font-family:Inter,sans-serif}' +
+            '#app-loading{background:#090E17}' +
+            '#app-error{background:#090E17}' +
+            '#app-error button{background:#e11d48;color:#fff}';
           document.head.appendChild(s);
         }
 
-        document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+
+          /* ===== fetch polyfill for Chrome 38-42 TV browsers ===== */
+          if (!window.fetch) {
+            window.fetch = function(url, options) {
+              return new Promise(function(resolve, reject) {
+                var opts = options || {};
+                var xhr = new XMLHttpRequest();
+                xhr.open(opts.method || 'GET', String(url), true);
+                var headers = opts.headers || {};
+                if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+                  var headerKeys = Object.keys(headers);
+                  for (var hi = 0; hi < headerKeys.length; hi++) {
+                    xhr.setRequestHeader(headerKeys[hi], headers[headerKeys[hi]]);
+                  }
+                }
+                xhr.onload = function() {
+                  var resText = xhr.responseText;
+                  var response = {
+                    status: xhr.status,
+                    statusText: xhr.statusText,
+                    ok: xhr.status >= 200 && xhr.status < 300,
+                    headers: {
+                      get: function(name) { return xhr.getResponseHeader(name); },
+                      has: function(name) { return xhr.getResponseHeader(name) !== null; }
+                    },
+                    url: String(url),
+                    text: function() { return Promise.resolve(resText); },
+                    json: function() {
+                      return Promise.resolve().then(function() { return JSON.parse(resText); });
+                    },
+                    blob: function() { return Promise.resolve(new Blob([resText])); },
+                    clone: function() { return this; }
+                  };
+                  resolve(response);
+                };
+                xhr.onerror = function() { reject(new TypeError('Network request failed')); };
+                xhr.ontimeout = function() { reject(new TypeError('Network request timed out')); };
+                if (opts.signal) {
+                  opts.signal.addEventListener('abort', function() {
+                    xhr.abort();
+                    reject(new Error('The user aborted a request.'));
+                  });
+                }
+                var body = opts.body !== undefined ? opts.body : null;
+                xhr.send(body);
+              });
+            };
+            window.fetch.polyfill = true;
+          }
+
+          /* URLSearchParams polyfill */
+          if (!window.URLSearchParams) {
+            window.URLSearchParams = function(init) {
+              this._p = {};
+              if (typeof init === 'string') {
+                var s = init.replace(/^\?/, '').split('&');
+                for (var i = 0; i < s.length; i++) {
+                  if (!s[i]) continue;
+                  var kv = s[i].split('=');
+                  this._p[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || '');
+                }
+              }
+            };
+            URLSearchParams.prototype.get = function(k) { return Object.prototype.hasOwnProperty.call(this._p, k) ? this._p[k] : null; };
+            URLSearchParams.prototype.set = function(k, v) { this._p[k] = v; };
+            URLSearchParams.prototype.append = function(k, v) { this._p[k] = v; };
+            URLSearchParams.prototype.has = function(k) { return Object.prototype.hasOwnProperty.call(this._p, k); };
+            URLSearchParams.prototype.toString = function() {
+              var r = []; for (var k in this._p) { if (Object.prototype.hasOwnProperty.call(this._p, k)) r.push(encodeURIComponent(k) + '=' + encodeURIComponent(this._p[k])); }
+              return r.join('&');
+            };
+          }
+
+          /* AbortController polyfill (stub — prevents crashes) */
+          if (!window.AbortController) {
+            window.AbortController = function() {
+              var listeners = [];
+              this.signal = {
+                aborted: false,
+                addEventListener: function(_, fn) { listeners.push(fn); },
+                removeEventListener: function(_, fn) { listeners = listeners.filter(function(f) { return f !== fn; }); }
+              };
+              this.abort = function() {
+                this.signal.aborted = true;
+                listeners.forEach(function(fn) { fn(); });
+              };
+            };
+          }
+
+          document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+
         document.addEventListener('keydown', function(e) {
           if (e.key === 'F12') { e.preventDefault(); return false; }
-          if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) { e.preventDefault(); return false; }
-          if (e.ctrlKey && (e.key === 'U' || e.key === 'u' || e.key === 'S' || e.key === 's')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && (e.key === 'U' || e.key === 'u')) { e.preventDefault(); return false; }
+          if (e.ctrlKey && (e.key === 'S' || e.key === 's')) { e.preventDefault(); return false; }
         });
 
       })();
     </script>
+
+      <script>
+        /* Loading timeout for old TV browsers — show error if React doesn't start in 15s */
+        (function() {
+          var TIMEOUT = 15000;
+          var timer = setTimeout(function() {
+            if (window.__appStarted) return;
+            var loadingEl = document.getElementById('app-loading');
+            var errorEl = document.getElementById('app-error');
+            var msgEl = document.getElementById('app-error-message');
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (errorEl) errorEl.style.display = 'flex';
+            if (msgEl) msgEl.textContent = 'Tu navegador es muy antiguo para esta versión. Usa uno más moderno o la Versión Ligera.';
+          }, TIMEOUT);
+          /* Cancel if app starts correctly */
+          var orig = window.__appStarted;
+          Object.defineProperty(window, '__appStarted', {
+            set: function(v) { orig = v; if (v) clearTimeout(timer); },
+            get: function() { return orig; },
+            configurable: true
+          });
+        })();
+      </script>
     <style>
-    *{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
-    #app-loading{
-      display:-webkit-box;display:-webkit-flex;display:-ms-flexbox;display:flex;
-      -webkit-box-orient:vertical;-webkit-box-direction:normal;
-      -webkit-flex-direction:column;-ms-flex-direction:column;flex-direction:column;
-      -webkit-box-align:center;-webkit-align-items:center;-ms-flex-align:center;align-items:center;
-      -webkit-box-pack:center;-webkit-justify-content:center;-ms-flex-pack:center;justify-content:center;
-      min-height:100vh;background:#090E17;color:#fff;font-family:Inter,sans-serif;
+    #app-loading {
+      display: -webkit-box;
+      display: -webkit-flex;
+      display: -ms-flexbox;
+      display: flex;
+      -webkit-box-orient: vertical;
+      -webkit-box-direction: normal;
+      -webkit-flex-direction: column;
+      -ms-flex-direction: column;
+      flex-direction: column;
+      -webkit-box-align: center;
+      -webkit-align-items: center;
+      -ms-flex-align: center;
+      align-items: center;
+      -webkit-box-pack: center;
+      -webkit-justify-content: center;
+      -ms-flex-pack: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #090E17;
+      color: #ffffff;
+      font-family: Inter, sans-serif;
     }
-    #app-loading .spinner{
-      width:48px;height:48px;
-      border:4px solid rgba(255,255,255,0.15);
-      border-top-color:#e11d48;
-      border-radius:50%;
-      margin-bottom:24px;
-      will-change:transform;
-      -webkit-animation:spin 0.9s linear infinite;
-      animation:spin 0.9s linear infinite;
+    #app-loading .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(255,255,255,0.15);
+      border-top-color: #e11d48;
+      border-radius: 50%;
+      margin-bottom: 24px;
+      -webkit-animation: spin 0.9s linear infinite;
+      animation: spin 0.9s linear infinite;
     }
-    @-webkit-keyframes spin{to{-webkit-transform:rotate(360deg);transform:rotate(360deg)}}
-    @keyframes spin{to{-webkit-transform:rotate(360deg);transform:rotate(360deg)}}
-    #app-loading p{color:rgba(255,255,255,0.5);font-size:14px;margin:0}
-    </style>
+    @-webkit-keyframes spin { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+    @keyframes spin { to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+    #app-loading p { color: rgba(255,255,255,0.5); font-size: 14px; margin: 0; }
+    #app-error {
+      display: none;
+      -webkit-box-orient: vertical;
+      -webkit-box-direction: normal;
+      -webkit-flex-direction: column;
+      -ms-flex-direction: column;
+      flex-direction: column;
+      -webkit-box-align: center;
+      -webkit-align-items: center;
+      -ms-flex-align: center;
+      align-items: center;
+      -webkit-box-pack: center;
+      -webkit-justify-content: center;
+      -ms-flex-pack: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #090E17;
+      color: #ffffff;
+      font-family: Inter, sans-serif;
+      text-align: center;
+      padding: 32px;
+    }
+    #app-error h2 { font-size: 20px; margin: 0 0 16px 0; }
+    #app-error p { color: rgba(255,255,255,0.5); font-size: 13px; margin: 0 0 16px 0; max-width: 320px; line-height: 1.6; }
+    #app-error button {
+      margin-top: 8px;
+      padding: 10px 24px;
+      background: #e11d48;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+  </style>
   </head>
   <body>
     <div id="app-loading">
       <div class="spinner"></div>
       <p>Cargando Super TV…</p>
     </div>
+    <div id="app-error">
+      <img src="/icon-192.png" style="width:64px;border-radius:12px;margin-bottom:1rem">
+      <h2>Tu navegador es muy antiguo</h2>
+      <p>Esta versión de Super TV no es compatible con tu navegador. Usa un navegador más moderno, o prueba la Versión Ligera que funciona en navegadores antiguos.</p>
+      <a href="/lite" style="display:inline-block;background:#e11d48;color:#fff;padding:0.65rem 1.6rem;border-radius:8px;text-decoration:none;font-size:0.95rem;font-weight:bold;margin-top:0.5rem">Usar Versión Ligera →</a>
+      <br>
+      <button onclick="location.reload()">Reintentar</button>
+    </div>
     <div id="root"></div>
     <script>
       window.__appStarted = false;
-      window.onerror = function() { return false; };
-      setTimeout(function() {
-        if (!window.__appStarted) {
-          var el = document.getElementById('app-loading');
-          if (el) el.style.display = 'none';
+      var __errorShown = false;
+      function __showAppError() {
+        if (!window.__appStarted && !__errorShown) {
+          __errorShown = true;
+          document.getElementById('app-loading').style.display = 'none';
+          document.getElementById('app-error').style.display = 'flex';
         }
-      }, 9000);
+      }
+      /* Only show error on script errors — NOT on unhandled promise rejections
+         (React Query and other libs produce benign rejections on old TV browsers) */
+      /* window.onerror does NOT show error screen.
+         Old TV browsers produce minor JS errors from polyfills / libraries.
+         React mount failures are caught in main.tsx which calls showError() directly.
+         We only rely on the timeout below for the truly broken case. */
+      window.onerror = function() { return false; };
+      /* Extend timeout to 40s for slow TV browsers */
+      /* 90s — old smart TV browsers (2015-era, Chrome 38-53) need 60-80s to parse React */
+      setTimeout(__showAppError, 90000);
     </script>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      if ('serviceWorker' in navigator) {
+      // LITE MODE: if React fails to boot in 10s, show fallback for very old TVs
+      (function() {
+        var liteTimer = setTimeout(function() {
+          var root = document.getElementById('root');
+          if (root && root.children.length === 0) {
+            document.documentElement.className += ' lite-mode';
+            root.innerHTML = '<div style="font-family:sans-serif;background:#090E17;color:#fff;min-height:100vh;padding:2rem;text-align:center"><img src="/icon-192.png" style="width:80px;border-radius:16px;margin-bottom:1rem"><h1 style="color:#e50914;font-size:2rem">Super TV</h1><p style="color:#aaa;font-size:1.2rem;margin:1rem 0">Tu navegador es muy antiguo para esta versión.<br>Usa el modo ligero:</p><a href="/lite.html" style="display:inline-block;background:#e50914;color:#fff;padding:1rem 2rem;border-radius:8px;text-decoration:none;font-size:1.2rem;margin:1rem">Abrir Modo Ligero</a><p style="color:#666;font-size:0.9rem;margin-top:2rem">O intenta actualizar el navegador de tu TV.</p></div>';
+          }
+        }, 10000);
+        window.__clearLiteTimer = function() { clearTimeout(liteTimer); };
+      })();
+            if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js')
-            .then(function(reg) { reg.update(); })
-            .catch(function() {});
+            .then(function(reg) { console.log('SW registered:', reg.scope); })
+            .catch(function(err) { console.log('SW registration failed:', err); });
         });
       }
     </script>
