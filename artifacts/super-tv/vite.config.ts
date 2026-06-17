@@ -27,7 +27,7 @@ export default defineConfig({
         'samsung >= 2',
         'opera >= 30',
       ],
-      modernPolyfills: true,
+      modernPolyfills: false,
       renderLegacyChunks: true,
       polyfills: true,
       externalSystemjs: false,
