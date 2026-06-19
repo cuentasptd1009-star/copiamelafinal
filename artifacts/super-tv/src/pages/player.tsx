@@ -221,7 +221,7 @@ export default function PlayerPage() {
   const showControlsTemporarily = useCallback(() => {
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 4000);
+    // Controls stay visible permanently — no auto-hide
   }, []);
 
   const setupVideoEvents = useCallback((video: HTMLVideoElement) => {
@@ -232,20 +232,13 @@ export default function PlayerPage() {
       if (!userMutedRef.current && video.muted) {
         video.muted = false;
       }
-      // Auto-fullscreen on first play to hide browser chrome
+      // Auto-fullscreen on first play — iOS only (Android user presses button manually)
       if (!autoFullscreenDoneRef.current) {
         autoFullscreenDoneRef.current = true;
-        const el = containerRef.current as any;
         const vid = video as any;
         const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
-        if (!isFull) {
-          // webkitEnterFullscreen works on both iOS and Android mobile browsers
-          if (vid?.webkitEnterFullscreen) {
-            try { vid.webkitEnterFullscreen(); } catch {}
-          } else {
-            const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
-            if (req) { try { req.call(el); } catch {} }
-          }
+        if (!isFull && /iPad|iPhone|iPod/.test(navigator.userAgent) && vid?.webkitEnterFullscreen) {
+          try { vid.webkitEnterFullscreen(); } catch {}
         }
       }
     };
