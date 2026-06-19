@@ -232,15 +232,21 @@ export default function PlayerPage() {
       if (!userMutedRef.current && video.muted) {
         video.muted = false;
       }
-      // Auto-fullscreen on first play to hide browser chrome (iOS only — Android needs user gesture)
+      // Auto-fullscreen on first play to hide browser chrome
       if (!autoFullscreenDoneRef.current) {
         autoFullscreenDoneRef.current = true;
+        const el = containerRef.current as any;
         const vid = video as any;
         const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
-        if (!isFull && /iPad|iPhone|iPod/.test(navigator.userAgent) && vid?.webkitEnterFullscreen) {
-          try { vid.webkitEnterFullscreen(); } catch {}
+        if (!isFull) {
+          // webkitEnterFullscreen works on both iOS and Android mobile browsers
+          if (vid?.webkitEnterFullscreen) {
+            try { vid.webkitEnterFullscreen(); } catch {}
+          } else {
+            const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
+            if (req) { try { req.call(el); } catch {} }
+          }
         }
-        // Android: requestFullscreen needs a direct user gesture — skip auto on play
       }
     };
     const onPause = () => setIsPlaying(false);
@@ -622,8 +628,14 @@ export default function PlayerPage() {
     const onFsChange = () => {
       const isNowFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
       setIsFullscreen(isNowFull);
-      if (!isNowFull && !fsExitByToggleRef.current) {
-        handleBackRef.current();
+      if (isNowFull) {
+        // Lock orientation to landscape as soon as fullscreen is confirmed active
+        try { screen.orientation?.lock('landscape').catch(() => {}); } catch {}
+      } else {
+        try { screen.orientation?.unlock(); } catch {}
+        if (!fsExitByToggleRef.current) {
+          handleBackRef.current();
+        }
       }
       fsExitByToggleRef.current = false;
     };
