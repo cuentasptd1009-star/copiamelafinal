@@ -232,20 +232,15 @@ export default function PlayerPage() {
       if (!userMutedRef.current && video.muted) {
         video.muted = false;
       }
-      // Auto-fullscreen on first play to hide browser chrome
+      // Auto-fullscreen on first play to hide browser chrome (iOS only — Android needs user gesture)
       if (!autoFullscreenDoneRef.current) {
         autoFullscreenDoneRef.current = true;
-        const el = containerRef.current as any;
         const vid = video as any;
         const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
-        if (!isFull) {
-          // iOS Safari requires webkitEnterFullscreen on the video element — try first
-          if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); } catch {} }
-          else {
-            const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
-            if (req) { try { req.call(el); } catch {} }
-          }
+        if (!isFull && /iPad|iPhone|iPod/.test(navigator.userAgent) && vid?.webkitEnterFullscreen) {
+          try { vid.webkitEnterFullscreen(); } catch {}
         }
+        // Android: requestFullscreen needs a direct user gesture — skip auto on play
       }
     };
     const onPause = () => setIsPlaying(false);
@@ -893,10 +888,8 @@ export default function PlayerPage() {
       onClick={e => {
         if (e.target === containerRef.current || e.target === videoRef.current) {
           const vid = videoRef.current as any;
-          // iOS Safari requires webkitEnterFullscreen to be called from a user gesture.
-          // If the video isn't already fullscreen and the iOS API is available, go fullscreen
-          // on this tap instead of toggling play — subsequent taps toggle play normally.
-          if (!isFullscreen && vid?.webkitEnterFullscreen) {
+          // iOS Safari: first tap goes fullscreen via webkitEnterFullscreen (needs user gesture)
+          if (isIOS && !isFullscreen && vid?.webkitEnterFullscreen) {
             try { vid.webkitEnterFullscreen(); showControlsTemporarily(); return; } catch {}
           }
           togglePlay();
@@ -915,17 +908,6 @@ export default function PlayerPage() {
         x-webkit-airplay="allow"
       />
 
-      {/* "Ver en pantalla completa" — solo Android, justo debajo del video */}
-      {!isFullscreen && !error && !isIOS && (
-        <button
-          onClick={e => { e.stopPropagation(); toggleFullscreen(); }}
-          className="absolute z-30 flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/75 text-white text-sm font-semibold backdrop-blur border border-white/25 shadow-xl hover:bg-black/90 active:scale-95 transition-all"
-          style={{ top: 'calc(50dvh + 28.125vw + 14px)', left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}
-        >
-          <Maximize className="w-4 h-4 flex-shrink-0" />
-          Ver en pantalla completa
-        </button>
-      )}
 
       {isLoading && !error && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none bg-black/60">
