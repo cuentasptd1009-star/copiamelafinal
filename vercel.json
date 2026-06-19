@@ -15,6 +15,15 @@
   },
   "headers": [
     {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "fullscreen=(self)"
+        }
+      ]
+    },
+    {
       "source": "/assets/(.*)",
       "headers": [
         {
