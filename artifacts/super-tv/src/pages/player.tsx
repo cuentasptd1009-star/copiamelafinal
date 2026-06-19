@@ -239,9 +239,12 @@ export default function PlayerPage() {
         const vid = video as any;
         const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
         if (!isFull) {
-          const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
-          if (req) { try { req.call(el); } catch {} }
-          else if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); } catch {} }
+          // iOS Safari requires webkitEnterFullscreen on the video element — try first
+          if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); } catch {} }
+          else {
+            const req = el?.requestFullscreen || el?.webkitRequestFullscreen;
+            if (req) { try { req.call(el); } catch {} }
+          }
         }
       }
     };
@@ -586,10 +589,11 @@ export default function PlayerPage() {
     if (!el) return;
     const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
     if (!isFull) {
+      // iOS Safari requires webkitEnterFullscreen directly on the video element — try first
+      if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
+      // Android Chrome / desktop: standard fullscreen on container
       const req = el.requestFullscreen || el.webkitRequestFullscreen;
       if (req) { try { req.call(el); return; } catch {} }
-      // iOS Safari: fullscreen on the video element itself
-      if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
       setIsFullscreen(true);
     } else {
       fsExitByToggleRef.current = true;
