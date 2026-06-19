@@ -394,9 +394,11 @@ export default function VodPlayerPage() {
     if (!el) return;
     const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
     if (!isFull) {
-      // iOS Safari requires webkitEnterFullscreen directly on the video element — try first
-      if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
-      // Android Chrome / desktop: standard fullscreen on container + lock landscape orientation
+      // iOS Safari: document.fullscreenEnabled is false, use webkitEnterFullscreen on video
+      // Android Chrome / desktop: document.fullscreenEnabled is true, use requestFullscreen + lock orientation
+      if (!document.fullscreenEnabled && vid?.webkitEnterFullscreen) {
+        try { vid.webkitEnterFullscreen(); return; } catch {}
+      }
       const req = el.requestFullscreen || el.webkitRequestFullscreen;
       if (req) {
         try {
@@ -627,11 +629,12 @@ export default function VodPlayerPage() {
         preload="auto"
       />
 
-      {/* "Ver en pantalla completa" — always visible below video when not fullscreen */}
+      {/* "Ver en pantalla completa" — positioned just below the video (16:9 calc), not overlapping controls */}
       {!isFullscreen && !error && (
         <button
           onClick={e => { e.stopPropagation(); toggleFullscreen(); }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/75 text-white text-sm font-semibold backdrop-blur border border-white/25 shadow-xl hover:bg-black/90 active:scale-95 transition-all"
+          className="absolute z-30 flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/75 text-white text-sm font-semibold backdrop-blur border border-white/25 shadow-xl hover:bg-black/90 active:scale-95 transition-all"
+          style={{ top: 'calc(50dvh + 28.125vw + 14px)', left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}
         >
           <Maximize className="w-4 h-4 flex-shrink-0" />
           Ver en pantalla completa
