@@ -221,7 +221,7 @@ export default function PlayerPage() {
   const showControlsTemporarily = useCallback(() => {
     setShowControls(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    // Controls stay visible permanently — no auto-hide
+    controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
   }, []);
 
   const setupVideoEvents = useCallback((video: HTMLVideoElement) => {
