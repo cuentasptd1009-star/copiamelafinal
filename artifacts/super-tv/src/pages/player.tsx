@@ -578,6 +578,7 @@ export default function PlayerPage() {
   }, [showControlsTemporarily]);
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent) && !/iPad|iPhone|iPod/.test(navigator.userAgent);
 
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current as any;
@@ -588,8 +589,15 @@ export default function PlayerPage() {
       if (isIOS) {
         // iOS Safari: fullscreen only works via webkitEnterFullscreen on the video element
         if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
+      } else if (isAndroid) {
+        // Android Chrome: native fullscreen API on any element still shows the video's
+        // native controls bar. Use CSS fake-fullscreen instead so our custom controls
+        // always stay visible.
+        try { screen.orientation?.lock('landscape').catch(() => {}); } catch {}
+        setIsFullscreen(true);
+        return;
       } else {
-        // Android Chrome / desktop: use requestFullscreen + force landscape orientation
+        // Desktop: use requestFullscreen on the container + force landscape orientation
         const req = el.requestFullscreen || el.webkitRequestFullscreen;
         const target = el;
         if (req) {
@@ -607,6 +615,12 @@ export default function PlayerPage() {
     } else {
       fsExitByToggleRef.current = true;
       try { screen.orientation?.unlock(); } catch {}
+      if (isAndroid) {
+        // Android fake fullscreen: just reset state
+        fsExitByToggleRef.current = false;
+        setIsFullscreen(false);
+        return;
+      }
       const exit = (document as any).exitFullscreen || (document as any).webkitExitFullscreen;
       if (exit) { try { exit.call(document); return; } catch {} }
       if (vid?.webkitExitFullscreen) { try { vid.webkitExitFullscreen(); return; } catch {} }
@@ -614,7 +628,7 @@ export default function PlayerPage() {
       setIsFullscreen(false);
     }
     showControlsTemporarily();
-  }, [showControlsTemporarily, isIOS]);
+  }, [showControlsTemporarily, isIOS, isAndroid, isFullscreen]);
 
   useEffect(() => {
     const vid = videoRef.current as any;
@@ -888,6 +902,7 @@ export default function PlayerPage() {
     <div
       ref={containerRef}
       className="relative w-full h-[100dvh] bg-black overflow-hidden flex items-center justify-center select-none"
+      style={isAndroid && isFullscreen ? { position: 'fixed', inset: 0, zIndex: 9999, width: '100vw', height: '100dvh' } : {}}
       onMouseMove={showControlsTemporarily}
       onTouchStart={showControlsTemporarily}
       onClick={e => {
@@ -911,6 +926,8 @@ export default function PlayerPage() {
         playsInline
         webkit-playsinline=""
         x-webkit-airplay="allow"
+        controlsList="nofullscreen nodownload noremoteplayback"
+        disablePictureInPicture
       />
 
 
