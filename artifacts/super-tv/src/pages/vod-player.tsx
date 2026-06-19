@@ -396,12 +396,19 @@ export default function VodPlayerPage() {
     if (!isFull) {
       // iOS Safari requires webkitEnterFullscreen directly on the video element — try first
       if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
-      // Android Chrome / desktop: standard fullscreen on container
+      // Android Chrome / desktop: standard fullscreen on container + lock landscape orientation
       const req = el.requestFullscreen || el.webkitRequestFullscreen;
-      if (req) { try { req.call(el); return; } catch {} }
-      // CSS-only fallback
+      if (req) {
+        try {
+          const p = req.call(el);
+          const lockLandscape = () => { try { (screen as any).orientation?.lock('landscape').catch(() => {}); } catch {} };
+          if (p && typeof p.then === 'function') { p.then(lockLandscape).catch(() => {}); } else { lockLandscape(); }
+          return;
+        } catch {}
+      }
       setIsFullscreen(true);
     } else {
+      try { (screen as any).orientation?.unlock(); } catch {}
       const exit = (document as any).exitFullscreen || (document as any).webkitExitFullscreen;
       if (exit) { try { exit.call(document); return; } catch {} }
       if (vid?.webkitExitFullscreen) { try { vid.webkitExitFullscreen(); return; } catch {} }
@@ -613,12 +620,23 @@ export default function VodPlayerPage() {
     >
       <video
         ref={videoRef}
-        className={`w-full h-full object-cover ${error ? 'hidden' : ''}`}
+        className={`w-full h-full object-contain ${error ? 'hidden' : ''}`}
         autoPlay
         muted
         playsInline
         preload="auto"
       />
+
+      {/* "Ver en pantalla completa" — always visible below video when not fullscreen */}
+      {!isFullscreen && !error && (
+        <button
+          onClick={e => { e.stopPropagation(); toggleFullscreen(); }}
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/75 text-white text-sm font-semibold backdrop-blur border border-white/25 shadow-xl hover:bg-black/90 active:scale-95 transition-all"
+        >
+          <Maximize className="w-4 h-4 flex-shrink-0" />
+          Ver en pantalla completa
+        </button>
+      )}
 
       {(isLoading || isBuffering) && !error && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
@@ -689,18 +707,6 @@ export default function VodPlayerPage() {
         </div>
       )}
 
-      {/* Persistent fullscreen button — only visible when NOT in fullscreen */}
-      {!showControls && !isFullscreen && (
-        <button
-          onClick={() => { if (isFullscreen) setLocation(backUrl); else toggleFullscreen(); }}
-          className="absolute bottom-4 right-4 z-20 p-3 rounded-full bg-black/50 text-white backdrop-blur hover:bg-black/80 transition-all shadow-lg"
-          title={isFullscreen ? 'Cerrar' : 'Pantalla completa'}
-        >
-          {isFullscreen
-            ? <Minimize className="w-5 h-5" />
-            : <Maximize className="w-5 h-5" />}
-        </button>
-      )}
 
       <div className={`absolute inset-0 flex flex-col justify-between z-10 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <div className="bg-gradient-to-b from-black/80 to-transparent px-4 pt-4 pb-10">
