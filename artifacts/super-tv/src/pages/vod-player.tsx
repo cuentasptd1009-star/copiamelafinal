@@ -635,17 +635,6 @@ export default function VodPlayerPage() {
         preload="auto"
       />
 
-      {/* "Ver en pantalla completa" — solo Android, justo debajo del video */}
-      {!isFullscreen && !error && !isIOS && (
-        <button
-          onClick={e => { e.stopPropagation(); toggleFullscreen(); }}
-          className="absolute z-30 flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/75 text-white text-sm font-semibold backdrop-blur border border-white/25 shadow-xl hover:bg-black/90 active:scale-95 transition-all"
-          style={{ top: 'calc(50dvh + 28.125vw + 14px)', left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap' }}
-        >
-          <Maximize className="w-4 h-4 flex-shrink-0" />
-          Ver en pantalla completa
-        </button>
-      )}
 
       {(isLoading || isBuffering) && !error && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
