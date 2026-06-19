@@ -426,7 +426,14 @@ export default function VodPlayerPage() {
 
   useEffect(() => {
     const onFsChange = () => {
-      setIsFullscreen(!!(document.fullscreenElement || (document as any).webkitFullscreenElement));
+      const isNowFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsFullscreen(isNowFull);
+      if (isNowFull) {
+        // Lock orientation to landscape as soon as fullscreen is confirmed active
+        try { screen.orientation?.lock('landscape').catch(() => {}); } catch {}
+      } else {
+        try { screen.orientation?.unlock(); } catch {}
+      }
     };
     const onIosEnter = () => setIsFullscreen(true);
     const onIosExit = () => setIsFullscreen(false);
