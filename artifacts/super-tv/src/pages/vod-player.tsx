@@ -388,35 +388,41 @@ export default function VodPlayerPage() {
     showControlsTemporarily();
   }, [showControlsTemporarily]);
 
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current as any;
     const vid = videoRef.current as any;
     if (!el) return;
     const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
     if (!isFull) {
-      // iOS Safari: document.fullscreenEnabled is false, use webkitEnterFullscreen on video
-      // Android Chrome / desktop: document.fullscreenEnabled is true, use requestFullscreen + lock orientation
-      if (!document.fullscreenEnabled && vid?.webkitEnterFullscreen) {
-        try { vid.webkitEnterFullscreen(); return; } catch {}
+      if (isIOS) {
+        // iOS Safari: fullscreen solo funciona via webkitEnterFullscreen en el elemento video
+        if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
+      } else {
+        // Android Chrome / desktop: requestFullscreen + forzar orientacion horizontal
+        const req = vid?.requestFullscreen || el.requestFullscreen || el.webkitRequestFullscreen;
+        const target = vid?.requestFullscreen ? vid : el;
+        if (req) {
+          try {
+            const p = req.call(target);
+            const lockLandscape = () => {
+              try { screen.orientation?.lock('landscape').catch(() => {}); } catch {}
+            };
+            if (p && typeof p.then === 'function') { p.then(lockLandscape).catch(() => {}); } else { lockLandscape(); }
+            return;
+          } catch {}
+        }
+        setIsFullscreen(true);
       }
-      const req = el.requestFullscreen || el.webkitRequestFullscreen;
-      if (req) {
-        try {
-          const p = req.call(el);
-          const lockLandscape = () => { try { (screen as any).orientation?.lock('landscape').catch(() => {}); } catch {} };
-          if (p && typeof p.then === 'function') { p.then(lockLandscape).catch(() => {}); } else { lockLandscape(); }
-          return;
-        } catch {}
-      }
-      setIsFullscreen(true);
     } else {
-      try { (screen as any).orientation?.unlock(); } catch {}
+      try { screen.orientation?.unlock(); } catch {}
       const exit = (document as any).exitFullscreen || (document as any).webkitExitFullscreen;
       if (exit) { try { exit.call(document); return; } catch {} }
       if (vid?.webkitExitFullscreen) { try { vid.webkitExitFullscreen(); return; } catch {} }
       setIsFullscreen(false);
     }
-  }, []);
+  }, [isIOS]);
 
   useEffect(() => {
     const onFsChange = () => {
@@ -629,8 +635,8 @@ export default function VodPlayerPage() {
         preload="auto"
       />
 
-      {/* "Ver en pantalla completa" — positioned just below the video (16:9 calc), not overlapping controls */}
-      {!isFullscreen && !error && (
+      {/* "Ver en pantalla completa" — solo Android, justo debajo del video */}
+      {!isFullscreen && !error && !isIOS && (
         <button
           onClick={e => { e.stopPropagation(); toggleFullscreen(); }}
           className="absolute z-30 flex items-center gap-2 px-5 py-2.5 rounded-full bg-black/75 text-white text-sm font-semibold backdrop-blur border border-white/25 shadow-xl hover:bg-black/90 active:scale-95 transition-all"
