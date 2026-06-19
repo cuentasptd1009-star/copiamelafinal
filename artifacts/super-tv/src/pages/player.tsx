@@ -590,8 +590,8 @@ export default function PlayerPage() {
         if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
       } else {
         // Android Chrome / desktop: use requestFullscreen + force landscape orientation
-        const req = vid?.requestFullscreen || el.requestFullscreen || el.webkitRequestFullscreen;
-        const target = vid?.requestFullscreen ? vid : el;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        const target = el;
         if (req) {
           try {
             const p = req.call(target);
