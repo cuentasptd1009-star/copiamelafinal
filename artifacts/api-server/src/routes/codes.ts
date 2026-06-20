@@ -141,6 +141,26 @@ router.put("/codes/:id", requireAdminAuth, async (req: Request, res: Response) =
   res.json(formatCode(updated));
 });
 
+router.delete("/codes/bulk", requireAdminAuth, async (req: Request, res: Response) => {
+  const adminSession = req.adminSession!;
+  if (adminSession.role === "subadmin") {
+    res.status(403).json({ error: "Subadmins cannot bulk delete codes" });
+    return;
+  }
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "ids must be a non-empty array" });
+    return;
+  }
+  const numIds = ids.map(Number).filter((n) => !isNaN(n));
+  if (numIds.length === 0) {
+    res.status(400).json({ error: "No valid ids provided" });
+    return;
+  }
+  await db.delete(accessCodesTable).where(inArray(accessCodesTable.id, numIds));
+  res.json({ success: true, deleted: numIds.length });
+});
+
 router.delete("/codes/:id", requireAdminAuth, async (req: Request, res: Response) => {
   const parsed = DeleteCodeParams.safeParse(req.params);
   if (!parsed.success) {
@@ -217,24 +237,5 @@ router.post("/codes/:id/adjust-time", requireAdminAuth, async (req: Request, res
   res.json(formatCode(updated));
 });
 
-router.delete("/codes/bulk", requireAdminAuth, async (req: Request, res: Response) => {
-  const adminSession = req.adminSession!;
-  if (adminSession.role === "subadmin") {
-    res.status(403).json({ error: "Subadmins cannot bulk delete codes" });
-    return;
-  }
-  const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) {
-    res.status(400).json({ error: "ids must be a non-empty array" });
-    return;
-  }
-  const numIds = ids.map(Number).filter((n) => !isNaN(n));
-  if (numIds.length === 0) {
-    res.status(400).json({ error: "No valid ids provided" });
-    return;
-  }
-  await db.delete(accessCodesTable).where(inArray(accessCodesTable.id, numIds));
-  res.json({ success: true, deleted: numIds.length });
-});
 
 export default router;
