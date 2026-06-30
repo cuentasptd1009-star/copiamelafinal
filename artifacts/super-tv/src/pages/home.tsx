@@ -423,8 +423,20 @@ export default function Home() {
   const castAvailable = !isTV && castState !== 'unavailable';
   const isCasting = castState === 'connected';
   const handleHomeCast = useCallback(() => {
-    if (isCasting) stopCasting(); else requestCast();
-  }, [isCasting, stopCasting, requestCast]);
+      if (isCasting) {
+        // Navigate back to the player that's casting — do NOT disconnect
+        const castUrl = sessionStorage.getItem('castPlayerUrl');
+        if (castUrl) {
+          try {
+            const u = new URL(castUrl);
+            setLocation(u.pathname + u.search);
+            return;
+          } catch {}
+        }
+      } else {
+        requestCast();
+      }
+    }, [isCasting, requestCast, setLocation]);
   const { openKeyboard } = useTvKeyboard();
   const [showHint, setShowHint] = useState(false);
   const [showShortcutHint, setShowShortcutHint] = useState(false);
