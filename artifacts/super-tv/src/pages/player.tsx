@@ -729,9 +729,14 @@ export default function PlayerPage() {
     setCurrentFormat(fmt);
     setCurrentUrl(proxyUrl);
     setCurrentTitle(ch.name);
+    // While casting: load the new channel on the existing Chromecast session
+    // without disconnecting — phone stays as remote control for the new channel
+    if (castState === 'connected') {
+      castMedia(proxyUrl, ch.name, fmt);
+    }
     showControlsTemporarily();
     showOsdBriefly();
-  }, [hasChannels, channels, showControlsTemporarily, showOsdBriefly, authToken]);
+  }, [hasChannels, channels, castState, castMedia, showControlsTemporarily, showOsdBriefly, authToken]);
 
   const goPrevChannel = useCallback(() => {
     goToChannel((channelIndex - 1 + channels.length) % channels.length);
@@ -992,9 +997,31 @@ export default function PlayerPage() {
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <p className="text-white/50 text-xs uppercase tracking-widest">Reproduciendo en TV</p>
+              {hasChannels && (
+                <p className="text-primary text-[11px] font-bold uppercase tracking-widest">Canal {channelIndex + 1}</p>
+              )}
               <p className="text-white text-base font-semibold max-w-[280px] truncate">{currentTitle}</p>
             </div>
-            <p className="text-white/30 text-xs">Usa los controles de abajo para pausar o cambiar</p>
+            {hasChannels && (
+              <div className="flex items-center gap-5">
+                <button
+                  onClick={goPrevChannel}
+                  className="p-3.5 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition-all"
+                  title="Canal anterior"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+                <span className="text-white/30 text-[11px]">cambiar canal</span>
+                <button
+                  onClick={goNextChannel}
+                  className="p-3.5 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition-all"
+                  title="Canal siguiente"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              </div>
+            )}
+            <p className="text-white/25 text-[11px]">Toca ⏸ abajo para pausar · 📺 para desconectar</p>
           </div>
         </div>
       )}
