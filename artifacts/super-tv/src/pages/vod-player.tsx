@@ -395,15 +395,6 @@ export default function VodPlayerPage() {
 
   const { castState, castMedia, stopCasting } = useChromecast();
 
-  // Stop casting when the tab/window is closed so the TV disconnects automatically.
-  useEffect(() => {
-    const endSession = () => {
-      try { (window as any).cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true); } catch {}
-    };
-    window.addEventListener('beforeunload', endSession);
-    return () => window.removeEventListener('beforeunload', endSession);
-  }, []);
-
   const handleCast = useCallback(() => {
     if (castState === 'connected') { stopCasting(); return; }
     castMedia(rawUrl, title, format);
