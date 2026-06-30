@@ -56,8 +56,8 @@ export function useChromecast() {
             const CS = window.cast.framework.CastState;
             if (state === CS.CONNECTED) setCastState('connected');
             else if (state === CS.CONNECTING) setCastState('connecting');
-            else if (state === CS.NOT_CONNECTED) setCastState('available');
-            else setCastState('unavailable');
+            // NOT_CONNECTED and NO_DEVICES_AVAILABLE both show the button; 'unavailable' = SDK not loaded
+            else setCastState('available');
           } catch {}
         };
 
