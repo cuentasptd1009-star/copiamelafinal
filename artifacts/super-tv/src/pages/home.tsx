@@ -46,6 +46,7 @@ import { setMiniPlayerState, updateMiniPlayerState, getMiniPlayerState, subscrib
 import { useTvKeyboard } from '@/hooks/use-tv-keyboard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Play, Pause, LogOut, Search, Tv, Film, Tv2, X, Download, Share2, UserCircle2, AlertTriangle, Lock, Mic, MicOff, Home as HomeIcon, Smartphone, Menu, Heart, Clock, Trash2, Youtube, Maximize2, Minimize2 } from 'lucide-react';
+import { CastIcon } from '@/components/CastIcon';
 import { getFavorites, getAllProgress, getHistory, toggleFavorite, getAllSeriesProgress, getExternalFavorites, getExternalHistory, toggleExternalFavorite, addExternalHistory, isExternalFavorite, removeExternalHistory, clearExternalHistory, type ExternalItem, getSearchHistory, addSearchHistory, removeSearchHistory, clearSearchHistory, getSeriesFavorites, toggleSeriesFavorite, getExternalProgress, getChannelFavorites, toggleChannelFavorite, removeProgress, removeSeriesProgress } from '@/lib/user-data';
 import { useVoiceSearch } from '@/hooks/use-voice-search';
 import logo from '@assets/logo_supertv.png';
@@ -1069,7 +1070,7 @@ export default function Home() {
 
   const actionButtons = useMemo(() => [
     ...(session?.type === 'user' ? [{ key: 'profile', label: 'Mi perfil', action: openProfile, icon: UserCircle2 }] : []),
-    ...(castAvailable ? [{ key: 'cast', label: isCasting ? 'Transmitiendo en TV ●' : 'Transmitir en TV', action: handleHomeCast, icon: Tv2, isCasting }] : []),
+    ...(castAvailable ? [{ key: 'cast', label: isCasting ? 'Transmitiendo en TV ●' : 'Transmitir en TV', action: handleHomeCast, icon: CastIcon, isCasting }] : []),
     { key: 'install', label: 'Instalar app para Android', action: handleInstall, icon: Download },
     { key: 'shortcut', label: 'Acceso directo', action: handleShortcut, icon: Smartphone },
     { key: 'logout', label: 'Salir', action: handleLogout, icon: LogOut },
@@ -1601,7 +1602,7 @@ export default function Home() {
               title={isCasting ? 'Transmitiendo en TV — toca para desconectar' : 'Transmitir en TV'}
               className={`flex-shrink-0 p-2 rounded-lg transition-all ${isCasting ? 'text-primary bg-primary/15' : 'text-white/40 hover:text-white hover:bg-white/10'}`}
             >
-              <Tv2 className={`w-5 h-5 ${isCasting ? 'animate-pulse' : ''}`} />
+              <CastIcon className={`w-5 h-5 ${isCasting ? 'animate-pulse' : ''}`} />
             </button>
           )}
         </div>
@@ -2079,7 +2080,7 @@ export default function Home() {
             onClick={handleHomeCast}
             className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-all ${isCasting ? 'text-primary' : 'text-white/35 hover:text-white/60'}`}
           >
-            <Tv2 className={`w-5 h-5 ${isCasting ? 'animate-pulse' : ''}`} />
+            <CastIcon className={`w-5 h-5 ${isCasting ? 'animate-pulse' : ''}`} />
             <span className="text-[9px] font-medium">{isCasting ? 'En TV' : 'TV'}</span>
             {isCasting && <div className="w-1 h-1 rounded-full bg-primary" />}
           </button>
