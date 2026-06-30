@@ -609,7 +609,16 @@ export default function PlayerPage() {
     }
   }, [castState]);
 
-  // Auto-cast: when a Cast session connects while the player is open,
+    // Silence local video while casting — also fires on channel change so audio stops
+    useEffect(() => {
+      if (castState !== 'connected') return;
+      const v = videoRef.current;
+      if (!v) return;
+      v.muted = true;
+      if (!v.paused) v.pause();
+    }, [castState, currentUrl]);
+
+    // Auto-cast: when a Cast session connects while the player is open,
   // automatically send the current stream to the TV
   useEffect(() => {
     if (castState === 'connected' && currentUrl && currentFormat !== 'youtube') {
@@ -1052,7 +1061,15 @@ export default function PlayerPage() {
                 </button>
               </div>
             )}
-            <p className="text-white/25 text-[11px]">Toca ⏸ abajo para pausar · 📺 para desconectar</p>
+            <div className="flex flex-col items-center gap-2">
+                <button
+                  onClick={stopCasting}
+                  className="px-6 py-2 rounded-full bg-white/10 border border-white/20 text-white/70 text-sm hover:bg-red-600/30 hover:text-red-300 hover:border-red-500/40 active:scale-95 transition-all"
+                >
+                  Desconectar TV
+                </button>
+                <p className="text-white/20 text-[10px]">Toca ⏸ abajo para pausar</p>
+              </div>
           </div>
         </div>
       )}
