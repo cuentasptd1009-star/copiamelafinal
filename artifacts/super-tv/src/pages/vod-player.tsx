@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, ChevronRight } from 'lucide-react';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
+import { useChromecast } from '@/hooks/useChromecast';
+import { CastButton } from '@/components/CastButton';
 import logo from '@assets/logo_supertv.png';
 import { getProgress, saveProgress, addToHistory, saveEpisodeProgress, getEpisodeProgress } from '@/lib/user-data';
 import { getMiniPlayerState, updateMiniPlayerState } from '@/lib/mini-player-state';
@@ -67,7 +69,7 @@ export default function VodPlayerPage() {
 
   // D-pad controls order for the bottom bar
   const vodControls = useMemo(
-    () => ['back', 'skipback', 'play', 'skipfwd', ...(nextEpisodeId ? ['nextepisode'] : []), 'mute', 'fullscreen'],
+    () => ['back', 'skipback', 'play', 'skipfwd', ...(nextEpisodeId ? ['nextepisode'] : []), 'mute', 'cast', 'fullscreen'],
     [nextEpisodeId]
   );
 
@@ -384,6 +386,12 @@ export default function VodPlayerPage() {
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
+  const { castState, castMedia, stopCasting } = useChromecast();
+  const handleCast = useCallback(() => {
+    if (castState === 'connected') { stopCasting(); return; }
+    castMedia(rawUrl, title, format);
+  }, [castState, castMedia, stopCasting, rawUrl, title, format]);
+
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current as any;
     const vid = videoRef.current as any;
@@ -521,6 +529,7 @@ export default function VodPlayerPage() {
             case 'skipfwd': skip(10); break;
             case 'nextepisode': if (nextEpisodeId) goNextEpisode(); break;
             case 'mute': toggleMute(); break;
+            case 'cast': handleCast(); break;
             case 'fullscreen': toggleFullscreen(); break;
           }
           showControlsTemporarily(); break;
@@ -542,7 +551,7 @@ export default function VodPlayerPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [error, errorBtnIndex, showNextEp, nextEpFocused, nextEpisodeId, ctrlFocusIdx, vodControls, togglePlay, skip, toggleMute, toggleFullscreen, backUrl, setLocation, showControlsTemporarily]);
+  }, [error, errorBtnIndex, showNextEp, nextEpFocused, nextEpisodeId, ctrlFocusIdx, vodControls, togglePlay, skip, toggleMute, handleCast, toggleFullscreen, backUrl, setLocation, showControlsTemporarily]);
 
   const handleRetry = () => {
     retryCountRef.current = 0;
@@ -808,6 +817,12 @@ export default function VodPlayerPage() {
               />
               <span className="text-[10px] text-white/50 w-7 text-right">{Math.round((isMuted ? 0 : volume) * 100)}%</span>
             </div>
+
+            <CastButton
+              castState={castState}
+              onCast={handleCast}
+              className={vodControls[ctrlFocusIdx] === 'cast' ? 'ring-2 ring-primary scale-110' : ''}
+            />
 
             <button
               onClick={() => { if (isFullscreen) setLocation(backUrl); else toggleFullscreen(); }}

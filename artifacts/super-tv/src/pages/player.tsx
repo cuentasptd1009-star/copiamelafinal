@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
+import { useChromecast } from '@/hooks/useChromecast';
+import { CastButton } from '@/components/CastButton';
 import logo from '@assets/logo_supertv.png';
 import { useGetMe, getGetMeQueryKey } from '@workspace/api-client-react';
 import { getProgress, saveProgress, addToHistory, saveEpisodeProgress, getEpisodeProgress } from '@/lib/user-data';
@@ -580,6 +582,12 @@ export default function PlayerPage() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent) && !/iPad|iPhone|iPod/.test(navigator.userAgent);
 
+  const { castState, castMedia, stopCasting } = useChromecast();
+  const handleCast = useCallback(() => {
+    if (castState === 'connected') { stopCasting(); return; }
+    castMedia(currentUrl, currentTitle, currentFormat);
+  }, [castState, castMedia, stopCasting, currentUrl, currentTitle, currentFormat]);
+
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current as any;
     const vid = videoRef.current as any;
@@ -730,7 +738,7 @@ export default function PlayerPage() {
     setLocation(`/player?${params.toString()}`);
   }, [nextEpisodeId, nextEpisodeUrl, nextEpisodeTitle, nextSeasonId, nextSeasonNumber, nextEpisodeNumber, nextEpisodeFormat, seriesId, seasonId, seasonNumber, seriesTitle]);
 
-  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'minimize', 'fullscreen'], [hasChannels]);
+  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'minimize', 'cast', 'fullscreen'], [hasChannels]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -778,6 +786,7 @@ export default function PlayerPage() {
             case 'nextch': goNextChannel(); break;
             case 'mute': toggleMute(); break;
             case 'minimize': handleMinimize(); break;
+            case 'cast': handleCast(); break;
             case 'fullscreen': toggleFullscreen(); break;
           }
           break;
@@ -1135,6 +1144,12 @@ export default function PlayerPage() {
                 <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )}
+
+            <CastButton
+              castState={castState}
+              onCast={handleCast}
+              className={ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}
+            />
 
             <button
               onClick={toggleFullscreen}

@@ -551,6 +551,15 @@
       cursor: pointer;
     }
   </style>
+    <script>
+      window['__onGCastApiAvailable'] = function(isAvailable) {
+        if (isAvailable) {
+          window.__castApiAvailable = true;
+          window.dispatchEvent(new Event('castApiAvailable'));
+        }
+      };
+    </script>
+    <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
   </head>
   <body>
     <div id="app-loading">
