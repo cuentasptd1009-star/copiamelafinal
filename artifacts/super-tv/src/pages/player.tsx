@@ -589,6 +589,20 @@ export default function PlayerPage() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent) && !/iPad|iPhone|iPod/.test(navigator.userAgent);
 
+  // Track AirPlay availability using the native Safari event.
+  // Only fires in Safari — never in Chrome/Firefox iOS — so the button only
+  // appears when AirPlay is actually usable (no false positives on other browsers).
+  const [airPlayAvailable, setAirPlayAvailable] = useState(false);
+  useEffect(() => {
+    const v = videoRef.current as any;
+    if (!v) return;
+    const handler = (e: any) => {
+      setAirPlayAvailable(e.availability === 'available' || e.availability === 'possibly-available');
+    };
+    v.addEventListener('webkitplaybacktargetavailabilitychanged', handler);
+    return () => v.removeEventListener('webkitplaybacktargetavailabilitychanged', handler);
+  }, []);
+
   const { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay } = useChromecast();
 
   // End cast session when the player unmounts or the browser tab closes
@@ -626,15 +640,6 @@ export default function PlayerPage() {
     }
   }, [castState]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Silence the local video while casting — prevents double audio on phone/PC
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (castState === 'connected') {
-      v.pause();
-      v.muted = true;
-    }
-  }, [castState]);
 
   const handleCast = useCallback(() => {
     if (castState === 'connected') { stopCasting(); return; }
@@ -995,6 +1000,14 @@ export default function PlayerPage() {
         x-webkit-airplay="allow"
         controlsList="nofullscreen nodownload"
         disablePictureInPicture
+        onPlay={() => {
+          // Guard: if casting is active, immediately stop local playback.
+          // Prevents double audio when HLS reloads (e.g. on channel change).
+          if (castState === 'connected') {
+            const v = videoRef.current;
+            if (v) { v.pause(); v.muted = true; }
+          }
+        }}
       />
 
 
@@ -1257,10 +1270,10 @@ export default function PlayerPage() {
               </button>
             )}
 
-            {isIOS ? (
+            {airPlayAvailable ? (
                 <button
                   onClick={() => {
-                    const v = document.querySelector('video') as any;
+                    const v = videoRef.current as any;
                     if (v?.webkitShowPlaybackTargetPicker) v.webkitShowPlaybackTargetPicker();
                   }}
                   className={`p-2.5 sm:p-3 rounded-full backdrop-blur transition-all bg-black/40 text-white hover:bg-black/60 ${ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}`}

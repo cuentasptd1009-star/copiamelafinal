@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, ChevronRight, Tv2 } from 'lucide-react';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
 import { useChromecast } from '@/hooks/useChromecast';
 import { CastButton } from '@/components/CastButton';
@@ -386,6 +386,19 @@ export default function VodPlayerPage() {
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
+  // Track AirPlay availability via native Safari event. Only fires in Safari,
+  // so the button appears only when AirPlay is truly usable.
+  const [airPlayAvailable, setAirPlayAvailable] = useState(false);
+  useEffect(() => {
+    const v = videoRef.current as any;
+    if (!v) return;
+    const handler = (e: any) => {
+      setAirPlayAvailable(e.availability === 'available' || e.availability === 'possibly-available');
+    };
+    v.addEventListener('webkitplaybacktargetavailabilitychanged', handler);
+    return () => v.removeEventListener('webkitplaybacktargetavailabilitychanged', handler);
+  }, []);
+
   const { castState, castMedia, stopCasting } = useChromecast();
   const handleCast = useCallback(() => {
     if (castState === 'connected') { stopCasting(); return; }
@@ -643,6 +656,7 @@ export default function VodPlayerPage() {
         muted
         playsInline
         preload="auto"
+        x-webkit-airplay="allow"
       />
 
 
@@ -818,11 +832,24 @@ export default function VodPlayerPage() {
               <span className="text-[10px] text-white/50 w-7 text-right">{Math.round((isMuted ? 0 : volume) * 100)}%</span>
             </div>
 
-            <CastButton
-              castState={castState}
-              onCast={handleCast}
-              className={vodControls[ctrlFocusIdx] === 'cast' ? 'ring-2 ring-primary scale-110' : ''}
-            />
+            {airPlayAvailable ? (
+              <button
+                onClick={() => {
+                  const v = videoRef.current as any;
+                  if (v?.webkitShowPlaybackTargetPicker) v.webkitShowPlaybackTargetPicker();
+                }}
+                className={`p-2.5 sm:p-3 rounded-full backdrop-blur transition-all bg-black/40 text-white hover:bg-black/60 ${vodControls[ctrlFocusIdx] === 'cast' ? 'ring-2 ring-primary scale-110' : ''}`}
+                title="AirPlay al TV"
+              >
+                <Tv2 className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            ) : (
+              <CastButton
+                castState={castState}
+                onCast={handleCast}
+                className={vodControls[ctrlFocusIdx] === 'cast' ? 'ring-2 ring-primary scale-110' : ''}
+              />
+            )}
 
             <button
               onClick={() => { if (isFullscreen) setLocation(backUrl); else toggleFullscreen(); }}

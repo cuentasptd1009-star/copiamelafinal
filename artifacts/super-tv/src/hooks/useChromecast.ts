@@ -120,6 +120,9 @@ export function useChromecast() {
   }, []);
 
   const stopCasting = useCallback(() => {
+    // Optimistically update state so the UI responds immediately even if the SDK
+    // is slow or the state-change event doesn't fire (known Chromecast SDK race).
+    setCastState(prev => prev === 'connected' ? 'available' : prev);
     try {
       window.cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true);
     } catch {}
