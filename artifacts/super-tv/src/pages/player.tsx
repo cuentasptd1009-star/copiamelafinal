@@ -1120,6 +1120,9 @@ export default function PlayerPage() {
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <p className="text-white/50 text-xs uppercase tracking-widest">Reproduciendo en TV</p>
+                {castDeviceName ? (
+                  <p className="text-white/35 text-[11px] tracking-wide mt-0.5">📺 {castDeviceName}</p>
+                ) : null}
               {hasChannels && (
                 <p className="text-primary text-[11px] font-bold uppercase tracking-widest">Canal {channelIndex + 1}</p>
               )}
