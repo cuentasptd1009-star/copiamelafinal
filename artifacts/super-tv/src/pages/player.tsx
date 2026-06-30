@@ -598,28 +598,35 @@ export default function PlayerPage() {
 
   const { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay } = useChromecast();
 
-  // End cast session and pause local video when the tab is hidden or closed.
-  // beforeunload: fires on tab close (desktop, unreliable on mobile).
-  // visibilitychange: fires when user switches tabs or minimises the browser.
-  // pagehide: fires on navigation away (back button) where beforeunload may not fire.
+  // Pause/stop handling when leaving the page.
+  // visibilitychange (tab hidden): only pause LOCAL video — do NOT stop the
+  //   Chromecast session because Chromecast is independent of the browser tab.
+  //   This way the user can switch to WhatsApp and the TV keeps playing.
+  // pagehide (persisted=false): real navigation away → end cast session.
+  // beforeunload: tab/window actually closing → end cast session.
   useEffect(() => {
-    const endSession = () => {
+    const endCastSession = () => {
       try { (window as any).cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true); } catch {}
     };
-    const handleHide = () => {
-      try { videoRef.current?.pause(); } catch {}
-      endSession();
-    };
     const onVisibilityChange = () => {
-      if (document.hidden) handleHide();
+      if (!document.hidden) return;
+      // Only pause local video; leave Chromecast running so TV keeps playing
+      try { videoRef.current?.pause(); } catch {}
     };
-    window.addEventListener('beforeunload', endSession);
+    const onPageHide = (e: PageTransitionEvent) => {
+      // persisted=true means the page is going into bfcache (back-forward cache),
+      // not actually unloading — do nothing.
+      if (e.persisted) return;
+      endCastSession();
+      try { videoRef.current?.pause(); } catch {}
+    };
+    window.addEventListener('beforeunload', endCastSession);
     document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pagehide', handleHide);
+    window.addEventListener('pagehide', onPageHide);
     return () => {
-      window.removeEventListener('beforeunload', endSession);
+      window.removeEventListener('beforeunload', endCastSession);
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pagehide', handleHide);
+      window.removeEventListener('pagehide', onPageHide);
     };
   }, []);
 
@@ -807,6 +814,47 @@ export default function PlayerPage() {
     if (nextEpisodeFormat) params.set('format', nextEpisodeFormat);
     setLocation(`/player?${params.toString()}`);
   }, [nextEpisodeId, nextEpisodeUrl, nextEpisodeTitle, nextSeasonId, nextSeasonNumber, nextEpisodeNumber, nextEpisodeFormat, seriesId, seasonId, seasonNumber, seriesTitle]);
+
+  // ── Media Session API ──────────────────────────────────────────────────────
+  // Updates the Android/iOS notification bar with channel name + artwork and
+  // registers prev/next channel handlers so the user can switch channels from
+  // the notification shade or lock screen without reopening the browser.
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentTitle,
+      artist: type === 'channel' ? (hasChannels ? `Canal ${channelIndex + 1}` : 'En Vivo') : 'SuperTV',
+      album: 'SuperTV',
+    });
+  }, [currentTitle, channelIndex, hasChannels, type]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    if (hasChannels) {
+      navigator.mediaSession.setActionHandler('previoustrack', () => goPrevChannel());
+      navigator.mediaSession.setActionHandler('nexttrack', () => goNextChannel());
+    } else {
+      navigator.mediaSession.setActionHandler('previoustrack', null);
+      navigator.mediaSession.setActionHandler('nexttrack', null);
+    }
+    navigator.mediaSession.setActionHandler('play', () => { videoRef.current?.play().catch(() => {}); });
+    navigator.mediaSession.setActionHandler('pause', () => { videoRef.current?.pause(); });
+    navigator.mediaSession.setActionHandler('stop', () => { videoRef.current?.pause(); });
+    return () => {
+      try {
+        navigator.mediaSession.setActionHandler('previoustrack', null);
+        navigator.mediaSession.setActionHandler('nexttrack', null);
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+        navigator.mediaSession.setActionHandler('stop', null);
+      } catch {}
+    };
+  }, [hasChannels, goPrevChannel, goNextChannel]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+  }, [isPlaying]);
 
   const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'minimize', 'cast', 'fullscreen'], [hasChannels]);
 
