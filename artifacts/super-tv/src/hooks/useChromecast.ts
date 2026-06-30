@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 declare global {
   interface Window {
@@ -33,9 +33,13 @@ function loadMediaOnSession(session: any, url: string, title: string, format: st
 
 export function useChromecast() {
   const [castState, setCastState] = useState<CastState>('unavailable');
+  const [castIsPlaying, setCastIsPlaying] = useState(false);
+  const remotePlayerRef = useRef<any>(null);
+  const remotePlayerControllerRef = useRef<any>(null);
 
   useEffect(() => {
     let removeListener: (() => void) | undefined;
+    let removePlayerListener: (() => void) | undefined;
 
     const initCast = () => {
       if (!window.cast?.framework || !window.chrome?.cast) return;
@@ -61,6 +65,26 @@ export function useChromecast() {
         context.addEventListener(eventType, updateState);
         updateState();
         removeListener = () => context.removeEventListener(eventType, updateState);
+
+        // Set up RemotePlayer to track and control cast playback from the phone
+        try {
+          const player = new window.cast.framework.RemotePlayer();
+          const controller = new window.cast.framework.RemotePlayerController(player);
+          remotePlayerRef.current = player;
+          remotePlayerControllerRef.current = controller;
+
+          const onPausedChange = () => {
+            try { setCastIsPlaying(!player.isPaused); } catch {}
+          };
+          const RPE = window.cast.framework.RemotePlayerEventType;
+          controller.addEventListener(RPE.IS_PAUSED_CHANGED, onPausedChange);
+          // Also update on media info change (new media loaded = playing)
+          controller.addEventListener(RPE.MEDIA_INFO_CHANGED, onPausedChange);
+          removePlayerListener = () => {
+            controller.removeEventListener(RPE.IS_PAUSED_CHANGED, onPausedChange);
+            controller.removeEventListener(RPE.MEDIA_INFO_CHANGED, onPausedChange);
+          };
+        } catch {}
       } catch {}
     };
 
@@ -72,10 +96,11 @@ export function useChromecast() {
       return () => {
         window.removeEventListener('castApiAvailable', onAvailable);
         removeListener?.();
+        removePlayerListener?.();
       };
     }
 
-    return () => removeListener?.();
+    return () => { removeListener?.(); removePlayerListener?.(); };
   }, []);
 
   const castMedia = useCallback((url: string, title: string, format: string = 'hls') => {
@@ -100,5 +125,23 @@ export function useChromecast() {
     } catch {}
   }, []);
 
-  return { castState, castMedia, stopCasting };
+  // Toggle play/pause on the Chromecast receiver from the phone
+  const castTogglePlay = useCallback(() => {
+    try {
+      remotePlayerControllerRef.current?.playOrPause();
+    } catch {}
+  }, []);
+
+  // Seek the Chromecast receiver to a specific time
+  const castSeek = useCallback((time: number) => {
+    try {
+      const player = remotePlayerRef.current;
+      if (player) {
+        player.currentTime = time;
+        remotePlayerControllerRef.current?.seek();
+      }
+    } catch {}
+  }, []);
+
+  return { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay, castSeek };
 }
