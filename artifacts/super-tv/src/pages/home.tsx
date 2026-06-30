@@ -56,7 +56,6 @@ import type { ContentItem, MovieItem } from '@/components/ContentRow';
 import { MovieDetailSheet, type MovieInfo } from '@/components/MovieDetailSheet';
 import { ProfileEditor } from '@/components/ProfileEditor';
 import { HeroBanner, type HeroBannerItem } from '@/components/HeroBanner';
-import { useChromecast } from '@/hooks/useChromecast';
 import { fetchSeries, type SeriesItem } from '@/lib/api';
 
 type TabKey = 'home' | 'channels' | 'movies' | 'series' | 'favorites';
@@ -418,22 +417,6 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { canInstall, install, showInstallButton, isIosSafari } = usePwaInstall();
-  const { castState, stopCasting, requestCast, presentationState, startPresentation, stopPresentation } = useChromecast();
-  const isTV = !!(window as any).__isTvBrowser;
-  const castAvailable = !isTV && castState !== 'unavailable';
-  const isCasting = castState === 'connected' || presentationState === 'connected';
-
-  const handleHomeCast = useCallback(async () => {
-    if (presentationState === 'connected') { stopPresentation(); return; }
-    if (castState === 'connected') { stopCasting(); return; }
-    if (typeof (window as any).PresentationRequest !== 'undefined') {
-      const token = getToken('user') || getToken('admin') || '';
-      const started = await startPresentation(token);
-      if (!started) requestCast();
-    } else {
-      requestCast();
-    }
-  }, [castState, presentationState, stopCasting, stopPresentation, startPresentation, requestCast]);
   const { openKeyboard } = useTvKeyboard();
   const [showHint, setShowHint] = useState(false);
   const [showShortcutHint, setShowShortcutHint] = useState(false);
@@ -1066,11 +1049,10 @@ export default function Home() {
 
   const actionButtons = useMemo(() => [
     ...(session?.type === 'user' ? [{ key: 'profile', label: 'Mi perfil', action: openProfile, icon: UserCircle2 }] : []),
-    ...(castAvailable ? [{ key: 'cast', label: isCasting ? 'Transmitiendo en TV ●' : 'Transmitir en TV', action: handleHomeCast, icon: Tv2, isCasting }] : []),
     { key: 'install', label: 'Instalar app para Android', action: handleInstall, icon: Download },
     { key: 'shortcut', label: 'Acceso directo', action: handleShortcut, icon: Smartphone },
     { key: 'logout', label: 'Salir', action: handleLogout, icon: LogOut },
-  ], [session, showInstallButton, openProfile, handleInstall, handleLogout, castAvailable, isCasting, handleHomeCast]);
+  ], [session, showInstallButton, openProfile, handleInstall, handleLogout]);
 
   type SidebarItemEntry =
     | { kind: 'profile' }
@@ -1561,12 +1543,10 @@ export default function Home() {
           {actionButtons.filter(b => b.key !== 'profile').map((btn) => {
             const Icon = btn.icon;
             const isLogout = btn.key === 'logout';
-            const isCastBtn = btn.key === 'cast';
-            const castActive = !!(btn as any).isCasting;
             const isFocused = inputMode === 'keyboard' && zone === 'sidebar' && sidebarItems[sidebarIdx]?.kind === 'action' && (sidebarItems[sidebarIdx] as { kind: 'action'; key: string }).key === btn.key;
             return (
-              <button key={btn.key} onClick={btn.action} className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isLogout ? 'text-white/35 hover:text-red-400 hover:bg-red-500/10' : isCastBtn ? (castActive ? 'text-primary hover:text-primary/80 hover:bg-primary/10' : 'text-white/45 hover:text-white hover:bg-white/7') : 'text-white/45 hover:text-white hover:bg-white/7'} ${isFocused ? (isLogout ? 'ring-2 ring-red-400/60 text-red-400 bg-red-500/10' : 'ring-2 ring-primary/60 text-white bg-white/10') : ''}`}>
-                <Icon className={`w-4 h-4 flex-shrink-0 ${isCastBtn && castActive ? 'animate-pulse' : ''}`} />
+              <button key={btn.key} onClick={btn.action} className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${isLogout ? 'text-white/35 hover:text-red-400 hover:bg-red-500/10' : 'text-white/45 hover:text-white hover:bg-white/7'} ${isFocused ? (isLogout ? 'ring-2 ring-red-400/60 text-red-400 bg-red-500/10' : 'ring-2 ring-primary/60 text-white bg-white/10') : ''}`}>
+                <Icon className="w-4 h-4 flex-shrink-0" />
                 {btn.label}
               </button>
             );
@@ -1592,15 +1572,6 @@ export default function Home() {
               className="w-full bg-white/7 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-white/20"
             />
           </div>
-          {castAvailable && (
-            <button
-              onClick={handleHomeCast}
-              title={isCasting ? 'Transmitiendo en TV — toca para desconectar' : 'Transmitir en TV'}
-              className={`flex-shrink-0 p-2 rounded-lg transition-all ${isCasting ? 'text-primary bg-primary/15' : 'text-white/40 hover:text-white hover:bg-white/10'}`}
-            >
-              <Tv2 className={`w-5 h-5 ${isCasting ? 'animate-pulse' : ''}`} />
-            </button>
-          )}
         </div>
 
         {/* Expiry warning */}
@@ -2071,16 +2042,6 @@ export default function Home() {
             </button>
           );
         })}
-        {castAvailable && (
-          <button
-            onClick={handleHomeCast}
-            className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-all ${isCasting ? 'text-primary' : 'text-white/35 hover:text-white/60'}`}
-          >
-            <Tv2 className={`w-5 h-5 ${isCasting ? 'animate-pulse' : ''}`} />
-            <span className="text-[9px] font-medium">{isCasting ? 'En TV' : 'TV'}</span>
-            {isCasting && <div className="w-1 h-1 rounded-full bg-primary" />}
-          </button>
-        )}
         <button onClick={handleLogout} className="flex-1 flex flex-col items-center gap-1 py-2.5 text-white/25 hover:text-white/50 transition-colors">
           <LogOut className="w-5 h-5" />
           <span className="text-[9px] font-medium">Salir</span>
