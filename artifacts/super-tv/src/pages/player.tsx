@@ -603,24 +603,6 @@ export default function PlayerPage() {
     };
   }, []);
 
-  // Auto-cast: when a Cast session connects while the player is open,
-  // automatically send the current stream to the TV
-  useEffect(() => {
-    if (castState === 'connected' && currentUrl && currentFormat !== 'youtube') {
-      castMedia(currentUrl, currentTitle, currentFormat);
-    }
-  }, [castState]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Silence the local video while casting — prevents double audio on phone/PC
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (castState === 'connected') {
-      v.pause();
-      v.muted = true;
-    }
-  }, [castState]);
-
   const handleCast = useCallback(() => {
     if (castState === 'connected') { stopCasting(); return; }
     castMedia(currentUrl, currentTitle, currentFormat);
