@@ -418,13 +418,25 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { canInstall, install, showInstallButton, isIosSafari } = usePwaInstall();
-  const { castState, stopCasting, requestCast } = useChromecast();
+  const { castState, stopCasting, requestCast, presentationState, startPresentation, stopPresentation, sendToPresentation } = useChromecast();
   const isTV = !!(window as any).__isTvBrowser;
   const castAvailable = !isTV && castState !== 'unavailable';
   const isCasting = castState === 'connected';
-  const handleHomeCast = useCallback(() => {
-    if (isCasting) stopCasting(); else requestCast();
-  }, [isCasting, stopCasting, requestCast]);
+  const isPresenting = presentationState === 'connected';
+  const isConnectedToTV = isPresenting || isCasting;
+  const isConnectingToTV = presentationState === 'connecting';
+
+  const handleHomeCast = useCallback(async () => {
+    if (isPresenting) { stopPresentation(); return; }
+    if (isCasting) { stopCasting(); return; }
+    if (typeof (window as any).PresentationRequest !== 'undefined') {
+      const token = getToken('user') || getToken('admin') || '';
+      const ok = await startPresentation(token);
+      if (!ok) requestCast();
+    } else {
+      requestCast();
+    }
+  }, [isPresenting, isCasting, stopPresentation, stopCasting, startPresentation, requestCast]);
   const { openKeyboard } = useTvKeyboard();
   const [showHint, setShowHint] = useState(false);
   const [showShortcutHint, setShowShortcutHint] = useState(false);
@@ -928,6 +940,10 @@ export default function Home() {
       return;
     }
     if (isChannel(item)) {
+      if (presentationState === 'connected') {
+        sendToPresentation({ action: 'play', type: 'channel', channelId: item.id, url: (item as any).streamUrl ?? '', title: item.name, format: (item as any).streamFormat || 'hls' });
+        return;
+      }
       const channelList = allChannels.map(ch => ({ id: ch.id, streamUrl: ch.streamUrl ?? '', name: ch.name }));
       const idx = allChannels.findIndex(ch => ch.id === item.id);
       setMiniPlayerState({ url: item.streamUrl ?? '', title: item.name, type: 'channel', movieId: null, channelId: item.id, streamFormat: (item as any).streamFormat ?? null, isMinimized: false, channels: channelList, channelIndex: idx >= 0 ? idx : 0 });
@@ -949,6 +965,10 @@ export default function Home() {
         if (videoId) { setExternalPlayer({ type: 'youtube', videoId, title: mv.title, thumbnail: mv.poster ?? undefined }); return; }
       }
       const saved = progressMap.get(mv.id);
+      if (presentationState === 'connected') {
+        sendToPresentation({ action: 'play', type: 'movie', movieId: mv.id, url, title: mv.title, format: (mv as any).videoFormat || '', startFrom: (saved && saved.time > 10) ? Math.floor(saved.time) : undefined });
+        return;
+      }
       const p = new URLSearchParams({ url, title: mv.title, type: 'movie', movieId: String(mv.id), category: mv.category || '' });
       if ((mv as any).videoFormat) p.set('format', (mv as any).videoFormat);
       if (saved && saved.time > 10) p.set('startFrom', String(Math.floor(saved.time)));
@@ -957,7 +977,7 @@ export default function Home() {
       if (_ms?.isMinimized) updateMiniPlayerState({ isMinimized: false });
       setLocation(`/vod-player?${p.toString()}`);
     }
-  }, [setLocation, isExpired, allChannels, progressMap]);
+  }, [setLocation, isExpired, allChannels, progressMap, presentationState, sendToPresentation]);
 
   const playSeriesItem = useCallback((series: SeriesItem) => {
     if (isExpired) { setShowExpiredOverlay(true); return; }
@@ -1057,11 +1077,11 @@ export default function Home() {
 
   const actionButtons = useMemo(() => [
     ...(session?.type === 'user' ? [{ key: 'profile', label: 'Mi perfil', action: openProfile, icon: UserCircle2 }] : []),
-    ...(castAvailable ? [{ key: 'cast', label: isCasting ? 'Transmitiendo en TV ●' : 'Transmitir en TV', action: handleHomeCast, icon: Tv2, isCasting }] : []),
+    ...(castAvailable ? [{ key: 'cast', label: isConnectedToTV ? 'Transmitiendo en TV ●' : isConnectingToTV ? 'Conectando al TV...' : 'Transmitir en TV', action: handleHomeCast, icon: Tv2, isCasting: isConnectedToTV }] : []),
     { key: 'install', label: 'Instalar app para Android', action: handleInstall, icon: Download },
     { key: 'shortcut', label: 'Acceso directo', action: handleShortcut, icon: Smartphone },
     { key: 'logout', label: 'Salir', action: handleLogout, icon: LogOut },
-  ], [session, showInstallButton, openProfile, handleInstall, handleLogout, castAvailable, isCasting, handleHomeCast]);
+  ], [session, showInstallButton, openProfile, handleInstall, handleLogout, castAvailable, isCasting, isConnectedToTV, isConnectingToTV, handleHomeCast]);
 
   type SidebarItemEntry =
     | { kind: 'profile' }
@@ -1586,10 +1606,10 @@ export default function Home() {
           {castAvailable && (
             <button
               onClick={handleHomeCast}
-              title={isCasting ? 'Transmitiendo en TV — toca para desconectar' : 'Transmitir en TV'}
-              className={`flex-shrink-0 p-2 rounded-lg transition-all ${isCasting ? 'text-primary bg-primary/15' : 'text-white/40 hover:text-white hover:bg-white/10'}`}
+              title={isConnectedToTV ? 'Transmitiendo en TV — toca para desconectar' : isConnectingToTV ? 'Conectando...' : 'Transmitir en TV'}
+              className={`flex-shrink-0 p-2 rounded-lg transition-all ${isConnectedToTV ? 'text-primary bg-primary/15' : 'text-white/40 hover:text-white hover:bg-white/10'}`}
             >
-              <Tv2 className={`w-5 h-5 ${isCasting ? 'animate-pulse' : ''}`} />
+              <Tv2 className={`w-5 h-5 ${isConnectedToTV ? 'animate-pulse' : ''}`} />
             </button>
           )}
         </div>
@@ -2065,11 +2085,11 @@ export default function Home() {
         {castAvailable && (
           <button
             onClick={handleHomeCast}
-            className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-all ${isCasting ? 'text-primary' : 'text-white/35 hover:text-white/60'}`}
+            className={`flex-1 flex flex-col items-center gap-1 py-2.5 transition-all ${isConnectedToTV ? 'text-primary' : 'text-white/35 hover:text-white/60'}`}
           >
-            <Tv2 className={`w-5 h-5 ${isCasting ? 'animate-pulse' : ''}`} />
-            <span className="text-[9px] font-medium">{isCasting ? 'En TV' : 'TV'}</span>
-            {isCasting && <div className="w-1 h-1 rounded-full bg-primary" />}
+            <Tv2 className={`w-5 h-5 ${isConnectedToTV ? 'animate-pulse' : ''}`} />
+            <span className="text-[9px] font-medium">{isConnectedToTV ? 'En TV' : 'TV'}</span>
+            {isConnectedToTV && <div className="w-1 h-1 rounded-full bg-primary" />}
           </button>
         )}
         <button onClick={handleLogout} className="flex-1 flex flex-col items-center gap-1 py-2.5 text-white/25 hover:text-white/50 transition-colors">
