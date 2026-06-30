@@ -646,14 +646,34 @@ export default function PlayerPage() {
       if (!v.paused) v.pause();
     }, [castState, currentUrl]);
 
-    // Auto-cast: when a Cast session connects while the player is open,
-  // automatically send the current stream to the TV
-  useEffect(() => {
-    if (castState === 'connected' && currentUrl && currentFormat !== 'youtube') {
-      castMedia(currentUrl, currentTitle, currentFormat);
-    }
-  }, [castState, currentUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Keep refs so retry callbacks always read the latest live values
+    const castStateRef2 = useRef(castState);
+    castStateRef2.current = castState;
+    const castMediaRef2 = useRef(castMedia);
+    castMediaRef2.current = castMedia;
+    const currentTitleRef2 = useRef(currentTitle);
+    currentTitleRef2.current = currentTitle;
+    const currentFormatRef2 = useRef(currentFormat);
+    currentFormatRef2.current = currentFormat;
 
+    // Auto-cast: fires whenever the active URL changes (new channel or fresh mount).
+    // The Cast SDK reconnects asynchronously after SPA back-navigation, so we retry
+    // at 300 ms and 1 200 ms to cover the full async-reconnect window.
+    useEffect(() => {
+      if (!currentUrl || currentFormatRef2.current === 'youtube') return;
+      let cancelled = false;
+      const trycast = () => {
+        if (cancelled) return;
+        if (castStateRef2.current === 'connected') {
+          castMediaRef2.current(currentUrl, currentTitleRef2.current, currentFormatRef2.current);
+        }
+      };
+      trycast();
+      const t1 = setTimeout(trycast, 300);
+      const t2 = setTimeout(trycast, 1200);
+      return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2); };
+    }, [currentUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  
 
   const handleCast = useCallback(() => {
     if (castState === 'connected') { stopCasting(); return; }
