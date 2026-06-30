@@ -840,12 +840,15 @@ export default function VodPlayerPage() {
                 <Tv2 className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )}
-            {/* Chromecast — visible when the Cast SDK loads (Android/Desktop Chrome) */}
-            <CastButton
-              castState={castState}
-              onCast={handleCast}
-              className={vodControls[ctrlFocusIdx] === 'cast' ? 'ring-2 ring-primary scale-110' : ''}
-            />
+            {/* Chromecast — only on non-AirPlay devices (Android/Desktop Chrome).
+                On iOS/macOS Safari supportsAirPlay=true so this is hidden. */}
+            {!supportsAirPlay && (
+              <CastButton
+                castState={castState}
+                onCast={handleCast}
+                className={vodControls[ctrlFocusIdx] === 'cast' ? 'ring-2 ring-primary scale-110' : ''}
+              />
+            )}
 
             <button
               onClick={() => { if (isFullscreen) setLocation(backUrl); else toggleFullscreen(); }}
