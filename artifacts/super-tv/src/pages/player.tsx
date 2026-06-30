@@ -605,30 +605,18 @@ export default function PlayerPage() {
   // pagehide (persisted=false): real navigation away → end cast session.
   // beforeunload: tab/window actually closing → end cast session.
   useEffect(() => {
-    const endCastSession = () => {
-      try { (window as any).cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true); } catch {}
-    };
-    const onVisibilityChange = () => {
-      if (!document.hidden) return;
-      // Only pause local video; leave Chromecast running so TV keeps playing
-      try { videoRef.current?.pause(); } catch {}
-    };
-    const onPageHide = (e: PageTransitionEvent) => {
-      // persisted=true means the page is going into bfcache (back-forward cache),
-      // not actually unloading — do nothing.
-      if (e.persisted) return;
-      endCastSession();
-      try { videoRef.current?.pause(); } catch {}
-    };
-    window.addEventListener('beforeunload', endCastSession);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pagehide', onPageHide);
-    return () => {
-      window.removeEventListener('beforeunload', endCastSession);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pagehide', onPageHide);
-    };
-  }, []);
+    // Pause local video when tab is hidden (e.g. user switches to WhatsApp).
+      // Do NOT end the Chromecast session — the TV is independent of the browser
+      // tab, so reload or navigation should keep the TV playing.
+      const onVisibilityChange = () => {
+        if (!document.hidden) return;
+        try { videoRef.current?.pause(); } catch {}
+      };
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      return () => {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      };
+    }, []);
 
   // Save player URL whenever cast is active so the home cast button can navigate back
   useEffect(() => {
@@ -776,8 +764,14 @@ export default function PlayerPage() {
   }, [type, currentUrl, currentTitle, backUrl, setLocation]);
 
   const handleBack = useCallback(() => {
-    setLocation(backUrl);
-  }, [backUrl, setLocation]);
+      // Hard navigation when casting so the Cast SDK re-initialises cleanly on
+      // home and the next channel selection reliably switches the TV.
+      if (castState === 'connected') {
+        window.location.href = backUrl;
+        return;
+      }
+      setLocation(backUrl);
+    }, [castState, backUrl, setLocation]);
 
   const handleMinimizeRef = useRef(handleMinimize);
   handleMinimizeRef.current = handleMinimize;
