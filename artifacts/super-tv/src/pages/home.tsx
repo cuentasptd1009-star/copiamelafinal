@@ -418,14 +418,22 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { canInstall, install, showInstallButton, isIosSafari } = usePwaInstall();
-  const { castState, stopCasting, requestCast } = useChromecast();
+  const { castState, stopCasting, requestCast, presentationState, startPresentation, stopPresentation } = useChromecast();
   const isTV = !!(window as any).__isTvBrowser;
   const castAvailable = !isTV && castState !== 'unavailable';
-  const isCasting = castState === 'connected';
+  const isCasting = castState === 'connected' || presentationState === 'connected';
 
-  const handleHomeCast = useCallback(() => {
-    if (isCasting) stopCasting(); else requestCast();
-  }, [isCasting, stopCasting, requestCast]);
+  const handleHomeCast = useCallback(async () => {
+    if (presentationState === 'connected') { stopPresentation(); return; }
+    if (castState === 'connected') { stopCasting(); return; }
+    if (typeof (window as any).PresentationRequest !== 'undefined') {
+      const token = getToken('user') || getToken('admin') || '';
+      const started = await startPresentation(token);
+      if (!started) requestCast();
+    } else {
+      requestCast();
+    }
+  }, [castState, presentationState, stopCasting, stopPresentation, startPresentation, requestCast]);
   const { openKeyboard } = useTvKeyboard();
   const [showHint, setShowHint] = useState(false);
   const [showShortcutHint, setShowShortcutHint] = useState(false);
