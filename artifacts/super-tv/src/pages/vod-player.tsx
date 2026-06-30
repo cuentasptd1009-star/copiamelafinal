@@ -386,20 +386,24 @@ export default function VodPlayerPage() {
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-  // Track AirPlay availability via native Safari event. Only fires in Safari,
-  // so the button appears only when AirPlay is truly usable.
-  const [airPlayAvailable, setAirPlayAvailable] = useState(false);
-  useEffect(() => {
-    const v = videoRef.current as any;
-    if (!v) return;
-    const handler = (e: any) => {
-      setAirPlayAvailable(e.availability === 'available' || e.availability === 'possibly-available');
-    };
-    v.addEventListener('webkitplaybacktargetavailabilitychanged', handler);
-    return () => v.removeEventListener('webkitplaybacktargetavailabilitychanged', handler);
-  }, []);
+  // AirPlay is supported on ALL iOS browsers (Safari, Chrome, Edge, Firefox on iOS all
+  // use WebKit which exposes webkitShowPlaybackTargetPicker) and macOS Safari.
+  // We feature-detect once — no need to wait for any event.
+  const supportsAirPlay = (() => {
+    try { return 'webkitShowPlaybackTargetPicker' in document.createElement('video'); } catch { return false; }
+  })();
 
   const { castState, castMedia, stopCasting } = useChromecast();
+
+  // Stop casting when the tab/window is closed so the TV disconnects automatically.
+  useEffect(() => {
+    const endSession = () => {
+      try { (window as any).cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true); } catch {}
+    };
+    window.addEventListener('beforeunload', endSession);
+    return () => window.removeEventListener('beforeunload', endSession);
+  }, []);
+
   const handleCast = useCallback(() => {
     if (castState === 'connected') { stopCasting(); return; }
     castMedia(rawUrl, title, format);
@@ -832,7 +836,8 @@ export default function VodPlayerPage() {
               <span className="text-[10px] text-white/50 w-7 text-right">{Math.round((isMuted ? 0 : volume) * 100)}%</span>
             </div>
 
-            {airPlayAvailable ? (
+            {/* AirPlay — visible on ALL iOS browsers and macOS Safari (all use WebKit) */}
+            {supportsAirPlay && (
               <button
                 onClick={() => {
                   const v = videoRef.current as any;
@@ -843,13 +848,13 @@ export default function VodPlayerPage() {
               >
                 <Tv2 className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
-            ) : (
-              <CastButton
-                castState={castState}
-                onCast={handleCast}
-                className={vodControls[ctrlFocusIdx] === 'cast' ? 'ring-2 ring-primary scale-110' : ''}
-              />
             )}
+            {/* Chromecast — visible when the Cast SDK loads (Android/Desktop Chrome) */}
+            <CastButton
+              castState={castState}
+              onCast={handleCast}
+              className={vodControls[ctrlFocusIdx] === 'cast' ? 'ring-2 ring-primary scale-110' : ''}
+            />
 
             <button
               onClick={() => { if (isFullscreen) setLocation(backUrl); else toggleFullscreen(); }}

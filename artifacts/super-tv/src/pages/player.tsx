@@ -589,19 +589,12 @@ export default function PlayerPage() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent) && !/iPad|iPhone|iPod/.test(navigator.userAgent);
 
-  // Track AirPlay availability using the native Safari event.
-  // Only fires in Safari — never in Chrome/Firefox iOS — so the button only
-  // appears when AirPlay is actually usable (no false positives on other browsers).
-  const [airPlayAvailable, setAirPlayAvailable] = useState(false);
-  useEffect(() => {
-    const v = videoRef.current as any;
-    if (!v) return;
-    const handler = (e: any) => {
-      setAirPlayAvailable(e.availability === 'available' || e.availability === 'possibly-available');
-    };
-    v.addEventListener('webkitplaybacktargetavailabilitychanged', handler);
-    return () => v.removeEventListener('webkitplaybacktargetavailabilitychanged', handler);
-  }, []);
+  // AirPlay is supported on ALL iOS browsers (Safari, Chrome, Edge, Firefox on iOS all
+  // use WebKit which exposes webkitShowPlaybackTargetPicker) and macOS Safari.
+  // We feature-detect once — no need to wait for any event.
+  const supportsAirPlay = (() => {
+    try { return 'webkitShowPlaybackTargetPicker' in document.createElement('video'); } catch { return false; }
+  })();
 
   const { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay } = useChromecast();
 
@@ -1270,24 +1263,25 @@ export default function PlayerPage() {
               </button>
             )}
 
-            {airPlayAvailable ? (
-                <button
-                  onClick={() => {
-                    const v = videoRef.current as any;
-                    if (v?.webkitShowPlaybackTargetPicker) v.webkitShowPlaybackTargetPicker();
-                  }}
-                  className={`p-2.5 sm:p-3 rounded-full backdrop-blur transition-all bg-black/40 text-white hover:bg-black/60 ${ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}`}
-                  title="AirPlay al TV"
-                >
-                  <Tv2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              ) : (
-                <CastButton
-                  castState={castState}
-                  onCast={handleCast}
-                  className={ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}
-                />
-              )}
+            {/* AirPlay — visible on ALL iOS browsers and macOS Safari (all use WebKit) */}
+            {supportsAirPlay && (
+              <button
+                onClick={() => {
+                  const v = videoRef.current as any;
+                  if (v?.webkitShowPlaybackTargetPicker) v.webkitShowPlaybackTargetPicker();
+                }}
+                className={`p-2.5 sm:p-3 rounded-full backdrop-blur transition-all bg-black/40 text-white hover:bg-black/60 ${ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}`}
+                title="AirPlay al TV"
+              >
+                <Tv2 className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            )}
+            {/* Chromecast — visible when the Cast SDK loads (Android/Desktop Chrome) */}
+            <CastButton
+              castState={castState}
+              onCast={handleCast}
+              className={ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}
+            />
 
             <button
               onClick={toggleFullscreen}

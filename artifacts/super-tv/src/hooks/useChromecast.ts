@@ -124,7 +124,23 @@ export function useChromecast() {
     // is slow or the state-change event doesn't fire (known Chromecast SDK race).
     setCastState(prev => prev === 'connected' ? 'available' : prev);
     try {
-      window.cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true);
+      const context = window.cast?.framework?.CastContext?.getInstance();
+      if (context) {
+        context.endCurrentSession(true);
+        // Re-call setOptions after the session ends to restart device discovery.
+        // Without this the SDK may mark the device as unavailable and
+        // requestSession() will open an empty picker until the tab is reloaded.
+        setTimeout(() => {
+          try {
+            if (window.cast?.framework && window.chrome?.cast) {
+              context.setOptions({
+                receiverApplicationId: CAST_APP_ID,
+                autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+              });
+            }
+          } catch {}
+        }, 2000);
+      }
     } catch {}
   }, []);
 
