@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
 import { useChromecast } from '@/hooks/useChromecast';
+import { CastIcon } from '@/components/CastIcon';
 import { CastButton } from '@/components/CastButton';
 import logo from '@assets/logo_supertv.png';
 import { useGetMe, getGetMeQueryKey } from '@workspace/api-client-react';
@@ -1114,7 +1115,7 @@ export default function PlayerPage() {
           </button>
           <div className="flex flex-col items-center gap-5">
             <div className="relative">
-              <Tv2 className="w-24 h-24 text-primary drop-shadow-[0_0_24px_rgba(239,68,68,0.6)]" />
+              <CastIcon className="w-24 h-24 text-primary drop-shadow-[0_0_24px_rgba(239,68,68,0.6)]" />
               <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-green-400 border-2 border-black animate-pulse" />
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
