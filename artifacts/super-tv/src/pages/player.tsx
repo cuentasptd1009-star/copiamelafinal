@@ -598,14 +598,28 @@ export default function PlayerPage() {
 
   const { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay } = useChromecast();
 
-  // End cast session when the player unmounts or the browser tab closes
+  // End cast session and pause local video when the tab is hidden or closed.
+  // beforeunload: fires on tab close (desktop, unreliable on mobile).
+  // visibilitychange: fires when user switches tabs or minimises the browser.
+  // pagehide: fires on navigation away (back button) where beforeunload may not fire.
   useEffect(() => {
     const endSession = () => {
       try { (window as any).cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true); } catch {}
     };
+    const handleHide = () => {
+      try { videoRef.current?.pause(); } catch {}
+      endSession();
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) handleHide();
+    };
     window.addEventListener('beforeunload', endSession);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', handleHide);
     return () => {
       window.removeEventListener('beforeunload', endSession);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', handleHide);
     };
   }, []);
 
@@ -631,7 +645,7 @@ export default function PlayerPage() {
     if (castState === 'connected' && currentUrl && currentFormat !== 'youtube') {
       castMedia(currentUrl, currentTitle, currentFormat);
     }
-  }, [castState]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [castState, currentUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const handleCast = useCallback(() => {
