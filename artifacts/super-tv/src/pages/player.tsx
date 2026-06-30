@@ -602,6 +602,13 @@ export default function PlayerPage() {
     };
   }, []);
 
+  // Save player URL whenever cast is active so the home cast button can navigate back
+  useEffect(() => {
+    if (castState === 'connected') {
+      sessionStorage.setItem('castPlayerUrl', window.location.href);
+    }
+  }, [castState]);
+
   // Auto-cast: when a Cast session connects while the player is open,
   // automatically send the current stream to the TV
   useEffect(() => {
