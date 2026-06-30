@@ -1,191 +1,154 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-  declare global {
-    interface Window {
-      cast?: any;
-      chrome?: any;
-      __castApiAvailable?: boolean;
-      __onGCastApiAvailable?: (isAvailable: boolean) => void;
-    }
+declare global {
+  interface Window {
+    cast?: any;
+    chrome?: any;
+    __castApiAvailable?: boolean;
+    __onGCastApiAvailable?: (isAvailable: boolean) => void;
   }
+}
 
-  const CAST_APP_ID = 'CC1AD845';
+const CAST_APP_ID = 'CC1AD845';
 
-  export type CastState = 'unavailable' | 'available' | 'connecting' | 'connected';
+export type CastState = 'unavailable' | 'available' | 'connecting' | 'connected';
 
-  function getContentType(url: string, format: string): string {
-    if (format === 'hls' || url.includes('.m3u8') || url.includes('hls-proxy')) return 'application/x-mpegurl';
-    if (format === 'dash' || url.includes('.mpd')) return 'application/dash+xml';
-    return 'video/mp4';
-  }
+function getContentType(url: string, format: string): string {
+  if (format === 'hls' || url.includes('.m3u8') || url.includes('hls-proxy')) return 'application/x-mpegurl';
+  if (format === 'dash' || url.includes('.mpd')) return 'application/dash+xml';
+  return 'video/mp4';
+}
 
-  function loadMediaOnSession(session: any, url: string, title: string, format: string) {
-    try {
-      const contentType = getContentType(url, format);
-      const mediaInfo = new window.chrome.cast.media.MediaInfo(url, contentType);
-      mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
-      mediaInfo.metadata.title = title;
-      const request = new window.chrome.cast.media.LoadRequest(mediaInfo);
-      request.autoplay = true;
-      session.loadMedia(request).catch(() => {});
-    } catch {}
-  }
+function loadMediaOnSession(session: any, url: string, title: string, format: string) {
+  try {
+    const contentType = getContentType(url, format);
+    const mediaInfo = new window.chrome.cast.media.MediaInfo(url, contentType);
+    mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
+    mediaInfo.metadata.title = title;
+    const request = new window.chrome.cast.media.LoadRequest(mediaInfo);
+    request.autoplay = true;
+    session.loadMedia(request).catch(() => {});
+  } catch {}
+}
 
-  export function useChromecast() {
-    const [castState, setCastState] = useState<CastState>('unavailable');
-    const [castIsPlaying, setCastIsPlaying] = useState(false);
-    const [presentationState, setPresentationState] = useState<'idle' | 'connecting' | 'connected'>('idle');
-    const presentationConnRef = useRef<any>(null);
-    const remotePlayerRef = useRef<any>(null);
-    const remotePlayerControllerRef = useRef<any>(null);
+export function useChromecast() {
+  const [castState, setCastState] = useState<CastState>('unavailable');
+  const [castIsPlaying, setCastIsPlaying] = useState(false);
+  const remotePlayerRef = useRef<any>(null);
+  const remotePlayerControllerRef = useRef<any>(null);
 
-    useEffect(() => {
-      let removeListener: (() => void) | undefined;
-      let removePlayerListener: (() => void) | undefined;
+  useEffect(() => {
+    let removeListener: (() => void) | undefined;
+    let removePlayerListener: (() => void) | undefined;
 
-      const initCast = () => {
-        if (!window.cast?.framework || !window.chrome?.cast) return;
-        try {
-          const context = window.cast.framework.CastContext.getInstance();
-          context.setOptions({
-            receiverApplicationId: CAST_APP_ID,
-            autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
-          });
-
-          const updateState = () => {
-            try {
-              const state = context.getCastState();
-              const CS = window.cast.framework.CastState;
-              if (state === CS.CONNECTED) setCastState('connected');
-              else if (state === CS.CONNECTING) setCastState('connecting');
-              else if (state === CS.NOT_CONNECTED) setCastState('available');
-              else setCastState('unavailable');
-            } catch {}
-          };
-
-          const eventType = window.cast.framework.CastContextEventType.CAST_STATE_CHANGED;
-          context.addEventListener(eventType, updateState);
-          updateState();
-          removeListener = () => context.removeEventListener(eventType, updateState);
-
-          // Set up RemotePlayer to track and control cast playback from the phone
-          try {
-            const player = new window.cast.framework.RemotePlayer();
-            const controller = new window.cast.framework.RemotePlayerController(player);
-            remotePlayerRef.current = player;
-            remotePlayerControllerRef.current = controller;
-
-            const onPausedChange = () => {
-              try { setCastIsPlaying(!player.isPaused); } catch {}
-            };
-            const RPE = window.cast.framework.RemotePlayerEventType;
-            controller.addEventListener(RPE.IS_PAUSED_CHANGED, onPausedChange);
-            // Also update on media info change (new media loaded = playing)
-            controller.addEventListener(RPE.MEDIA_INFO_CHANGED, onPausedChange);
-            removePlayerListener = () => {
-              controller.removeEventListener(RPE.IS_PAUSED_CHANGED, onPausedChange);
-              controller.removeEventListener(RPE.MEDIA_INFO_CHANGED, onPausedChange);
-            };
-          } catch {}
-        } catch {}
-      };
-
-      if (window.__castApiAvailable) {
-        initCast();
-      } else {
-        const onAvailable = () => initCast();
-        window.addEventListener('castApiAvailable', onAvailable);
-        return () => {
-          window.removeEventListener('castApiAvailable', onAvailable);
-          removeListener?.();
-          removePlayerListener?.();
-        };
-      }
-
-      return () => { removeListener?.(); removePlayerListener?.(); };
-    }, []);
-
-    const castMedia = useCallback((url: string, title: string, format: string = 'hls') => {
+    const initCast = () => {
       if (!window.cast?.framework || !window.chrome?.cast) return;
       try {
         const context = window.cast.framework.CastContext.getInstance();
-        const session = context.getCurrentSession();
-        if (session) {
-          loadMediaOnSession(session, url, title, format);
-        } else {
-          context.requestSession().then(() => {
-            const newSession = context.getCurrentSession();
-            if (newSession) loadMediaOnSession(newSession, url, title, format);
-          }).catch(() => {});
-        }
-      } catch {}
-    }, []);
+        context.setOptions({
+          receiverApplicationId: CAST_APP_ID,
+          autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+        });
 
-    const stopCasting = useCallback(() => {
-      try {
-        window.cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true);
-      } catch {}
-    }, []);
+        const updateState = () => {
+          try {
+            const state = context.getCastState();
+            const CS = window.cast.framework.CastState;
+            if (state === CS.CONNECTED) setCastState('connected');
+            else if (state === CS.CONNECTING) setCastState('connecting');
+            else if (state === CS.NOT_CONNECTED) setCastState('available');
+            else setCastState('unavailable');
+          } catch {}
+        };
 
-    // Toggle play/pause on the Chromecast receiver from the phone
-    const castTogglePlay = useCallback(() => {
-      try {
-        remotePlayerControllerRef.current?.playOrPause();
-      } catch {}
-    }, []);
+        const eventType = window.cast.framework.CastContextEventType.CAST_STATE_CHANGED;
+        context.addEventListener(eventType, updateState);
+        updateState();
+        removeListener = () => context.removeEventListener(eventType, updateState);
 
-    // Seek the Chromecast receiver to a specific time
-    const castSeek = useCallback((time: number) => {
-      try {
-        const player = remotePlayerRef.current;
-        if (player) {
-          player.currentTime = time;
-          remotePlayerControllerRef.current?.seek();
-        }
-      } catch {}
-    }, []);
+        // Set up RemotePlayer to track and control cast playback from the phone
+        try {
+          const player = new window.cast.framework.RemotePlayer();
+          const controller = new window.cast.framework.RemotePlayerController(player);
+          remotePlayerRef.current = player;
+          remotePlayerControllerRef.current = controller;
 
-    // Open the Cast device picker without loading media (for home screen button)
-    const requestCast = useCallback(() => {
-      try {
-        window.cast?.framework?.CastContext?.getInstance()?.requestSession().catch(() => {});
+          const onPausedChange = () => {
+            try { setCastIsPlaying(!player.isPaused); } catch {}
+          };
+          const RPE = window.cast.framework.RemotePlayerEventType;
+          controller.addEventListener(RPE.IS_PAUSED_CHANGED, onPausedChange);
+          // Also update on media info change (new media loaded = playing)
+          controller.addEventListener(RPE.MEDIA_INFO_CHANGED, onPausedChange);
+          removePlayerListener = () => {
+            controller.removeEventListener(RPE.IS_PAUSED_CHANGED, onPausedChange);
+            controller.removeEventListener(RPE.MEDIA_INFO_CHANGED, onPausedChange);
+          };
+        } catch {}
       } catch {}
-    }, []);
+    };
 
-    // ── Presentation API: mirror app as second screen on the TV ──
-    const startPresentation = useCallback(async (token: string): Promise<boolean> => {
-      if (typeof (window as any).PresentationRequest === 'undefined') return false;
-      setPresentationState('connecting');
-      try {
-        const tvUrl = `${window.location.origin}/home?tv_receiver=1&t=${encodeURIComponent(token)}`;
-        const request = new (window as any).PresentationRequest([tvUrl]);
-        const conn = await request.start();
-        presentationConnRef.current = conn;
-        setPresentationState('connected');
-        const cleanup = () => { presentationConnRef.current = null; setPresentationState('idle'); };
-        conn.onclose = cleanup;
-        conn.onterminate = cleanup;
-        return true;
-      } catch {
-        setPresentationState('idle');
-        return false;
+    if (window.__castApiAvailable) {
+      initCast();
+    } else {
+      const onAvailable = () => initCast();
+      window.addEventListener('castApiAvailable', onAvailable);
+      return () => {
+        window.removeEventListener('castApiAvailable', onAvailable);
+        removeListener?.();
+        removePlayerListener?.();
+      };
+    }
+
+    return () => { removeListener?.(); removePlayerListener?.(); };
+  }, []);
+
+  const castMedia = useCallback((url: string, title: string, format: string = 'hls') => {
+    if (!window.cast?.framework || !window.chrome?.cast) return;
+    try {
+      const context = window.cast.framework.CastContext.getInstance();
+      const session = context.getCurrentSession();
+      if (session) {
+        loadMediaOnSession(session, url, title, format);
+      } else {
+        context.requestSession().then(() => {
+          const newSession = context.getCurrentSession();
+          if (newSession) loadMediaOnSession(newSession, url, title, format);
+        }).catch(() => {});
       }
-    }, []);
+    } catch {}
+  }, []);
 
-    const stopPresentation = useCallback(() => {
-      try { presentationConnRef.current?.terminate(); } catch {}
-      presentationConnRef.current = null;
-      setPresentationState('idle');
-    }, []);
+  const stopCasting = useCallback(() => {
+    try {
+      window.cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true);
+    } catch {}
+  }, []);
 
-    const sendToPresentation = useCallback((data: object) => {
-      try {
-        if (presentationConnRef.current?.state === 'connected') {
-          presentationConnRef.current.send(JSON.stringify(data));
-        }
-      } catch {}
-    }, []);
+  // Toggle play/pause on the Chromecast receiver from the phone
+  const castTogglePlay = useCallback(() => {
+    try {
+      remotePlayerControllerRef.current?.playOrPause();
+    } catch {}
+  }, []);
 
-    return { presentationState, startPresentation, stopPresentation, sendToPresentation, castState, castIsPlaying, castMedia, stopCasting, castTogglePlay, castSeek, requestCast };
-  }
-  
+  // Seek the Chromecast receiver to a specific time
+  const castSeek = useCallback((time: number) => {
+    try {
+      const player = remotePlayerRef.current;
+      if (player) {
+        player.currentTime = time;
+        remotePlayerControllerRef.current?.seek();
+      }
+    } catch {}
+  }, []);
+
+  // Open the Cast device picker without loading media (for home screen button)
+  const requestCast = useCallback(() => {
+    try {
+      window.cast?.framework?.CastContext?.getInstance()?.requestSession().catch(() => {});
+    } catch {}
+  }, []);
+
+  return { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay, castSeek, requestCast };
+}
