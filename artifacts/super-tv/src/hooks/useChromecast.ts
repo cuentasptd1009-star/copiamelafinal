@@ -34,6 +34,7 @@ function loadMediaOnSession(session: any, url: string, title: string, format: st
 export function useChromecast() {
   const [castState, setCastState] = useState<CastState>('unavailable');
   const [castIsPlaying, setCastIsPlaying] = useState(false);
+  const [deviceName, setDeviceName] = useState<string>('');
   const remotePlayerRef = useRef<any>(null);
   const remotePlayerControllerRef = useRef<any>(null);
 
@@ -54,10 +55,16 @@ export function useChromecast() {
           try {
             const state = context.getCastState();
             const CS = window.cast.framework.CastState;
-            if (state === CS.CONNECTED) setCastState('connected');
+            if (state === CS.CONNECTED) {
+              setCastState('connected');
+              try {
+                const dn = context.getCurrentSession()?.getCastDevice()?.friendlyName;
+                if (dn) setDeviceName(dn);
+              } catch {}
+            }
             else if (state === CS.CONNECTING) setCastState('connecting');
             // NOT_CONNECTED and NO_DEVICES_AVAILABLE both show the button; 'unavailable' = SDK not loaded
-            else setCastState('available');
+            else { setCastState('available'); setDeviceName(''); }
           } catch {}
         };
 
@@ -153,5 +160,5 @@ export function useChromecast() {
     } catch {}
   }, []);
 
-  return { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay, castSeek, requestCast };
+  return { castState, castIsPlaying, deviceName, castMedia, stopCasting, castTogglePlay, castSeek, requestCast };
 }
