@@ -170,6 +170,8 @@ export default function PlayerPage() {
   const isLiveRef = useRef(type === 'channel');
   const autoFullscreenDoneRef = useRef(false);
   const userMutedRef = useRef(false);
+  const castStateRef = useRef(castState);
+  castStateRef.current = castState;
 
   // Grace period: set when backend reports the channel was deleted
   const [channelDeletedInfo, setChannelDeletedInfo] = useState<{ gracePeriodEnd: string } | null>(null);
@@ -228,6 +230,12 @@ export default function PlayerPage() {
 
   const setupVideoEvents = useCallback((video: HTMLVideoElement) => {
     const onPlay = () => {
+      // While casting, keep local video silent — stream plays on the TV
+      if (castStateRef.current === 'connected') {
+        video.pause();
+        video.muted = true;
+        return;
+      }
       setIsPlaying(true);
       setIsLoading(false);
       // Auto-unmute: video starts muted to bypass autoplay policy, unmute on first play
@@ -598,7 +606,7 @@ export default function PlayerPage() {
     };
     window.addEventListener('beforeunload', endSession);
     return () => {
-      endSession();
+      // Do NOT end session on unmount — keep cast alive when navigating back to browse.
       window.removeEventListener('beforeunload', endSession);
     };
   }, []);
@@ -1008,6 +1016,13 @@ export default function PlayerPage() {
 
       {castState === 'connected' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-[15] bg-black/90">
+          <button
+            onClick={() => setLocation(backUrl)}
+            className="absolute top-4 left-4 p-2.5 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition-all"
+            title="Volver (la conexión al TV se mantiene)"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
           <div className="flex flex-col items-center gap-5">
             <div className="relative">
               <Tv2 className="w-24 h-24 text-primary drop-shadow-[0_0_24px_rgba(239,68,68,0.6)]" />
@@ -1227,11 +1242,21 @@ export default function PlayerPage() {
               </button>
             )}
 
-            <CastButton
-              castState={castState}
-              onCast={handleCast}
-              className={ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}
-            />
+            {isIOS ? (
+                <button
+                  onClick={() => { try { (videoRef.current as any)?.webkitShowPlaybackTargetPicker?.(); } catch {} }}
+                  className={`p-2.5 sm:p-3 rounded-full backdrop-blur transition-all bg-black/40 text-white hover:bg-black/60 ${ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}`}
+                  title="AirPlay al TV"
+                >
+                  <Tv2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+              ) : (
+                <CastButton
+                  castState={castState}
+                  onCast={handleCast}
+                  className={ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}
+                />
+              )}
 
             <button
               onClick={toggleFullscreen}
