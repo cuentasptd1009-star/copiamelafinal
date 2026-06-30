@@ -646,35 +646,34 @@ export default function PlayerPage() {
       if (!v.paused) v.pause();
     }, [castState, currentUrl]);
 
-    // ── Cast channel-change via sessionStorage + reload ─────────────────────────
-    // When the user presses back and selects a different channel while cast is active,
-    // the Cast SDK async-reconnect during SPA navigation is unreliable. The reliable
-    // fix: detect the channel change on mount (via sessionStorage) and hard-reload so
-    // the SDK starts fresh and auto-sends the new channel (which the user confirmed works).
-    useEffect(() => {
-      const castWasActive = sessionStorage.getItem('supertv_cast_active') === '1';
-      const lastCastChannelId = sessionStorage.getItem('supertv_cast_channel_id') || '';
-      if (castWasActive && channelId && lastCastChannelId && lastCastChannelId !== channelId) {
-        // Different channel selected while cast was active — reload to switch the TV.
-        sessionStorage.setItem('supertv_cast_channel_id', channelId);
-        window.location.replace(window.location.href);
-      }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Keep refs so retry callbacks always read the latest live values
+    const castStateRef2 = useRef(castState);
+    castStateRef2.current = castState;
+    const castMediaRef2 = useRef(castMedia);
+    castMediaRef2.current = castMedia;
+    const currentTitleRef2 = useRef(currentTitle);
+    currentTitleRef2.current = currentTitle;
+    const currentFormatRef2 = useRef(currentFormat);
+    currentFormatRef2.current = currentFormat;
 
-    // Track cast session in sessionStorage so the mount-check above works after
-    // back-navigation (when React state is gone but sessionStorage persists).
+    // Auto-cast: fires whenever the active URL changes (new channel or fresh mount).
+    // The Cast SDK reconnects asynchronously after SPA back-navigation, so we retry
+    // at 300 ms and 1 200 ms to cover the full async-reconnect window.
     useEffect(() => {
-      if (castState === 'connected') {
-        sessionStorage.setItem('supertv_cast_active', '1');
-        if (channelId) sessionStorage.setItem('supertv_cast_channel_id', channelId);
-      } else if (castState === 'available') {
-        // 'available' means truly disconnected (not just reconnecting)
-        sessionStorage.removeItem('supertv_cast_active');
-        sessionStorage.removeItem('supertv_cast_channel_id');
-      }
-    }, [castState, channelId]);
-
-    
+      if (!currentUrl || currentFormatRef2.current === 'youtube') return;
+      let cancelled = false;
+      const trycast = () => {
+        if (cancelled) return;
+        if (castStateRef2.current === 'connected') {
+          castMediaRef2.current(currentUrl, currentTitleRef2.current, currentFormatRef2.current);
+        }
+      };
+      trycast();
+      const t1 = setTimeout(trycast, 300);
+      const t2 = setTimeout(trycast, 1200);
+      return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2); };
+    }, [currentUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  
 
   const handleCast = useCallback(() => {
     if (castState === 'connected') { stopCasting(); return; }
