@@ -34,8 +34,6 @@ function loadMediaOnSession(session: any, url: string, title: string, format: st
 export function useChromecast() {
   const [castState, setCastState] = useState<CastState>('unavailable');
   const [castIsPlaying, setCastIsPlaying] = useState(false);
-  const [presentationState, setPresentationState] = useState<'idle' | 'connecting' | 'connected'>('idle');
-  const presentationConnRef = useRef<any>(null);
   const remotePlayerRef = useRef<any>(null);
   const remotePlayerControllerRef = useRef<any>(null);
 
@@ -153,38 +151,5 @@ export function useChromecast() {
   }, []);
 
   // ── Presentation API: mirror app as second screen on the TV ──
-  const startPresentation = useCallback(async (token: string): Promise<boolean> => {
-    if (typeof (window as any).PresentationRequest === 'undefined') return false;
-    setPresentationState('connecting');
-    try {
-      const tvUrl = `${window.location.origin}/home?tv_receiver=1&t=${encodeURIComponent(token)}`;
-      const request = new (window as any).PresentationRequest([tvUrl]);
-      const conn = await request.start();
-      presentationConnRef.current = conn;
-      setPresentationState('connected');
-      const cleanup = () => { presentationConnRef.current = null; setPresentationState('idle'); };
-      conn.onclose = cleanup;
-      conn.onterminate = cleanup;
-      return true;
-    } catch {
-      setPresentationState('idle');
-      return false;
-    }
-  }, []);
-
-  const stopPresentation = useCallback(() => {
-    try { presentationConnRef.current?.terminate(); } catch {}
-    presentationConnRef.current = null;
-    setPresentationState('idle');
-  }, []);
-
-  const sendToPresentation = useCallback((data: object) => {
-    try {
-      if (presentationConnRef.current?.state === 'connected') {
-        presentationConnRef.current.send(JSON.stringify(data));
-      }
-    } catch {}
-  }, []);
-
-  return { presentationState, startPresentation, stopPresentation, sendToPresentation, castState, castIsPlaying, castMedia, stopCasting, castTogglePlay, castSeek, requestCast };
+  return { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay, castSeek, requestCast };
 }
