@@ -143,5 +143,12 @@ export function useChromecast() {
     } catch {}
   }, []);
 
-  return { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay, castSeek };
+  // Open the Cast device picker without loading media (for home screen button)
+  const requestCast = useCallback(() => {
+    try {
+      window.cast?.framework?.CastContext?.getInstance()?.requestSession().catch(() => {});
+    } catch {}
+  }, []);
+
+  return { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay, castSeek, requestCast };
 }
