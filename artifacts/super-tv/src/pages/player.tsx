@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
 import { useChromecast } from '@/hooks/useChromecast';
 import { CastButton } from '@/components/CastButton';
@@ -410,6 +410,12 @@ export default function PlayerPage() {
       video.muted = true;
       try {
         if (fmt === 'hls') {
+          // iOS Safari: use native HLS directly — hls.js uses MediaSource API
+          // which AirPlay cannot stream. Native HLS on iOS supports AirPlay natively.
+          if (isIOS && video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = currentUrl;
+            video.play().catch(() => {});
+          } else {
           const Hls = (await getHls()).default;
           if (Hls.isSupported()) {
             const isChannel = type === 'channel';
@@ -480,6 +486,7 @@ export default function PlayerPage() {
             setError('Tu navegador no soporta este formato de video.');
             setIsLoading(false);
           }
+          } // end non-iOS HLS branch
         } else if (fmt === 'dash') {
           const dashjs = await import('dashjs');
           const player = dashjs.MediaPlayer().create();
@@ -582,7 +589,20 @@ export default function PlayerPage() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent) && !/iPad|iPhone|iPod/.test(navigator.userAgent);
 
-  const { castState, castMedia, stopCasting } = useChromecast();
+  const { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay } = useChromecast();
+
+  // End cast session when the player unmounts or the browser tab closes
+  useEffect(() => {
+    const endSession = () => {
+      try { (window as any).cast?.framework?.CastContext?.getInstance()?.endCurrentSession(true); } catch {}
+    };
+    window.addEventListener('beforeunload', endSession);
+    return () => {
+      endSession();
+      window.removeEventListener('beforeunload', endSession);
+    };
+  }, []);
+
   const handleCast = useCallback(() => {
     if (castState === 'connected') { stopCasting(); return; }
     castMedia(currentUrl, currentTitle, currentFormat);
@@ -928,14 +948,14 @@ export default function PlayerPage() {
     >
       <video
         ref={videoRef}
-        className={`w-full h-full object-contain ${error ? 'hidden' : ''}`}
+        className={`w-full h-full object-contain ${error || castState === 'connected' ? 'hidden' : ''}`}
         style={{ willChange: 'transform', contain: 'strict' }}
         autoPlay
         muted
         playsInline
         webkit-playsinline=""
         x-webkit-airplay="allow"
-        controlsList="nofullscreen nodownload noremoteplayback"
+        controlsList="nofullscreen nodownload"
         disablePictureInPicture
       />
 
@@ -958,6 +978,23 @@ export default function PlayerPage() {
               </svg>
             </div>
             <span className="text-white/70 text-sm tracking-wide">Cargando…</span>
+          </div>
+        </div>
+      )}
+
+
+      {castState === 'connected' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-[15] bg-black/90">
+          <div className="flex flex-col items-center gap-5">
+            <div className="relative">
+              <Tv2 className="w-24 h-24 text-primary drop-shadow-[0_0_24px_rgba(239,68,68,0.6)]" />
+              <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-green-400 border-2 border-black animate-pulse" />
+            </div>
+            <div className="flex flex-col items-center gap-1 text-center">
+              <p className="text-white/50 text-xs uppercase tracking-widest">Reproduciendo en TV</p>
+              <p className="text-white text-base font-semibold max-w-[280px] truncate">{currentTitle}</p>
+            </div>
+            <p className="text-white/30 text-xs">Usa los controles de abajo para pausar o cambiar</p>
           </div>
         </div>
       )}
@@ -1091,10 +1128,10 @@ export default function PlayerPage() {
             )}
 
             <button
-              onClick={togglePlay}
+              onClick={castState === 'connected' ? castTogglePlay : togglePlay}
               className={`p-3.5 sm:p-5 rounded-full bg-primary text-white transition-all shadow-lg ${ctrlIndex === controls.indexOf('play') ? 'ring-4 ring-white scale-110' : 'hover:scale-105 hover:bg-primary/90'}`}
             >
-              {isPlaying
+              {(castState === 'connected' ? castIsPlaying : isPlaying)
                 ? <Pause className="w-6 h-6 sm:w-8 sm:h-8 fill-current" />
                 : <Play className="w-6 h-6 sm:w-8 sm:h-8 fill-current" />}
             </button>
