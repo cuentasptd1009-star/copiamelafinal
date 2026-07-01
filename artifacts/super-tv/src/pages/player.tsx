@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight, PictureInPicture2 } from 'lucide-react';
 import { CastIcon } from '@/components/CastIcon';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
 import { useChromecast } from '@/hooks/useChromecast';
@@ -143,6 +143,7 @@ export default function PlayerPage() {
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isPiP, setIsPiP] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -236,7 +237,7 @@ export default function PlayerPage() {
       if (!userMutedRef.current && video.muted) {
         video.muted = false;
       }
-      // Auto-fullscreen on first play â iOS only (Android user presses button manually)
+      // Auto-fullscreen on first play Ã¢ÂÂ iOS only (Android user presses button manually)
       if (!autoFullscreenDoneRef.current) {
         autoFullscreenDoneRef.current = true;
         const vid = video as any;
@@ -251,7 +252,7 @@ export default function PlayerPage() {
     const onCanPlay = () => { setIsBuffering(false); setIsLoading(false); };
     const onTimeUpdate = () => {
       const now = Date.now();
-      // Only update React state every 500ms â live channels don't need time tracking at all
+      // Only update React state every 500ms Ã¢ÂÂ live channels don't need time tracking at all
       if (!isLiveRef.current && now - lastDisplayUpdateRef.current > 500) {
         lastDisplayUpdateRef.current = now;
         setCurrentTime(video.currentTime);
@@ -339,11 +340,11 @@ export default function PlayerPage() {
               }, backoffMs);
               return;
             }
-            // All retries exhausted â show the real error
+            // All retries exhausted Ã¢ÂÂ show the real error
             msg = err.code === 3
-              ? 'Error al decodificar el video. El archivo puede estar daÃ±ado o usar un codec no soportado.'
-              : 'Error de red al cargar el video. Comprueba tu conexiÃ³n e intenta de nuevo.';
-          } else if (err.code === 1) msg = 'ReproducciÃ³n interrumpida. Intenta de nuevo.';
+              ? 'Error al decodificar el video. El archivo puede estar daÃÂ±ado o usar un codec no soportado.'
+              : 'Error de red al cargar el video. Comprueba tu conexiÃÂ³n e intenta de nuevo.';
+          } else if (err.code === 1) msg = 'ReproducciÃÂ³n interrumpida. Intenta de nuevo.';
         }
         setError(msg);
         setIsLoading(false);
@@ -430,12 +431,12 @@ export default function PlayerPage() {
     let destroyed = false;
 
     const init = async () => {
-      // React's `muted` JSX prop doesn't apply to the DOM â set imperatively so
+      // React's `muted` JSX prop doesn't apply to the DOM Ã¢ÂÂ set imperatively so
       // the browser allows autoplay (muted autoplay is universally permitted)
       video.muted = true;
       try {
         if (fmt === 'hls') {
-          // iOS Safari: use native HLS directly â hls.js uses MediaSource API
+          // iOS Safari: use native HLS directly Ã¢ÂÂ hls.js uses MediaSource API
           // which AirPlay cannot stream. Native HLS on iOS supports AirPlay natively.
           if (isIOS && video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = currentUrl;
@@ -458,7 +459,7 @@ export default function PlayerPage() {
               // Assume 2Mbps connection so ABR doesn't waste time probing bandwidth
               abrEwmaDefaultEstimate: 2_000_000,
               progressive: true,
-              // Skip bandwidth test on channels â we want immediate playback
+              // Skip bandwidth test on channels Ã¢ÂÂ we want immediate playback
               testBandwidth: !isChannel,
               // Tight timeouts: fail fast so proxy fallback kicks in quickly
               // Higher timeouts to survive Vercel cold starts (3-5s) and large 4K segments
@@ -470,7 +471,7 @@ export default function PlayerPage() {
               nudgeMaxRetry: 6,
               nudgeOffset: 0.1,
               highBufferWatchdogPeriod: 1,
-              // Skip stall recovery delay for channels â jump immediately
+              // Skip stall recovery delay for channels Ã¢ÂÂ jump immediately
               stallReported: isChannel ? 0.3 : 1,
             });
             hls.loadSource(currentUrl);
@@ -487,7 +488,7 @@ export default function PlayerPage() {
             hls.on(Hls.Events.ERROR, (_, data) => {
               if (data.fatal) {
                 if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retryCountRef.current === 0 && type === 'channel' && channelId) {
-                  // Direct stream failed (CORS or network) â fall back to server proxy
+                  // Direct stream failed (CORS or network) Ã¢ÂÂ fall back to server proxy
                   retryCountRef.current = 1;
                   cleanupRef.current = null;
                   hls.destroy();
@@ -498,7 +499,7 @@ export default function PlayerPage() {
                 } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
                   hls.recoverMediaError();
                 } else {
-                  setError('No se pudo cargar el stream. El canal puede estar sin seÃ±al.');
+                  setError('No se pudo cargar el stream. El canal puede estar sin seÃÂ±al.');
                   setIsLoading(false);
                 }
               }
@@ -616,7 +617,7 @@ export default function PlayerPage() {
 
   // AirPlay is supported on ALL iOS browsers (Safari, Chrome, Edge, Firefox on iOS all
   // use WebKit which exposes webkitShowPlaybackTargetPicker) and macOS Safari.
-  // We feature-detect once â no need to wait for any event.
+  // We feature-detect once Ã¢ÂÂ no need to wait for any event.
   const supportsAirPlay = (() => {
     try { return 'webkitShowPlaybackTargetPicker' in document.createElement('video'); } catch { return false; }
   })();
@@ -624,21 +625,21 @@ export default function PlayerPage() {
   const { castState, castIsPlaying, castMedia, stopCasting, castTogglePlay } = useChromecast();
 
   // Pause/stop handling when leaving the page.
-  // visibilitychange (tab hidden): only pause LOCAL video â do NOT stop the
+  // visibilitychange (tab hidden): only pause LOCAL video Ã¢ÂÂ do NOT stop the
   //   Chromecast session because Chromecast is independent of the browser tab.
   //   This way the user can switch to WhatsApp and the TV keeps playing.
-  // pagehide (persisted=false): real navigation away â end cast session.
-  // beforeunload: tab/window actually closing â end cast session.
+  // pagehide (persisted=false): real navigation away Ã¢ÂÂ end cast session.
+  // beforeunload: tab/window actually closing Ã¢ÂÂ end cast session.
   useEffect(() => {
     // Pause local video when tab is hidden (e.g. user switches to WhatsApp).
-      // Do NOT end the Chromecast session â the TV is independent of the browser
+      // Do NOT end the Chromecast session Ã¢ÂÂ the TV is independent of the browser
       // tab, so reload or navigation should keep the TV playing.
       const onVisibilityChange = () => {
           if (!document.hidden) return;
           try {
             const video = videoRef.current;
             if (!video) return;
-            // Don't pause if AirPlay (iOS wireless playback) is active â AirPlay needs
+            // Don't pause if AirPlay (iOS wireless playback) is active Ã¢ÂÂ AirPlay needs
             // the video element to keep playing to maintain the stream to the TV.
             const isAirPlaying =
               (video as any).webkitCurrentPlaybackTargetIsWireless === true ||
@@ -659,7 +660,7 @@ export default function PlayerPage() {
     }
   }, [castState]);
 
-    // Silence local video while casting â also fires on channel change so audio stops
+    // Silence local video while casting Ã¢ÂÂ also fires on channel change so audio stops
     useEffect(() => {
       if (castState !== 'connected') return;
       const v = videoRef.current;
@@ -764,6 +765,18 @@ export default function PlayerPage() {
     showControlsTemporarily();
   }, [showControlsTemporarily, isIOS, isAndroid, isFullscreen]);
 
+    const togglePiP = useCallback(async () => {
+      const vid = videoRef.current as any;
+      if (!vid) return;
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if ((document as any).pictureInPictureEnabled !== false) {
+          await vid.requestPictureInPicture();
+        }
+      } catch {}
+    }, []);
+
   useEffect(() => {
     const vid = videoRef.current as any;
     const onFsChange = () => {
@@ -800,7 +813,20 @@ export default function PlayerPage() {
     };
   }, []);
 
-  const handleMinimize = useCallback(() => {
+    useEffect(() => {
+      const vid = videoRef.current as any;
+      if (!vid) return;
+      const onEnter = () => setIsPiP(true);
+      const onLeave = () => setIsPiP(false);
+      vid.addEventListener('enterpictureinpicture', onEnter);
+      vid.addEventListener('leavepictureinpicture', onLeave);
+      return () => {
+        vid.removeEventListener('enterpictureinpicture', onEnter);
+        vid.removeEventListener('leavepictureinpicture', onLeave);
+      };
+    }, []);
+
+    const handleMinimize = useCallback(() => {
     if (type === 'channel' && currentUrl) {
       updateMiniPlayerState({ isMinimized: true, url: currentUrl, title: currentTitle });
       setLocation(backUrl);
@@ -842,7 +868,7 @@ export default function PlayerPage() {
     setCurrentUrl(proxyUrl);
     setCurrentTitle(ch.name);
     // While casting: load the new channel on the existing Chromecast session
-    // without disconnecting â phone stays as remote control for the new channel
+    // without disconnecting Ã¢ÂÂ phone stays as remote control for the new channel
     if (castState === 'connected') {
       castMedia(proxyUrl, ch.name, fmt);
     }
@@ -875,7 +901,7 @@ export default function PlayerPage() {
     setLocation(`/player?${params.toString()}`);
   }, [nextEpisodeId, nextEpisodeUrl, nextEpisodeTitle, nextSeasonId, nextSeasonNumber, nextEpisodeNumber, nextEpisodeFormat, seriesId, seasonId, seasonNumber, seriesTitle]);
 
-  // ââ Media Session API ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Media Session API Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   // Updates the Android/iOS notification bar with channel name + artwork and
   // registers prev/next channel handlers so the user can switch channels from
   // the notification shade or lock screen without reopening the browser.
@@ -916,7 +942,7 @@ export default function PlayerPage() {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [isPlaying]);
 
-  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'minimize', 'cast', 'fullscreen'], [hasChannels]);
+  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'minimize', 'cast', 'pip', 'fullscreen'], [hasChannels]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -965,7 +991,8 @@ export default function PlayerPage() {
             case 'mute': toggleMute(); break;
             case 'minimize': handleMinimize(); break;
             case 'cast': handleCast(); break;
-            case 'fullscreen': toggleFullscreen(); break;
+            case 'pip': togglePiP(); break;
+              case 'fullscreen': toggleFullscreen(); break;
           }
           break;
         case 'Escape':
@@ -1019,7 +1046,7 @@ export default function PlayerPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [ctrlIndex, backUrl, togglePlay, toggleMute, toggleFullscreen, skip, handleVolumeChange, showControlsTemporarily, hasChannels, goPrevChannel, goNextChannel, handleMinimize, handleBack, controls]);
+  }, [ctrlIndex, backUrl, togglePlay, toggleMute, toggleFullscreen, togglePiP, skip, handleVolumeChange, showControlsTemporarily, hasChannels, goPrevChannel, goNextChannel, handleMinimize, handleBack, controls]);
 
   useEffect(() => {
     showControlsTemporarily();
@@ -1037,7 +1064,7 @@ export default function PlayerPage() {
         </div>
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-white">Acceso vencido</h2>
-          <p className="text-white/60 max-w-xs">Tu cÃ³digo venciÃ³. Para renovarlo, contacta a tu proveedor para activarlo.</p>
+          <p className="text-white/60 max-w-xs">Tu cÃÂ³digo venciÃÂ³. Para renovarlo, contacta a tu proveedor para activarlo.</p>
         </div>
         <button onClick={() => setLocation('/home')} className="text-sm text-white/50 hover:text-white transition-colors underline underline-offset-4">
           Volver al inicio
@@ -1048,7 +1075,7 @@ export default function PlayerPage() {
 
   if (currentFormat === 'youtube' || detectFormat(currentUrl) === 'youtube') {
     const ytId = extractYouTubeId(currentUrl);
-    if (!ytId) return <div className="flex items-center justify-center h-[100dvh] bg-black text-white/60 text-sm">URL de YouTube invÃ¡lida</div>;
+    if (!ytId) return <div className="flex items-center justify-center h-[100dvh] bg-black text-white/60 text-sm">URL de YouTube invÃÂ¡lida</div>;
 
     const handleHideFromCatalog = movieId ? async () => {
       try {
@@ -1143,7 +1170,7 @@ export default function PlayerPage() {
                 </defs>
               </svg>
             </div>
-            <span className="text-white/70 text-sm tracking-wide">Cargandoâ¦</span>
+            <span className="text-white/70 text-sm tracking-wide">CargandoÃ¢ÂÂ¦</span>
           </div>
         </div>
       )}
@@ -1196,7 +1223,7 @@ export default function PlayerPage() {
                 >
                   Desconectar TV
                 </button>
-                <p className="text-white/20 text-[10px]">Toca â¸ abajo para pausar</p>
+                <p className="text-white/20 text-[10px]">Toca Ã¢ÂÂ¸ abajo para pausar</p>
               </div>
           </div>
         </div>
@@ -1241,10 +1268,10 @@ export default function PlayerPage() {
         const minsLeft = Math.max(0, Math.ceil((end - Date.now()) / 60_000));
         return (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-orange-600/90 text-white rounded-xl px-5 py-3 text-sm flex items-center gap-3 backdrop-blur shadow-lg max-w-[90vw]">
-            <span className="text-orange-200">â </span>
+            <span className="text-orange-200">Ã¢ÂÂ </span>
             <div>
               <div className="font-semibold">Canal eliminado</div>
-              <div className="text-xs text-orange-100">SeguirÃ¡s viendo durante {minsLeft > 1 ? `${minsLeft} minutos mÃ¡s` : 'menos de 1 minuto'}. Luego volverÃ¡s a los canales.</div>
+              <div className="text-xs text-orange-100">SeguirÃÂ¡s viendo durante {minsLeft > 1 ? `${minsLeft} minutos mÃÂ¡s` : 'menos de 1 minuto'}. Luego volverÃÂ¡s a los canales.</div>
             </div>
           </div>
         );
@@ -1280,7 +1307,7 @@ export default function PlayerPage() {
             <div className="min-w-0 flex-1">
               <h2 className="text-sm sm:text-lg font-semibold text-white truncate drop-shadow">{currentTitle}</h2>
               <div className="flex items-center gap-2 mt-0.5">
-                {isLive && <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] sm:text-[10px] rounded uppercase tracking-wider font-bold">â EN VIVO</span>}
+                {isLive && <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] sm:text-[10px] rounded uppercase tracking-wider font-bold">Ã¢ÂÂ EN VIVO</span>}
                 <span className="text-white/40 text-[9px] sm:text-[10px] uppercase tracking-wide">{formatLabel}</span>
               </div>
             </div>
@@ -1370,7 +1397,7 @@ export default function PlayerPage() {
               </button>
             )}
 
-            {/* AirPlay â visible on ALL iOS browsers and macOS Safari (all use WebKit) */}
+            {/* AirPlay Ã¢ÂÂ visible on ALL iOS browsers and macOS Safari (all use WebKit) */}
             {supportsAirPlay && (
               <button
                 onClick={() => {
@@ -1383,7 +1410,7 @@ export default function PlayerPage() {
                 <CastIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )}
-            {/* Chromecast â only on non-AirPlay devices (Android/Desktop Chrome).
+            {/* Chromecast Ã¢ÂÂ only on non-AirPlay devices (Android/Desktop Chrome).
                 On iOS/macOS Safari supportsAirPlay=true so this is hidden. */}
             {!supportsAirPlay && (
               <CastButton
@@ -1393,20 +1420,30 @@ export default function PlayerPage() {
               />
             )}
 
-            <button
-              onClick={toggleFullscreen}
-              className={`p-2.5 sm:p-3 rounded-full bg-black/40 text-white backdrop-blur transition-all ${ctrlIndex === controls.indexOf('fullscreen') ? 'ring-2 ring-primary scale-110' : 'hover:bg-black/60'}`}
-            >
-              {isFullscreen ? <Minimize className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize className="w-4 h-4 sm:w-5 sm:h-5" />}
-            </button>
+            {(document as any).pictureInPictureEnabled && (
+                <button
+                  onClick={togglePiP}
+                  className={`p-2.5 sm:p-3 rounded-full bg-black/40 text-white backdrop-blur transition-all ${ctrlIndex === controls.indexOf('pip') ? 'ring-2 ring-primary scale-110' : 'hover:bg-black/60'}`}
+                  title="Ventana flotante"
+                >
+                  <PictureInPicture2 className={`w-4 h-4 sm:w-5 sm:h-5 ${isPiP ? 'text-primary' : ''}`} />
+                </button>
+              )}
+
+              <button
+                onClick={toggleFullscreen}
+                className={`p-2.5 sm:p-3 rounded-full bg-black/40 text-white backdrop-blur transition-all ${ctrlIndex === controls.indexOf('fullscreen') ? 'ring-2 ring-primary scale-110' : 'hover:bg-black/60'}`}
+              >
+                {isFullscreen ? <Minimize className="w-4 h-4 sm:w-5 sm:h-5" /> : <Maximize className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </button>
           </div>
 
           <p className="text-center text-white/25 text-[9px] sm:text-[10px] pb-1">
             {hasChannels
-              ? 'â² Canal siguiente Â· â¼ Canal anterior Â· ââº Controles Â· Esc Minimizar'
+              ? 'Ã¢ÂÂ² Canal siguiente ÃÂ· Ã¢ÂÂ¼ Canal anterior ÃÂ· Ã¢ÂÂÃ¢ÂÂº Controles ÃÂ· Esc Minimizar'
               : isLive
-                ? 'â²â¼ Volumen Â· ââº Controles Â· Esc Salir'
-                : 'Espacio Reproducir Â· â²â¼ Volumen Â· Shift+ââº Saltar 30s Â· F Pantalla completa'}
+                ? 'Ã¢ÂÂ²Ã¢ÂÂ¼ Volumen ÃÂ· Ã¢ÂÂÃ¢ÂÂº Controles ÃÂ· Esc Salir'
+                : 'Espacio Reproducir ÃÂ· Ã¢ÂÂ²Ã¢ÂÂ¼ Volumen ÃÂ· Shift+Ã¢ÂÂÃ¢ÂÂº Saltar 30s ÃÂ· F Pantalla completa'}
           </p>
         </div>
       </div>
