@@ -712,13 +712,22 @@ export default function PlayerPage() {
         // iOS Safari: fullscreen only works via webkitEnterFullscreen on the video element
         if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
       } else if (isAndroid) {
-        // Android Chrome: native fullscreen API on any element still shows the video's
-        // native controls bar. Use CSS fake-fullscreen instead so our custom controls
-        // always stay visible.
-        try { screen.orientation?.lock('landscape').catch(() => {}); } catch {}
-        setIsFullscreen(true);
-        return;
-      } else {
+          // Android Chrome: requestFullscreen on the container div hides browser bars
+          // AND keeps our custom controls visible (unlike using the video element directly).
+          const req = el.requestFullscreen || el.webkitRequestFullscreen;
+          if (req) {
+            try {
+              const p = req.call(el);
+              const lockLandscape = () => { try { screen.orientation?.lock('landscape').catch(() => {}); } catch {} };
+              if (p && typeof p.then === 'function') { p.then(lockLandscape).catch(() => {}); } else { lockLandscape(); }
+              return;
+            } catch {}
+          }
+          // Fallback if API unavailable
+          try { screen.orientation?.lock('landscape').catch(() => {}); } catch {}
+          setIsFullscreen(true);
+          return;
+        } else {
         // Desktop: use requestFullscreen on the container + force landscape orientation
         const req = el.requestFullscreen || el.webkitRequestFullscreen;
         const target = el;
@@ -738,11 +747,15 @@ export default function PlayerPage() {
       fsExitByToggleRef.current = true;
       try { screen.orientation?.unlock(); } catch {}
       if (isAndroid) {
-        // Android fake fullscreen: just reset state
-        fsExitByToggleRef.current = false;
-        setIsFullscreen(false);
-        return;
-      }
+          fsExitByToggleRef.current = false;
+          // Exit real fullscreen if active
+          const exitFn = (document as any).exitFullscreen || (document as any).webkitExitFullscreen;
+          if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+            try { exitFn?.call(document); } catch {}
+          }
+          setIsFullscreen(false);
+          return;
+        }
       const exit = (document as any).exitFullscreen || (document as any).webkitExitFullscreen;
       if (exit) { try { exit.call(document); return; } catch {} }
       if (vid?.webkitExitFullscreen) { try { vid.webkitExitFullscreen(); return; } catch {} }
