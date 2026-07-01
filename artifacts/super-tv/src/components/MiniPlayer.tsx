@@ -121,7 +121,7 @@ export function MiniPlayer() {
       const vid = videoRef.current;
       if (!vid) return;
       const onEnter = () => { setIsPiP(true); isPiPRef.current = true; };
-      const onLeave = () => { setIsPiP(false); isPiPRef.current = false; };
+      const onLeave = () => { setIsPiP(false); isPiPRef.current = false; setTimeout(() => actionsRef.current.handleMaximize(), 150); };
       const onPause = () => { if (isPiPRef.current) vid.play().catch(() => {}); };
       vid.addEventListener('enterpictureinpicture', onEnter);
       vid.addEventListener('leavepictureinpicture', onLeave);
