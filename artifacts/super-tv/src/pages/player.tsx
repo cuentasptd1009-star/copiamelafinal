@@ -359,9 +359,9 @@ export default function PlayerPage() {
             }
             // All retries exhausted ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ show the real error
             msg = err.code === 3
-              ? 'Error al decodificar el video. El archivo puede estar daÃÂÃÂÃÂÃÂ±ado o usar un codec no soportado.'
-              : 'Error de red al cargar el video. Comprueba tu conexiÃÂÃÂÃÂÃÂ³n e intenta de nuevo.';
-          } else if (err.code === 1) msg = 'ReproducciÃÂÃÂÃÂÃÂ³n interrumpida. Intenta de nuevo.';
+              ? 'Error al decodificar el video. El archivo puede estar dañado o usar un codec no soportado.'
+              : 'Error de red al cargar el video. Comprueba tu conexión e intenta de nuevo.';
+          } else if (err.code === 1) msg = 'Reproducción interrumpida. Intenta de nuevo.';
         }
         setError(msg);
         setIsLoading(false);
@@ -516,7 +516,7 @@ export default function PlayerPage() {
                 } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
                   hls.recoverMediaError();
                 } else {
-                  setError('No se pudo cargar el stream. El canal puede estar sin seÃÂÃÂÃÂÃÂ±al.');
+                  setError('No se pudo cargar el stream. El canal puede estar sin señal.');
                   setIsLoading(false);
                 }
               }
@@ -1062,7 +1062,7 @@ export default function PlayerPage() {
         </div>
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-white">Acceso vencido</h2>
-          <p className="text-white/60 max-w-xs">Tu cÃÂÃÂÃÂÃÂ³digo venciÃÂÃÂÃÂÃÂ³. Para renovarlo, contacta a tu proveedor para activarlo.</p>
+          <p className="text-white/60 max-w-xs">Tu código venció. Para renovarlo, contacta a tu proveedor para activarlo.</p>
         </div>
         <button onClick={() => setLocation('/home')} className="text-sm text-white/50 hover:text-white transition-colors underline underline-offset-4">
           Volver al inicio
@@ -1073,7 +1073,7 @@ export default function PlayerPage() {
 
   if (currentFormat === 'youtube' || detectFormat(currentUrl) === 'youtube') {
     const ytId = extractYouTubeId(currentUrl);
-    if (!ytId) return <div className="flex items-center justify-center h-[100dvh] bg-black text-white/60 text-sm">URL de YouTube invÃÂÃÂÃÂÃÂ¡lida</div>;
+    if (!ytId) return <div className="flex items-center justify-center h-[100dvh] bg-black text-white/60 text-sm">URL de YouTube inválida</div>;
 
     const handleHideFromCatalog = movieId ? async () => {
       try {
@@ -1167,7 +1167,7 @@ export default function PlayerPage() {
                 </defs>
               </svg>
             </div>
-            <span className="text-white/70 text-sm tracking-wide">CargandoÃÂÃÂ¢ÃÂÃÂÃÂÃÂ¦</span>
+            <span className="text-white/70 text-sm tracking-wide">Cargando...</span>
           </div>
         </div>
       )}
@@ -1220,7 +1220,7 @@ export default function PlayerPage() {
                 >
                   Desconectar TV
                 </button>
-                <p className="text-white/20 text-[10px]">Toca ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ¸ abajo para pausar</p>
+                <p className="text-white/20 text-[10px]">Toca abajo para pausar</p>
               </div>
           </div>
         </div>
@@ -1265,10 +1265,10 @@ export default function PlayerPage() {
         const minsLeft = Math.max(0, Math.ceil((end - Date.now()) / 60_000));
         return (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-orange-600/90 text-white rounded-xl px-5 py-3 text-sm flex items-center gap-3 backdrop-blur shadow-lg max-w-[90vw]">
-            <span className="text-orange-200">ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ </span>
+            <span className="text-orange-200">⚠</span>
             <div>
               <div className="font-semibold">Canal eliminado</div>
-              <div className="text-xs text-orange-100">SeguirÃÂÃÂÃÂÃÂ¡s viendo durante {minsLeft > 1 ? `${minsLeft} minutos mÃÂÃÂÃÂÃÂ¡s` : 'menos de 1 minuto'}. Luego volverÃÂÃÂÃÂÃÂ¡s a los canales.</div>
+              <div className="text-xs text-orange-100">Seguirás viendo durante {minsLeft > 1 ? `${minsLeft} minutos más` : 'menos de 1 minuto'}. Luego volverás a los canales.</div>
             </div>
           </div>
         );
@@ -1304,7 +1304,7 @@ export default function PlayerPage() {
             <div className="min-w-0 flex-1">
               <h2 className="text-sm sm:text-lg font-semibold text-white truncate drop-shadow">{currentTitle}</h2>
               <div className="flex items-center gap-2 mt-0.5">
-                {isLive && <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] sm:text-[10px] rounded uppercase tracking-wider font-bold">ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ EN VIVO</span>}
+                {isLive && <span className="px-2 py-0.5 bg-red-600 text-white text-[9px] sm:text-[10px] rounded uppercase tracking-wider font-bold">EN VIVO</span>}
                 <span className="text-white/40 text-[9px] sm:text-[10px] uppercase tracking-wide">{formatLabel}</span>
               </div>
             </div>
@@ -1427,10 +1427,10 @@ export default function PlayerPage() {
 
           <p className="text-center text-white/25 text-[9px] sm:text-[10px] pb-1">
             {hasChannels
-              ? 'ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ² Canal siguiente ÃÂÃÂÃÂÃÂ· ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ¼ Canal anterior ÃÂÃÂÃÂÃÂ· ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂº Controles ÃÂÃÂÃÂÃÂ· Esc Minimizar'
+              ? '↑ Canal siguiente · ↓ Canal anterior · ← → Controles · Esc Minimizar'
               : isLive
-                ? 'ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ²ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ¼ Volumen ÃÂÃÂÃÂÃÂ· ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂº Controles ÃÂÃÂÃÂÃÂ· Esc Salir'
-                : 'Espacio Reproducir ÃÂÃÂÃÂÃÂ· ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ²ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ¼ Volumen ÃÂÃÂÃÂÃÂ· Shift+ÃÂÃÂ¢ÃÂÃÂÃÂÃÂÃÂÃÂ¢ÃÂÃÂÃÂÃÂº Saltar 30s ÃÂÃÂÃÂÃÂ· F Pantalla completa'}
+                ? '↑ ↓ Volumen · ← → Controles · Esc Salir'
+                : 'Espacio: Reproducir · ↑↓ Volumen · Shift+←→ Saltar 30s · F: Pantalla completa'}
           </p>
         </div>
       </div>
