@@ -848,7 +848,6 @@ export default function PlayerPage() {
 
   const togglePiP = useCallback(() => {
     handleMinimizeRef.current();
-    setTimeout(() => window.dispatchEvent(new Event('supertv:mini-enter-pip')), 400);
   }, []);
 
   const showOsdBriefly = useCallback(() => {
