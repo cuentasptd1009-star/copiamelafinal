@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight, PictureInPicture2 } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, ChevronLeft, ChevronRight, PictureInPicture2 } from 'lucide-react';
 import { CastIcon } from '@/components/CastIcon';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
 import { useChromecast } from '@/hooks/useChromecast';
@@ -942,7 +942,7 @@ export default function PlayerPage() {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [isPlaying]);
 
-  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'minimize', 'cast', 'pip', 'fullscreen'], [hasChannels]);
+  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'cast', 'pip', 'fullscreen'], [hasChannels]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -989,7 +989,6 @@ export default function PlayerPage() {
             case 'skipfwd': skip(10); break;
             case 'nextch': goNextChannel(); break;
             case 'mute': toggleMute(); break;
-            case 'minimize': handleMinimize(); break;
             case 'cast': handleCast(); break;
             case 'pip': togglePiP(); break;
               case 'fullscreen': toggleFullscreen(); break;
@@ -1385,16 +1384,6 @@ export default function PlayerPage() {
               </button>
             )}
 
-
-            {type === 'channel' && (
-              <button
-                onClick={handleMinimize}
-                className={`p-2.5 sm:p-3 rounded-full bg-black/40 text-white backdrop-blur transition-all ${ctrlIndex === controls.indexOf('minimize') ? 'ring-2 ring-primary scale-110' : 'hover:bg-black/60'}`}
-                title="Minimizar"
-              >
-                <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
-            )}
 
             {/* AirPlay ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ visible on ALL iOS browsers and macOS Safari (all use WebKit) */}
             {supportsAirPlay && (
