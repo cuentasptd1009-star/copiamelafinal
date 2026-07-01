@@ -1347,21 +1347,6 @@ export default function PlayerPage() {
               </button>
             )}
 
-            <div className="flex items-center gap-1.5 sm:gap-2 bg-black/40 rounded-full px-2.5 sm:px-3 py-1.5 sm:py-2 backdrop-blur">
-              <button
-                onClick={toggleMute}
-                className={`p-1 sm:p-1.5 rounded-full text-white transition-all ${ctrlIndex === controls.indexOf('mute') ? 'ring-2 ring-primary scale-110' : 'hover:bg-white/10'}`}
-              >
-                {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" /> : <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" />}
-              </button>
-              <input
-                type="range" min="0" max="1" step="0.05"
-                value={isMuted ? 0 : volume}
-                onChange={e => handleVolumeChange(parseFloat(e.target.value))}
-                className="w-14 sm:w-20 accent-primary"
-              />
-              <span className="text-[10px] text-white/50 w-7 text-right">{Math.round((isMuted ? 0 : volume) * 100)}%</span>
-            </div>
 
             {type === 'channel' && (
               <button
