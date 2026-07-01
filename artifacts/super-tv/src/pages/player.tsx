@@ -610,9 +610,18 @@ export default function PlayerPage() {
       // Do NOT end the Chromecast session — the TV is independent of the browser
       // tab, so reload or navigation should keep the TV playing.
       const onVisibilityChange = () => {
-        if (!document.hidden) return;
-        try { videoRef.current?.pause(); } catch {}
-      };
+          if (!document.hidden) return;
+          try {
+            const video = videoRef.current;
+            if (!video) return;
+            // Don't pause if AirPlay (iOS wireless playback) is active — AirPlay needs
+            // the video element to keep playing to maintain the stream to the TV.
+            const isAirPlaying =
+              (video as any).webkitCurrentPlaybackTargetIsWireless === true ||
+              (video as any).remote?.state === 'connected';
+            if (!isAirPlaying) video.pause();
+          } catch {}
+        };
       document.addEventListener('visibilitychange', onVisibilityChange);
       return () => {
         document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -1120,9 +1129,6 @@ export default function PlayerPage() {
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <p className="text-white/50 text-xs uppercase tracking-widest">Reproduciendo en TV</p>
-                {castDeviceName ? (
-                  <p className="text-white/35 text-[11px] tracking-wide mt-0.5">📺 {castDeviceName}</p>
-                ) : null}
               {hasChannels && (
                 <p className="text-primary text-[11px] font-bold uppercase tracking-widest">Canal {channelIndex + 1}</p>
               )}
