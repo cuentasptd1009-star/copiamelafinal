@@ -71,6 +71,7 @@ export default function PlayerPage() {
   const category = searchParams.get('category');
   const startFrom = searchParams.get('startFrom');
   const episodeId = searchParams.get('episodeId');
+  const requestFullscreenOnMount = searchParams.get('fullscreen') === '1';
   const seriesId = searchParams.get('seriesId');
   const seasonId = searchParams.get('seasonId');
   const seasonNumber = searchParams.get('seasonNumber');
@@ -172,6 +173,7 @@ export default function PlayerPage() {
   const lastDisplayUpdateRef = useRef(0);
   const isLiveRef = useRef(type === 'channel');
   const autoFullscreenDoneRef = useRef(false);
+  const requestFullscreenOnMountRef = useRef(requestFullscreenOnMount);
   const userMutedRef = useRef(false);
 
   // Grace period: set when backend reports the channel was deleted
@@ -237,16 +239,31 @@ export default function PlayerPage() {
       if (!userMutedRef.current && video.muted) {
         video.muted = false;
       }
-      // Auto-fullscreen on first play ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ iOS only (Android user presses button manually)
-      if (!autoFullscreenDoneRef.current) {
-        autoFullscreenDoneRef.current = true;
-        const vid = video as any;
-        const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
-        if (!isFull && /iPad|iPhone|iPod/.test(navigator.userAgent) && vid?.webkitEnterFullscreen) {
-          try { vid.webkitEnterFullscreen(); } catch {}
+      // Auto-fullscreen on first play
+        if (!autoFullscreenDoneRef.current) {
+          autoFullscreenDoneRef.current = true;
+          const vid = video as any;
+          const isFull = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+          if (!isFull) {
+            if (/iPad|iPhone|iPod/.test(navigator.userAgent) && vid?.webkitEnterFullscreen) {
+              try { vid.webkitEnterFullscreen(); } catch {}
+            } else if (requestFullscreenOnMountRef.current) {
+              const el = containerRef.current as any;
+              if (el) {
+                const req = el.requestFullscreen || el.webkitRequestFullscreen;
+                if (req) {
+                  try {
+                    const p = req.call(el);
+                    if (p && typeof p.then === 'function') {
+                      p.then(() => { try { screen.orientation?.lock('landscape').catch(() => {}); } catch {} }).catch(() => {});
+                    } else { try { screen.orientation?.lock('landscape').catch(() => {}); } catch {} }
+                  } catch {}
+                }
+              }
+            }
+          }
         }
-      }
-    };
+      };
     const onPause = () => setIsPlaying(false);
     const onWaiting = () => setIsBuffering(true);
     const onCanPlay = () => { setIsBuffering(false); setIsLoading(false); };
