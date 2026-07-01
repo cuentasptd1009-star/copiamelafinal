@@ -165,6 +165,7 @@ export default function PlayerPage() {
   const currentUrlRef = useRef(currentUrl);
   currentUrlRef.current = currentUrl;
   const retryCountRef = useRef(0);
+    const decodeRetryRef = useRef(0);   // retries for network/decode errors on slow connections
   // Throttle currentTime React state updates to max once per 500ms to avoid
   // constant re-renders (timeupdate fires ~4x/sec) while keeping the UI smooth
   const lastDisplayUpdateRef = useRef(0);
@@ -318,12 +319,34 @@ export default function PlayerPage() {
           } else {
             msg = 'Formato no soportado. El canal puede no ser compatible con este navegador.';
           }
-        } else if (err.code === 3) msg = 'Error al decodificar el video. El archivo puede estar dañado o usar un codec no soportado.';
-        else if (err.code === 2) msg = 'Error de red al cargar el video. Comprueba tu conexión e intenta de nuevo.';
-        else if (err.code === 1) msg = 'Reproducción interrumpida. Intenta de nuevo.';
-      }
-      setError(msg);
-      setIsLoading(false);
+        } else if (err.code === 3 || err.code === 2) {
+            // On slow connections the browser throws code 3 (decode) or 2 (network)
+            // even when the stream is perfectly fine. Auto-retry up to 3 times with
+            // back-off before showing an error screen, just like TikTok/YouTube do.
+            const MAX_RETRIES = 3;
+            if (decodeRetryRef.current < MAX_RETRIES) {
+              decodeRetryRef.current += 1;
+              setIsLoading(true);
+              setError(null);
+              const backoffMs = 2000 * decodeRetryRef.current; // 2 s, 4 s, 6 s
+              setTimeout(() => {
+                const v = videoRef.current;
+                if (!v) return;
+                const src = v.src || v.currentSrc;
+                if (src) v.src = src;
+                v.load();
+                v.play().catch(() => {});
+              }, backoffMs);
+              return;
+            }
+            // All retries exhausted — show the real error
+            msg = err.code === 3
+              ? 'Error al decodificar el video. El archivo puede estar dañado o usar un codec no soportado.'
+              : 'Error de red al cargar el video. Comprueba tu conexión e intenta de nuevo.';
+          } else if (err.code === 1) msg = 'Reproducción interrumpida. Intenta de nuevo.';
+        }
+        setError(msg);
+        setIsLoading(false);
     };
 
     video.addEventListener('play', onPlay);
@@ -353,6 +376,7 @@ export default function PlayerPage() {
 
   useEffect(() => {
     retryCountRef.current = 0;
+    decodeRetryRef.current = 0;
     if (!currentUrl) { setLocation(backUrl); return; }
     const video = videoRef.current;
     if (!video) return;
