@@ -13,6 +13,8 @@ export function MiniPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const [showOsd, setShowOsd] = useState(false);
+  const [isPiP, setIsPiP] = useState(false);
+  const isPiPRef = useRef(false);
   const osdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionsRef = useRef<{ flashOsd: () => void; handleMaximize: () => void; handleClose: () => void }>({
     flashOsd: () => {},
@@ -28,15 +30,27 @@ export function MiniPlayer() {
     const onFlash = () => actionsRef.current.flashOsd();
     const onMaximize = () => actionsRef.current.handleMaximize();
     const onClose = () => actionsRef.current.handleClose();
-    window.addEventListener('supertv:mini-flash-osd', onFlash);
-    window.addEventListener('supertv:mini-maximize', onMaximize);
-    window.addEventListener('supertv:mini-close', onClose);
-    return () => {
-      window.removeEventListener('supertv:mini-flash-osd', onFlash);
-      window.removeEventListener('supertv:mini-maximize', onMaximize);
-      window.removeEventListener('supertv:mini-close', onClose);
-    };
-  }, []);
+    const onEnterPiP = async () => {
+        const vid = videoRef.current;
+        if (!vid || !(document as any).pictureInPictureEnabled) return;
+        try {
+          if (document.pictureInPictureElement === vid) return;
+          const tryPiP = async () => { try { await vid.requestPictureInPicture(); } catch {} };
+          if (!vid.paused && vid.readyState >= 2) { await tryPiP(); }
+          else { vid.addEventListener('playing', tryPiP, { once: true }); }
+        } catch {}
+      };
+      window.addEventListener('supertv:mini-flash-osd', onFlash);
+      window.addEventListener('supertv:mini-maximize', onMaximize);
+      window.addEventListener('supertv:mini-close', onClose);
+      window.addEventListener('supertv:mini-enter-pip', onEnterPiP);
+      return () => {
+        window.removeEventListener('supertv:mini-flash-osd', onFlash);
+        window.removeEventListener('supertv:mini-maximize', onMaximize);
+        window.removeEventListener('supertv:mini-close', onClose);
+        window.removeEventListener('supertv:mini-enter-pip', onEnterPiP);
+      };
+    }, []);
 
   const loadStream = useCallback(async (url: string) => {
     const video = videoRef.current;
@@ -103,16 +117,32 @@ export function MiniPlayer() {
     }
   }, [state?.isMinimized, state?.url, loadStream]);
 
-  const handleMaximize = () => {
-    if (!state) return;
-    updateMiniPlayerState({ isMinimized: false });
-    if (state.type === 'channel' && state.channelId) {
-      setLocation(`${BASE_URL}/player?channelId=${state.channelId}&title=${encodeURIComponent(state.title)}&type=channel`);
-    } else {
-      setLocation(`${BASE_URL}/player?url=${encodeURIComponent(state.url)}&title=${encodeURIComponent(state.title)}&type=${state.type}${state.movieId ? `&movieId=${state.movieId}` : ''}`);
-    }
-  };
+    useEffect(() => {
+      const vid = videoRef.current;
+      if (!vid) return;
+      const onEnter = () => { setIsPiP(true); isPiPRef.current = true; };
+      const onLeave = () => { setIsPiP(false); isPiPRef.current = false; };
+      const onPause = () => { if (isPiPRef.current) vid.play().catch(() => {}); };
+      vid.addEventListener('enterpictureinpicture', onEnter);
+      vid.addEventListener('leavepictureinpicture', onLeave);
+      vid.addEventListener('pause', onPause);
+      return () => {
+        vid.removeEventListener('enterpictureinpicture', onEnter);
+        vid.removeEventListener('leavepictureinpicture', onLeave);
+        vid.removeEventListener('pause', onPause);
+      };
+    });
 
+    const handleMaximize = async () => {
+      if (!state) return;
+      try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); } catch {}
+      updateMiniPlayerState({ isMinimized: false });
+      if (state.type === 'channel' && state.channelId) {
+        setLocation(`${BASE_URL}/player?channelId=${state.channelId}&title=${encodeURIComponent(state.title)}&type=channel`);
+      } else {
+        setLocation(`${BASE_URL}/player?url=${encodeURIComponent(state.url)}&title=${encodeURIComponent(state.title)}&type=${state.type}${state.movieId ? `&movieId=${state.movieId}` : ''}`);
+      }
+    };
   const handleClose = () => {
     const video = videoRef.current;
     if (video) { video.src = ''; video.load(); }
@@ -139,13 +169,13 @@ export function MiniPlayer() {
     if (isDash) return { url: ch.streamUrl, streamFormat: 'dash' };
     if (isFlv) return { url: ch.streamUrl, streamFormat: 'flv' };
     if (lower.endsWith('.m3u8') || lower.includes('/hls/')) {
-      // Only try direct for HTTPS streams — HTTP streams blocked as mixed content on HTTPS sites
+      // Only try direct for HTTPS streams â HTTP streams blocked as mixed content on HTTPS sites
       if (ch.streamUrl.startsWith('https://')) {
         return { url: ch.streamUrl, streamFormat: 'hls' };
       }
-      // HTTP stream → fall through to proxy immediately
+      // HTTP stream â fall through to proxy immediately
     }
-    // IPTV panel URL (/live/user/pass/id) — use proxy so loadStream detects as HLS
+    // IPTV panel URL (/live/user/pass/id) â use proxy so loadStream detects as HLS
     return { url: `/api/channels/${ch.id}/hls-proxy?token=${encodeURIComponent(token)}`, streamFormat: 'hls' };
   }
 
@@ -197,7 +227,7 @@ export function MiniPlayer() {
           <button onClick={handlePrev} className="p-1 rounded text-white/70 hover:text-white hover:bg-white/10 transition-all">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-white/50 text-[9px]">● EN VIVO</span>
+          <span className="text-white/50 text-[9px]">â EN VIVO</span>
           <button onClick={handleNext} className="p-1 rounded text-white/70 hover:text-white hover:bg-white/10 transition-all">
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -219,13 +249,13 @@ export function MiniPlayer() {
           <div className="flex items-center gap-1.5 text-[9px] text-white/80 bg-black/75 backdrop-blur rounded-full px-2.5 py-1">
             {state.type === 'channel' && state.channels.length > 1 && (
               <>
-                <span>◀▶ Canal</span>
-                <span className="text-white/30">•</span>
+                <span>ââ¶ Canal</span>
+                <span className="text-white/30">â¢</span>
               </>
             )}
-            <span>↵ Abrir</span>
-            <span className="text-white/30">•</span>
-            <span>⌫ Cerrar</span>
+            <span>âµ Abrir</span>
+            <span className="text-white/30">â¢</span>
+            <span>â« Cerrar</span>
           </div>
         </div>
       )}
