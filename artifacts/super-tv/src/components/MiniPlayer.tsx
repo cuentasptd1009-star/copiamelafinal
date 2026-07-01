@@ -138,9 +138,9 @@ export function MiniPlayer() {
       try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); } catch {}
       updateMiniPlayerState({ isMinimized: false });
       if (state.type === 'channel' && state.channelId) {
-        setLocation(`${BASE_URL}/player?channelId=${state.channelId}&title=${encodeURIComponent(state.title)}&type=channel`);
+        setLocation(`${BASE_URL}/player?channelId=${state.channelId}&title=${encodeURIComponent(state.title)}&type=channel&fullscreen=1`);
       } else {
-        setLocation(`${BASE_URL}/player?url=${encodeURIComponent(state.url)}&title=${encodeURIComponent(state.title)}&type=${state.type}${state.movieId ? `&movieId=${state.movieId}` : ''}`);
+        setLocation(`${BASE_URL}/player?url=${encodeURIComponent(state.url)}&title=${encodeURIComponent(state.title)}&type=${state.type}${state.movieId ? `&movieId=${state.movieId}` : ''}&fullscreen=1`);
       }
     };
   const handleClose = () => {
