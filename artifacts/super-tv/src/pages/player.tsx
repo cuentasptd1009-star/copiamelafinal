@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ArrowLeft, RotateCcw, SkipBack, SkipForward, AlertTriangle, Lock, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CastIcon } from '@/components/CastIcon';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
 import { useChromecast } from '@/hooks/useChromecast';
-import { CastIcon } from '@/components/CastIcon';
 import { CastButton } from '@/components/CastButton';
 import logo from '@assets/logo_supertv.png';
 import { useGetMe, getGetMeQueryKey } from '@workspace/api-client-react';
@@ -1359,7 +1359,7 @@ export default function PlayerPage() {
                 className={`p-2.5 sm:p-3 rounded-full backdrop-blur transition-all bg-black/40 text-white hover:bg-black/60 ${ctrlIndex === controls.indexOf('cast') ? 'ring-2 ring-primary scale-110' : ''}`}
                 title="AirPlay al TV"
               >
-                <Tv2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                <CastIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )}
             {/* Chromecast — only on non-AirPlay devices (Android/Desktop Chrome).
