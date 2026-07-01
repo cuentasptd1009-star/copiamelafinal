@@ -410,9 +410,10 @@ export default function VodPlayerPage() {
         // iOS Safari: fullscreen solo funciona via webkitEnterFullscreen en el elemento video
         if (vid?.webkitEnterFullscreen) { try { vid.webkitEnterFullscreen(); return; } catch {} }
       } else {
-        // Android Chrome / desktop: requestFullscreen + forzar orientacion horizontal
-        const req = vid?.requestFullscreen || el.requestFullscreen || el.webkitRequestFullscreen;
-        const target = vid?.requestFullscreen ? vid : el;
+        // Android Chrome / desktop: use container div for fullscreen (not video element)
+        // so our custom controls stay visible instead of Android's native controls bar.
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        const target = el;
         if (req) {
           try {
             const p = req.call(target);
