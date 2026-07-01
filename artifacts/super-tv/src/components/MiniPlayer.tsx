@@ -13,8 +13,6 @@ export function MiniPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const [showOsd, setShowOsd] = useState(false);
-  const [isPiP, setIsPiP] = useState(false);
-  const isPiPRef = useRef(false);
   const osdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionsRef = useRef<{ flashOsd: () => void; handleMaximize: () => void; handleClose: () => void }>({
     flashOsd: () => {},
@@ -30,25 +28,13 @@ export function MiniPlayer() {
     const onFlash = () => actionsRef.current.flashOsd();
     const onMaximize = () => actionsRef.current.handleMaximize();
     const onClose = () => actionsRef.current.handleClose();
-    const onEnterPiP = async () => {
-        const vid = videoRef.current;
-        if (!vid || !(document as any).pictureInPictureEnabled) return;
-        try {
-          if (document.pictureInPictureElement === vid) return;
-          const tryPiP = async () => { try { await vid.requestPictureInPicture(); } catch {} };
-          if (!vid.paused && vid.readyState >= 2) { await tryPiP(); }
-          else { vid.addEventListener('playing', tryPiP, { once: true }); }
-        } catch {}
-      };
       window.addEventListener('supertv:mini-flash-osd', onFlash);
       window.addEventListener('supertv:mini-maximize', onMaximize);
       window.addEventListener('supertv:mini-close', onClose);
-      window.addEventListener('supertv:mini-enter-pip', onEnterPiP);
       return () => {
         window.removeEventListener('supertv:mini-flash-osd', onFlash);
         window.removeEventListener('supertv:mini-maximize', onMaximize);
         window.removeEventListener('supertv:mini-close', onClose);
-        window.removeEventListener('supertv:mini-enter-pip', onEnterPiP);
       };
     }, []);
 
@@ -117,25 +103,9 @@ export function MiniPlayer() {
     }
   }, [state?.isMinimized, state?.url, loadStream]);
 
-    useEffect(() => {
-      const vid = videoRef.current;
-      if (!vid) return;
-      const onEnter = () => { setIsPiP(true); isPiPRef.current = true; };
-      const onLeave = () => { setIsPiP(false); isPiPRef.current = false; setTimeout(() => actionsRef.current.handleMaximize(), 150); };
-      const onPause = () => { if (isPiPRef.current) vid.play().catch(() => {}); };
-      vid.addEventListener('enterpictureinpicture', onEnter);
-      vid.addEventListener('leavepictureinpicture', onLeave);
-      vid.addEventListener('pause', onPause);
-      return () => {
-        vid.removeEventListener('enterpictureinpicture', onEnter);
-        vid.removeEventListener('leavepictureinpicture', onLeave);
-        vid.removeEventListener('pause', onPause);
-      };
-    });
 
-    const handleMaximize = async () => {
+    const handleMaximize = () => {
       if (!state) return;
-      try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); } catch {}
       updateMiniPlayerState({ isMinimized: false });
       if (state.type === 'channel' && state.channelId) {
         setLocation(`${BASE_URL}/player?channelId=${state.channelId}&title=${encodeURIComponent(state.title)}&type=channel&fullscreen=1`);
