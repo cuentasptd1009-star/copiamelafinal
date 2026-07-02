@@ -192,6 +192,10 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
                 }
               } catch {}
               setPlayerReady(true);
+              // Attempt autoplay immediately — browser may allow it (especially muted or
+              // after a user gesture chain). If blocked, the spinner overlay stays
+              // clickable so the user can tap to start manually.
+              try { e.target.playVideo(); } catch {}
             }
           },
           onError: (e: any) => {
@@ -496,17 +500,15 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
         </div>
       )}
 
-      {/* Tap-to-start overlay — covers iframe and hides YouTube logo until user taps */}
+      {/* Spinner overlay while waiting for playback to start (playerReady but not yet playing).
+          Clickable as fallback in case browser blocks autoplay. */}
       {playerReady && !hasStarted && (
         <div
-          className="absolute inset-0 z-20 cursor-pointer flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.45)' }}
+          className="absolute inset-0 z-20 cursor-pointer flex items-center justify-center bg-black/60"
           onClick={e => { e.stopPropagation(); startPlayback(); containerRef.current?.focus({ preventScroll: true }); }}
           onTouchEnd={e => { e.preventDefault(); startPlayback(); containerRef.current?.focus({ preventScroll: true }); }}
         >
-          <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl hover:bg-white/20 transition-all active:scale-95">
-            <Play className="w-9 h-9 text-white fill-white ml-1" />
-          </div>
+          <YTSpinner />
         </div>
       )}
 
