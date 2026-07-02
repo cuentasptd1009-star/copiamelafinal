@@ -54,6 +54,7 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
 
   const item = overrideItem ?? items[current] ?? items[0];
   if (!item) return null;
+  const hasBanner = !!item.banner;
   const bgImage = item.banner || item.poster;
 
   const playFocused = focusedBtnIndex === 0;
@@ -61,7 +62,7 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
 
   return (
     <div className="relative w-full overflow-hidden" style={{ aspectRatio: '16/7', minHeight: '240px', maxHeight: '560px' }}>
-      {bgImage && (
+      {bgImage && hasBanner && (
         <img
           key={bgImage}
           src={bgImage}
@@ -70,6 +71,28 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
           onLoad={() => setLoaded(true)}
           onError={() => setLoaded(true)}
         />
+      )}
+      {bgImage && !hasBanner && (
+        // No dedicated wide banner for this title — stretching a portrait poster
+        // across the full width made parts of the image look pixelated/low quality.
+        // Instead: a blurred cover fill for ambiance + the poster shown sharp at its
+        // native aspect ratio, like Netflix/Prime do for poster-only titles.
+        <>
+          <img
+            src={bgImage}
+            alt=""
+            aria-hidden="true"
+            className={`absolute inset-0 w-full h-full object-cover scale-125 blur-2xl brightness-[0.45] transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setLoaded(true)}
+            onError={() => setLoaded(true)}
+          />
+          <img
+            key={bgImage}
+            src={bgImage}
+            alt={item.title}
+            className={`absolute hidden sm:block right-6 md:right-12 bottom-6 md:bottom-10 h-[68%] md:h-[75%] w-auto object-contain rounded-xl shadow-2xl ring-1 ring-white/10 transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          />
+        </>
       )}
       {!bgImage && (
         <div className="absolute inset-0 bg-black" />
