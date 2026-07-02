@@ -28,6 +28,9 @@ interface HeroBannerProps {
 export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnIndex, currentIndex, onCurrentChange }: HeroBannerProps) {
   const [internalCurrent, setInternalCurrent] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  // null = not measured yet (assume wide/banner-like so we don't flash a shrunk layout),
+  // true = the image is a narrow/portrait poster and needs the blurred-fill treatment.
+  const [isNarrowPoster, setIsNarrowPoster] = useState(false);
 
   const current = currentIndex !== undefined ? currentIndex : internalCurrent;
   const currentRef = useRef(current);
@@ -57,12 +60,31 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
   const hasBanner = !!item.banner;
   const bgImage = item.banner || item.poster;
 
+  // Only the true portrait movie posters (roughly 2:3) get squeezed into
+  // pixelated slivers when stretched full-bleed. Wide screenshots/thumbnails
+  // used as a "poster" already look fine full-bleed, so measure the real
+  // image dimensions and only switch layout for genuinely narrow images.
+  useEffect(() => {
+    setIsNarrowPoster(false);
+    if (hasBanner || !bgImage) return;
+    let cancelled = false;
+    const probe = new Image();
+    probe.onload = () => {
+      if (cancelled) return;
+      if (probe.naturalWidth && probe.naturalHeight) {
+        setIsNarrowPoster(probe.naturalWidth / probe.naturalHeight < 1.2);
+      }
+    };
+    probe.src = bgImage;
+    return () => { cancelled = true; };
+  }, [bgImage, hasBanner]);
+
   const playFocused = focusedBtnIndex === 0;
   const infoFocused = focusedBtnIndex === 1;
 
   return (
     <div className="relative w-full overflow-hidden" style={{ aspectRatio: '16/7', minHeight: '240px', maxHeight: '560px' }}>
-      {bgImage && hasBanner && (
+      {bgImage && !isNarrowPoster && (
         <img
           key={bgImage}
           src={bgImage}
@@ -72,11 +94,12 @@ export function HeroBanner({ items, onPlay, onInfo, overrideItem, focusedBtnInde
           onError={() => setLoaded(true)}
         />
       )}
-      {bgImage && !hasBanner && (
-        // No dedicated wide banner for this title — stretching a portrait poster
-        // across the full width made parts of the image look pixelated/low quality.
-        // Instead: a blurred cover fill for ambiance + the poster shown sharp at its
-        // native aspect ratio, like Netflix/Prime do for poster-only titles.
+      {bgImage && isNarrowPoster && (
+        // No dedicated wide banner for this title and the fallback image is a
+        // narrow/portrait poster — stretching it across the full width made
+        // parts of the image look pixelated/low quality. Instead: a blurred
+        // cover fill for ambiance + the poster shown sharp at its native
+        // aspect ratio, like Netflix/Prime do for poster-only titles.
         <>
           <img
             src={bgImage}
