@@ -71,7 +71,7 @@ export default function PlayerPage() {
   const category = searchParams.get('category');
   const startFrom = searchParams.get('startFrom');
   const episodeId = searchParams.get('episodeId');
-  const requestFullscreenOnMount = searchParams.get('fullscreen') === '1';
+  const requestFullscreenOnMount = searchParams.get('fullscreen') === '1' || (searchParams.get('type') || 'channel') === 'channel';
   const seriesId = searchParams.get('seriesId');
   const seasonId = searchParams.get('seasonId');
   const seasonNumber = searchParams.get('seasonNumber');
