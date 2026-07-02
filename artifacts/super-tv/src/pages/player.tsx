@@ -95,8 +95,7 @@ export default function PlayerPage() {
 
   function buildChannelUrl(chId: string | number, fmt: string, directUrl?: string): string {
     if (fmt === 'youtube' && directUrl) return directUrl;
-    // HTTPS direct URLs can bypass the proxy (no mixed content issue on HTTPS page)
-    if (directUrl && directUrl.startsWith('https://')) return directUrl;
+    // All streams go through the VPS proxy for consistent caching across clients.
     if (fmt === 'hls') {
       return `${apiBase}/api/channels/${chId}/hls-proxy?token=${encodeURIComponent(authToken)}`;
     }
@@ -121,9 +120,8 @@ export default function PlayerPage() {
         .then(ch => {
           const fmt = ch.streamFormat || detectFormat(ch.streamUrl || '');
           setCurrentFormat(fmt);
-          // Use stream URL directly for HTTPS; HTTP needs proxy (mixed content)
-          const directUrl = ch.streamUrl?.startsWith('https://') ? ch.streamUrl : undefined;
-          setCurrentUrl(directUrl || buildChannelUrl(channelId, fmt));
+          // Always route through VPS proxy for caching benefits.
+          setCurrentUrl(buildChannelUrl(channelId, fmt));
         })
         .catch(() => {});
     }
