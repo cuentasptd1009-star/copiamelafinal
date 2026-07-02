@@ -177,7 +177,7 @@ function ContinueWatchingCard({ item, onClick, focused, onRemove }: { item: Cont
       onClick={onClick}
       tabIndex={0}
       data-tv-focused={focused ? 'true' : undefined}
-      className={`flex-shrink-0 w-36 sm:w-40 md:w-44 cursor-pointer group rounded-xl overflow-hidden border transition-all duration-200 ${focused ? 'border-primary ring-2 ring-primary scale-105 shadow-[0_0_15px_rgba(220,38,38,0.5)] z-10' : 'border-border hover:border-primary/60 hover:scale-[1.03]'}`}
+      className={`relative flex-shrink-0 w-36 sm:w-40 md:w-44 cursor-pointer group rounded-xl overflow-hidden border transition-all duration-200 ${focused ? 'border-primary ring-2 ring-primary scale-105 shadow-[0_0_15px_rgba(220,38,38,0.5)] z-10' : 'border-border hover:border-primary/60 hover:scale-[1.03]'}`}
     >
       <div className={`relative bg-muted overflow-hidden aspect-video`}>
         {poster ? (
