@@ -653,6 +653,9 @@ export default function PlayerPage() {
       // tab, so reload or navigation should keep the TV playing.
       const onVisibilityChange = () => {
           if (!document.hidden) return;
+          // On PC/desktop do not pause when the user switches apps or windows.
+          // Only pause automatically on mobile (iOS / Android).
+          if (!/iPad|iPhone|iPod|Android/i.test(navigator.userAgent)) return;
           try {
             const video = videoRef.current;
             if (!video) return;
