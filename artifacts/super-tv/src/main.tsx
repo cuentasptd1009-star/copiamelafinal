@@ -1,7 +1,16 @@
 import { createRoot } from "react-dom/client";
 import { setBaseUrl } from "@workspace/api-client-react";
+import { loadYouTubeApi } from "./lib/youtube-api";
 import App from "./App";
 import "./index.css";
+
+// Preload the YouTube IFrame API in idle time so it's already ready
+// by the time the user opens a YouTube movie — same pattern as hls.js preloading.
+if (typeof requestIdleCallback !== "undefined") {
+  requestIdleCallback(() => loadYouTubeApi(() => {}), { timeout: 3000 });
+} else {
+  setTimeout(() => loadYouTubeApi(() => {}), 500);
+}
 
 function showError() {
   (window as any).__appStarted = false;

@@ -4,6 +4,28 @@ import { loadYouTubeApi } from '@/lib/youtube-api';
 import { saveProgress, saveEpisodeProgress, saveExternalProgress, clearExternalProgress } from '@/lib/user-data';
 import logo from '@assets/logo_supertv.png';
 
+function YTSpinner() {
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <img src={logo} alt="Super TV" className="w-28 sm:w-36 h-auto drop-shadow-2xl" />
+      <div className="relative w-14 h-14">
+        <svg className="w-14 h-14 animate-spin" viewBox="0 0 56 56" fill="none">
+          <circle cx="28" cy="28" r="24" stroke="white" strokeWidth="4" strokeOpacity="0.15" />
+          <path d="M28 4 A24 24 0 0 1 52 28" stroke="url(#yt-spin-grad)" strokeWidth="4" strokeLinecap="round" />
+          <defs>
+            <linearGradient id="yt-spin-grad" x1="28" y1="4" x2="52" y2="28" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#ef4444" />
+              <stop offset="50%" stopColor="#3b82f6" />
+              <stop offset="100%" stopColor="#ffffff" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span className="text-white/60 text-sm tracking-wide">Cargando...</span>
+    </div>
+  );
+}
+
 interface Props {
   videoId: string;
   title: string;
@@ -47,6 +69,7 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSaveRef = useRef(0);
 
+  const [playerReady, setPlayerReady] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [ytEnded, setYtEnded] = useState(false);
@@ -68,8 +91,10 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
   );
   const ytPlayIdx = ytControls.indexOf('play');
 
-  // Reset next-ep state whenever the video changes
+  // Reset state whenever the video changes
   useEffect(() => {
+    setPlayerReady(false);
+    setHasStarted(false);
     setShowNextEp(false);
     setCoverBars(true);
   }, [videoId]);
@@ -153,6 +178,10 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
             if (!destroyed) {
               const d = e.target.getDuration?.() ?? 0;
               if (d > 0) setDuration(d);
+              // Pre-seek to saved position so it's already queued before first play
+              if (startFrom && startFrom > 10) {
+                try { e.target.seekTo(startFrom, true); } catch {}
+              }
               try {
                 const iframe = e.target.getIframe() as HTMLIFrameElement | null;
                 if (iframe) {
@@ -162,6 +191,7 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
                   playerDivRef.current.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;';
                 }
               } catch {}
+              setPlayerReady(true);
             }
           },
           onError: (e: any) => {
@@ -459,8 +489,15 @@ export function YouTubePlayerPage({ videoId, title, onBack, isFav, onFavToggle, 
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', minHeight: 0 }}
       />
 
+      {/* Loading spinner — while YouTube API + iframe is initializing */}
+      {!playerReady && !ytError && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 pointer-events-none">
+          <YTSpinner />
+        </div>
+      )}
+
       {/* Tap-to-start overlay — covers iframe and hides YouTube logo until user taps */}
-      {!hasStarted && (
+      {playerReady && !hasStarted && (
         <div
           className="absolute inset-0 z-20 cursor-pointer flex items-center justify-center"
           style={{ background: 'rgba(0,0,0,0.45)' }}
