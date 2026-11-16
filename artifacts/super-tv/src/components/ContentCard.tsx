@@ -63,6 +63,8 @@ interface ContentCardProps {
   onHoverEnd?: () => void;
   cardRef?: (el: HTMLDivElement | null) => void;
   disableHover?: boolean;
+  navigationIndex?: number;
+  navigationId?: number;
 }
 
 export const ContentCard = memo(function ContentCard({
@@ -84,6 +86,8 @@ export const ContentCard = memo(function ContentCard({
   onHoverEnd,
   cardRef,
   disableHover = false,
+  navigationIndex,
+  navigationId,
 }: ContentCardProps) {
   const [imgError, setImgError] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
@@ -458,8 +462,10 @@ export const ContentCard = memo(function ContentCard({
           cardRef?.(el);
         }}
         data-tv-focused={isFocused ? 'true' : undefined}
-        className={`flex-shrink-0 ${widthClass} group cursor-pointer select-none transition-transform duration-200 ease-out ${
-          isFocused ? 'scale-105 z-20' : 'hover:scale-[1.04] z-10'
+        data-channel-index={isChannel ? navigationIndex : undefined}
+        data-channel-id={isChannel ? navigationId : undefined}
+        className={`flex-shrink-0 ${widthClass} ${disableHover ? '' : 'group'} cursor-pointer select-none transition-transform duration-200 ease-out ${
+          isFocused ? 'scale-105 z-20' : disableHover ? 'z-10' : 'hover:scale-[1.04] z-10'
         }`}
         onClick={() => { stopPreview(); onClick(); }}
         onMouseEnter={handleMouseEnter}

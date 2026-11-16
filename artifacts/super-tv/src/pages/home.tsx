@@ -475,6 +475,7 @@ export default function Home() {
   const [zone, setZone] = useState<NavZone>('rows');
   const [inputMode, setInputMode] = useState<'mouse' | 'keyboard'>(() => (window as any).__isTvBrowser ? 'keyboard' : 'mouse');
   const inputModeRef = useRef<'mouse' | 'keyboard'>((window as any).__isTvBrowser ? 'keyboard' : 'mouse');
+  const pointerPositionRef = useRef<{ x: number; y: number } | null>(null);
 
   type YtResult = { videoId: string; title: string; thumbnail: string; channel: string; year?: string; duration: string };
   type ArchiveResult = { identifier: string; title: string; year?: string; creator?: string; thumbnail: string };
@@ -1124,7 +1125,7 @@ export default function Home() {
       const activeEl = document.activeElement;
       const isInputFocused = activeEl instanceof HTMLInputElement || activeEl instanceof HTMLTextAreaElement || (activeEl instanceof HTMLElement && activeEl.isContentEditable);
       if (isInputFocused) {
-        if (['Escape','Enter','ArrowUp','ArrowDown'].includes(e.key)) {
+        if (['Escape','Enter','ArrowUp','ArrowDown'].includes(nk)) {
           e.preventDefault();
           (activeEl as HTMLElement).blur();
           setZone('rows');
@@ -1135,7 +1136,7 @@ export default function Home() {
       }
 
       // Blur any focused button/link so arrow keys always reach our handler
-      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(nk)) {
         if (inputModeRef.current !== 'keyboard') { inputModeRef.current = 'keyboard'; setInputMode('keyboard'); }
         if (activeEl && activeEl !== document.body && (activeEl as HTMLElement).blur) {
           (activeEl as HTMLElement).blur();
@@ -1373,7 +1374,19 @@ export default function Home() {
           case 'MediaPlayPause':
           case 'Enter': {
             e.preventDefault();
-            if (activeTab === 'series') {
+            if (activeTab === 'channels') {
+              // Do not let this same OK event reach the newly mounted player's
+              // controls and immediately switch to the previous channel.
+              e.stopImmediatePropagation();
+              if (e.repeat) break;
+              // Activate the card painted as selected, even if a rapid arrow/OK
+              // sequence has already advanced the navigation refs before repaint.
+              const focusedCard = document.querySelector<HTMLElement>('[data-channel-id][data-tv-focused="true"]');
+              const item = focusedCard
+                ? allChannels.find(ch => ch.id === Number(focusedCard.dataset.channelId))
+                : currentRow?.items[colRef.current];
+              if (item) playItem(item as ContentItem);
+            } else if (activeTab === 'series') {
               const item = seriesRows[rowRef.current]?.items[colRef.current];
               if (item) playSeriesItem(item);
             } else if (currentRow?.id === 'continue') {
@@ -1405,7 +1418,19 @@ export default function Home() {
   }, [zone, sidebarIdx, sidebarItems, rowIndex, colIndex, rowsFocusActive, heroBtnIndex, heroBannerIdx, activeRows, seriesRows, activeTab, playItem, playSeriesItem, actionButtons, showProfile, showHint, showShortcutHint, isListening, startListening, stopListening, showHero, hoveredHero, heroBannerItems, openKeyboard, searchQuery, openProfile, catFilterIdx, channelRows, selectedChannelCategory, apkMsg, sidebarMouseOpen, combinedContinueWatching, handleRemoveContinue, isExpired, setExternalPlayer, setShowExpiredOverlay]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-background text-white flex select-none" onMouseMove={() => { if (inputModeRef.current !== 'mouse') { inputModeRef.current = 'mouse'; setInputMode('mouse'); } }}>
+    <div className="min-h-screen bg-background text-white flex select-none" onMouseMove={(e) => {
+      const previous = pointerPositionRef.current;
+      if (previous?.x === e.clientX && previous?.y === e.clientY) return;
+      pointerPositionRef.current = { x: e.clientX, y: e.clientY };
+      if (inputModeRef.current !== 'mouse') { inputModeRef.current = 'mouse'; setInputMode('mouse'); }
+      if (activeTab === 'channels' && e.target instanceof Element) {
+        const card = e.target.closest<HTMLElement>('[data-channel-index]');
+        const index = Number(card?.dataset.channelIndex);
+        if (card && index >= 0 && index < visibleChannels.length) {
+          setZone('rows'); setRowIndex(0); setColIndex(index); setRowsFocusActive(true);
+        }
+      }
+    }}>
 
       {/* ── EXPIRED OVERLAY ── */}
       {isExpired && showExpiredOverlay && (
@@ -1702,6 +1727,8 @@ export default function Home() {
                       title={ch.name}
                       image={ch.logo ?? null}
                       isChannel
+                      navigationIndex={cIdx}
+                      navigationId={ch.id}
                       isFocused={inputMode === 'keyboard' && rowsFocusActive && zone === 'rows' && rowIndex === 0 && colIndex === cIdx}
                         disableHover={inputMode === 'keyboard'}
                       onClick={() => playItem(ch as ContentItem)}

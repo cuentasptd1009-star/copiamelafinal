@@ -984,6 +984,7 @@ export default function PlayerPage() {
           break;
         case 'Enter':
           e.preventDefault();
+          if (e.repeat) break;
           switch (controls[ctrlIndex]) {
             case 'back': setLocation(backUrl); break;
             case 'prevch': goPrevChannel(); break;
