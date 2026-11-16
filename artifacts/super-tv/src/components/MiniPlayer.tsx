@@ -4,8 +4,7 @@ import { Maximize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
 import { getMiniPlayerState, setMiniPlayerState, subscribeMiniPlayer, updateMiniPlayerState } from '@/lib/mini-player-state';
 import { getToken } from '@/lib/auth';
 import { apiBase } from '@/lib/api';
-
-const BASE_URL = apiBase;
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 
 export function MiniPlayer() {
   const [, setLocation] = useLocation();
@@ -79,7 +78,7 @@ export function MiniPlayer() {
               const t = getToken('user') || getToken('admin') || '';
               hls.destroy();
               cleanupRef.current = null;
-              const proxyUrl = `/api/channels/${state.channelId}/hls-proxy?token=${encodeURIComponent(t)}`;
+              const proxyUrl = `${apiBase}/api/channels/${state.channelId}/hls-proxy?token=${encodeURIComponent(t)}`;
               updateMiniPlayerState({ url: proxyUrl, streamFormat: 'hls' });
             }
           });
@@ -146,7 +145,7 @@ export function MiniPlayer() {
       // HTTP stream â fall through to proxy immediately
     }
     // IPTV panel URL (/live/user/pass/id) â use proxy so loadStream detects as HLS
-    return { url: `/api/channels/${ch.id}/hls-proxy?token=${encodeURIComponent(token)}`, streamFormat: 'hls' };
+    return { url: `${apiBase}/api/channels/${ch.id}/hls-proxy?token=${encodeURIComponent(token)}`, streamFormat: 'hls' };
   }
 
   const handlePrev = () => {
@@ -154,7 +153,7 @@ export function MiniPlayer() {
     const newIdx = (state.channelIndex - 1 + state.channels.length) % state.channels.length;
     const ch = state.channels[newIdx];
     const { url, streamFormat } = buildProxyUrl(ch);
-    updateMiniPlayerState({ url, title: ch.name, channelIndex: newIdx, streamFormat });
+    updateMiniPlayerState({ url, title: ch.name, channelId: ch.id, channelIndex: newIdx, streamFormat });
     flashOsd();
   };
 
@@ -163,7 +162,7 @@ export function MiniPlayer() {
     const newIdx = (state.channelIndex + 1) % state.channels.length;
     const ch = state.channels[newIdx];
     const { url, streamFormat } = buildProxyUrl(ch);
-    updateMiniPlayerState({ url, title: ch.name, channelIndex: newIdx, streamFormat });
+    updateMiniPlayerState({ url, title: ch.name, channelId: ch.id, channelIndex: newIdx, streamFormat });
     flashOsd();
   };
 

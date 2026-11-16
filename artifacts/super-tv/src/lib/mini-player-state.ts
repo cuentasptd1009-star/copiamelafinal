@@ -2,6 +2,7 @@ export interface ChannelEntry {
   id: number;
   streamUrl: string;
   name: string;
+  streamFormat?: string | null;
 }
 
 export interface MiniPlayerState {

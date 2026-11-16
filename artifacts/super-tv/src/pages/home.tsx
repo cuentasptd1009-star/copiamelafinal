@@ -458,8 +458,9 @@ export default function Home() {
       if (t === 'series') return 'series';
       if (t === 'channels') return 'channels';
       if (t === 'favorites') return 'favorites';
-      return 'home';
-    } catch { return 'home'; }
+      if (t === 'home') return 'home';
+      return 'channels';
+    } catch { return 'channels'; }
   })() as TabKey;
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
@@ -848,18 +849,19 @@ export default function Home() {
     return rows;
   }, [activeTab, allChannels, categoriesFromApi, channelsByCategory, searchQuery]);
 
+  const visibleChannels = useMemo(() => selectedChannelCategory
+    ? (channelRows.find(r => r.title === selectedChannelCategory)?.items ?? [])
+    : channelRows.flatMap(r => r.items), [channelRows, selectedChannelCategory]);
+
   const activeRows = useMemo(() => {
     if (activeTab === 'channels') {
       // Return a single flat row matching exactly what the grid renders.
       // This ensures rowIndex stays at 0 and colIndex maps 1:1 to the visible grid items.
-      const flatItems = selectedChannelCategory
-        ? (channelRows.find(r => r.title === selectedChannelCategory)?.items ?? [])
-        : channelRows.flatMap(r => r.items);
-      return [{ id: 'channels-flat', title: 'Canales', emoji: '📺', items: flatItems as ContentItem[] }];
+      return [{ id: 'channels-flat', title: 'Canales', emoji: '📺', items: visibleChannels as ContentItem[] }];
     }
     if (activeTab === 'series') return seriesRows.map(r => ({ id: r.id, title: r.title, emoji: '🎬', items: r.items as unknown as ContentItem[] }));
     return contentRows;
-  }, [activeTab, channelRows, seriesRows, contentRows, selectedChannelCategory]);
+  }, [activeTab, visibleChannels, seriesRows, contentRows]);
 
   useEffect(() => {
     setRowIndex(0); setColIndex(0); setSelectedChannelCategory(null); setRowsFocusActive(false);
@@ -941,8 +943,9 @@ export default function Home() {
       return;
     }
     if (isChannel(item)) {
-      const channelList = allChannels.map(ch => ({ id: ch.id, streamUrl: ch.streamUrl ?? '', name: ch.name }));
-      const idx = allChannels.findIndex(ch => ch.id === item.id);
+      const playbackChannels = activeTab === 'channels' ? visibleChannels : allChannels;
+      const channelList = playbackChannels.map(ch => ({ id: ch.id, streamUrl: ch.streamUrl ?? '', name: ch.name, streamFormat: (ch as any).streamFormat }));
+      const idx = playbackChannels.findIndex(ch => ch.id === item.id);
       setMiniPlayerState({ url: item.streamUrl ?? '', title: item.name, type: 'channel', movieId: null, channelId: item.id, streamFormat: (item as any).streamFormat ?? null, isMinimized: false, channels: channelList, channelIndex: idx >= 0 ? idx : 0 });
       setLocation(`/player?channelId=${item.id}&title=${encodeURIComponent(item.name)}&type=channel&url=${encodeURIComponent((item as any).streamUrl ?? '')}&format=${(item as any).streamFormat || ''}`);
     } else if ((item as any)._isSeries) {
@@ -970,7 +973,7 @@ export default function Home() {
       if (_ms?.isMinimized) updateMiniPlayerState({ isMinimized: false });
       setLocation(`/vod-player?${p.toString()}`);
     }
-  }, [setLocation, isExpired, allChannels, progressMap]);
+  }, [setLocation, isExpired, activeTab, visibleChannels, allChannels, progressMap]);
 
   const playSeriesItem = useCallback((series: SeriesItem) => {
     if (isExpired) { setShowExpiredOverlay(true); return; }
@@ -1244,7 +1247,7 @@ export default function Home() {
               const newIdx = (mini.channelIndex - 1 + mini.channels.length) % mini.channels.length;
               const ch = mini.channels[newIdx];
               const { url, streamFormat } = buildMiniProxyUrl(ch);
-              updateMiniPlayerState({ url, title: ch.name, channelIndex: newIdx, streamFormat });
+              updateMiniPlayerState({ url, title: ch.name, channelId: ch.id, channelIndex: newIdx, streamFormat });
               window.dispatchEvent(new CustomEvent('supertv:mini-flash-osd'));
             }
             break;
@@ -1255,7 +1258,7 @@ export default function Home() {
               const newIdx = (mini.channelIndex + 1) % mini.channels.length;
               const ch = mini.channels[newIdx];
               const { url, streamFormat } = buildMiniProxyUrl(ch);
-              updateMiniPlayerState({ url, title: ch.name, channelIndex: newIdx, streamFormat });
+              updateMiniPlayerState({ url, title: ch.name, channelId: ch.id, channelIndex: newIdx, streamFormat });
               window.dispatchEvent(new CustomEvent('supertv:mini-flash-osd'));
             }
             break;
@@ -1693,10 +1696,7 @@ export default function Home() {
 
                 {/* Flat channel grid — ContentCard style matching movies */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
-                  {(selectedChannelCategory
-                    ? (channelRows.find(r => r.title === selectedChannelCategory)?.items ?? [])
-                    : channelRows.flatMap(r => r.items)
-                  ).map((ch, cIdx) => (
+                  {visibleChannels.map((ch, cIdx) => (
                     <ContentCard
                       key={ch.id}
                       title={ch.name}

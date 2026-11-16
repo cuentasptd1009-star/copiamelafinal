@@ -861,9 +861,9 @@ export default function PlayerPage() {
     if (!hasChannels) return;
     const ch = channels[newIdx];
     if (!ch) return;
-    const fmt = detectFormat(ch.streamUrl || '');
+    const fmt = ch.streamFormat || detectFormat(ch.streamUrl || '');
     const proxyUrl = buildChannelUrl(ch.id, fmt, fmt === 'youtube' ? ch.streamUrl : undefined);
-    updateMiniPlayerState({ channelIndex: newIdx, url: proxyUrl, title: ch.name, streamFormat: fmt });
+    updateMiniPlayerState({ channelId: ch.id, channelIndex: newIdx, url: proxyUrl, title: ch.name, streamFormat: fmt });
     setCurrentFormat(fmt);
     setCurrentUrl(proxyUrl);
     setCurrentTitle(ch.name);
