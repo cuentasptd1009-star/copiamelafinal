@@ -62,7 +62,7 @@ export default function PlayerPage() {
 
 
   const searchParams = new URLSearchParams(window.location.search);
-  const channelId = searchParams.get('channelId') || '';
+  const [channelId, setChannelId] = useState(() => searchParams.get('channelId') || '');
   const miniState = getMiniPlayerState();
   const rawUrl = searchParams.get('url') || (channelId && miniState?.url ? miniState.url : '');
   const title = searchParams.get('title') || 'Reproduciendo';
@@ -458,6 +458,7 @@ export default function PlayerPage() {
             video.play().catch(() => {});
           } else {
           const Hls = (await getHls()).default;
+          if (destroyed) return;
           if (Hls.isSupported()) {
             const isChannel = type === 'channel';
             const hls = new Hls({
@@ -501,6 +502,7 @@ export default function PlayerPage() {
               }
             });
             hls.on(Hls.Events.ERROR, (_, data) => {
+              if (destroyed) return;
               if (data.fatal) {
                 if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retryCountRef.current === 0 && type === 'channel' && channelId) {
                   // Direct stream failed (CORS or network) ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ fall back to server proxy
@@ -864,6 +866,7 @@ export default function PlayerPage() {
     const fmt = ch.streamFormat || detectFormat(ch.streamUrl || '');
     const proxyUrl = buildChannelUrl(ch.id, fmt, fmt === 'youtube' ? ch.streamUrl : undefined);
     updateMiniPlayerState({ channelId: ch.id, channelIndex: newIdx, url: proxyUrl, title: ch.name, streamFormat: fmt });
+    setChannelId(String(ch.id));
     setCurrentFormat(fmt);
     setCurrentUrl(proxyUrl);
     setCurrentTitle(ch.name);
