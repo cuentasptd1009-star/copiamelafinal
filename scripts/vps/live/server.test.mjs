@@ -5,9 +5,16 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createLiveServer } from './server.mjs';
+import { createLiveServer, segmentBandwidth } from './server.mjs';
 
 const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)));
+
+test('bitrate metadata separates weighted average consumption from peak headroom', () => {
+  assert.deepEqual(segmentBandwidth([2, 6], [250000, 1500000]), { bandwidth: 2500000, averageBandwidth: 1750000 });
+  assert.throws(() => segmentBandwidth([], []));
+  assert.throws(() => segmentBandwidth([2, 0], [100, 100]));
+  assert.throws(() => segmentBandwidth([2], [100, 200]));
+});
 
 test('authenticated viewers share a bounded adaptive encoder with repaired timestamps, original video and private playlists', { timeout: 90000 }, async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'supertv-live-test-'));
@@ -55,6 +62,11 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
   assert.equal(live.jobs.size, 1);
   assert.match(first, /RESOLUTION=640x360/); assert.match(first, /RESOLUTION=854x480/);
   assert.match(first, /TIME-OFFSET=-6/);
+  for (const line of first.split('\n').filter(line => line.startsWith('#EXT-X-STREAM-INF:'))) {
+    const peak = Number(/(?:[:,])BANDWIDTH=(\d+)/.exec(line)?.[1]);
+    const average = Number(/AVERAGE-BANDWIDTH=(\d+)/.exec(line)?.[1]);
+    assert.ok(average > 0 && average <= peak, line);
+  }
   assert.ok(first.includes('viewer-one') && !first.includes('viewer-two'));
   assert.ok(second.includes('viewer-two') && !second.includes('viewer-one'));
   for(let i=0;i<10;i++){ await fetch(`${base}/api/live/channels/1/master.m3u8?token=viewer-one`); await new Promise(resolve=>setTimeout(resolve,500)); }

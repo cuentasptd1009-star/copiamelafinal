@@ -86,6 +86,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const playlistDuration = text => [...text.matchAll(/^#EXTINF:([\d.]+)/gm)].reduce((sum, m) => sum + Number(m[1]), 0);
 const cleanError = message => String(message).replace(/https?:\/\/[^\s]+/g, '[origin]').slice(-800);
 
+export function segmentBandwidth(durations, sizes) {
+  if (!durations.length || durations.length !== sizes.length || durations.some(d => !Number.isFinite(d) || d <= 0) || sizes.some(s => !Number.isFinite(s) || s <= 0)) throw new Error('Incomplete bitrate sample');
+  return {
+    bandwidth: Math.ceil(Math.max(...sizes.map((size, i) => size * 8 / durations[i])) * 1.25),
+    averageBandwidth: Math.ceil(sizes.reduce((sum, size) => sum + size, 0) * 8 / durations.reduce((sum, duration) => sum + duration, 0)),
+  };
+}
+
 export function createLiveServer(options = {}) {
   const config = {
     apiBase: process.env.LIVE_API_BASE || 'http://127.0.0.1:4000',
@@ -283,14 +291,18 @@ export function createLiveServer(options = {}) {
           observePublishedMedia(job, lists[job.renditions.findIndex(r => r.name === 'original')]);
           // Use actual published media, not FFmpeg's timestamp-offset-dependent average speed.
           if (job.recentSpeed >= 0.98 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2 && playlistDuration(playoutPlaylist(text)) >= CLIENT_RESERVE_SECONDS + 2)) {
-            const original = job.renditions.find(r => r.name === 'original');
-            const originalText = lists[job.renditions.findIndex(r => r.name === 'original')];
-            const durations = [...originalText.matchAll(/^#EXTINF:([\d.]+)/gm)].map(m => Number(m[1]));
-            const files = originalText.split('\n').filter(line => /^seg_\d+\.ts$/.test(line.trim()));
-            try {
-              const sizes = await Promise.all(files.map(file => stat(path.join(job.directory, 'original', file.trim())).then(s => s.size)));
-              original.bandwidth = Math.ceil(Math.max(...sizes.map((size, i) => size * 8 / durations[i])) * 1.25);
-            } catch { /* A rolling segment may expire while measuring; retain the conservative estimate. */ }
+            await Promise.all(job.renditions.map(async (rendition, i) => {
+              const durations = [...lists[i].matchAll(/^#EXTINF:([\d.]+)/gm)].map(m => Number(m[1]));
+              const files = lists[i].split('\n').filter(line => /^seg_\d+\.ts$/.test(line.trim()));
+              try {
+                const sizes = await Promise.all(files.map(file => stat(path.join(job.directory, rendition.name, file.trim())).then(s => s.size)));
+                const measured = segmentBandwidth(durations, sizes);
+                // Keep peak headroom for bursts and advertise the measured average too.
+                // Otherwise an unvisited higher rendition is judged only by its peak.
+                rendition.bandwidth = rendition.name === 'original' ? measured.bandwidth : Math.max(rendition.bandwidth, measured.bandwidth);
+                rendition.averageBandwidth = measured.averageBandwidth;
+              } catch { /* A rolling segment may expire while measuring; retain the conservative estimate. */ }
+            }));
             job.ready = true; job.lastSeen = Date.now(); return;
           }
         } catch { /* The encoder has not published its first playlist yet. */ }
@@ -416,7 +428,7 @@ export function createLiveServer(options = {}) {
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('X-SuperTV-Live', 'transcoded');
         res.end(`#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=-${CLIENT_RESERVE_SECONDS},PRECISE=YES\n` + job.renditions.map(r =>
-          `#EXT-X-STREAM-INF:BANDWIDTH=${r.bandwidth},RESOLUTION=${r.width}x${r.height},FRAME-RATE=${r.fps.toFixed(3)},CODECS="${r.codecs},mp4a.40.2",NAME="SuperTV ${r.name === 'original' ? 'Original ' + r.height + 'p' : r.name}"\n/api/live/channels/${id}/${job.generation}/${r.name}/index.m3u8?${credentialQuery}\n`).join(''));
+          `#EXT-X-STREAM-INF:BANDWIDTH=${r.bandwidth}${r.averageBandwidth ? `,AVERAGE-BANDWIDTH=${r.averageBandwidth}` : ''},RESOLUTION=${r.width}x${r.height},FRAME-RATE=${r.fps.toFixed(3)},CODECS="${r.codecs},mp4a.40.2",NAME="SuperTV ${r.name === 'original' ? 'Original ' + r.height + 'p' : r.name}"\n/api/live/channels/${id}/${job.generation}/${r.name}/index.m3u8?${credentialQuery}\n`).join(''));
         return;
       }
       const job = jobs.get(id);
