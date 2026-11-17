@@ -8,7 +8,7 @@ LIVE_BACKUP="/root/supertv-live-backup-$(date -u +%Y%m%d%H%M%S)"
 mkdir -m 700 "$LIVE_BACKUP"
 cp -p "$LIVE_CONFIG" "$LIVE_BACKUP/nginx.conf"
 install -d -m 700 /opt/supertv-live /var/cache/supertv-live
-for live_file in server.mjs sharing.mjs ffmpeg-child.py ecosystem.config.cjs; do
+for live_file in server.mjs sharing.mjs ingest.mjs ffmpeg-child.py ecosystem.config.cjs; do
   if [ -f "/opt/supertv-live/$live_file" ]; then cp -p "/opt/supertv-live/$live_file" "$LIVE_BACKUP/"; fi
   install -m 600 "$LIVE_SOURCE_DIR/$live_file" "/opt/supertv-live/$live_file"
 done

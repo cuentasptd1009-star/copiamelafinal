@@ -1,10 +1,11 @@
 import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, rm, stat, readdir } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { createHlsInput } from './ingest.mjs';
 import { sameSecret, createChannelLookup, createOriginRelay } from './sharing.mjs';
 
 export const DELAY_SECONDS = 10;
@@ -16,10 +17,16 @@ const ENCODED_PROFILES = [
 ];
 
 export async function probeSource(source) {
-  const data = await new Promise((resolve, reject) => execFile(process.env.FFPROBE_PATH || 'ffprobe', [
-    '-v', 'error', '-rw_timeout', '12000000', '-user_agent', ORIGIN_USER_AGENT, '-live_start_index', '-1',
-    '-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate,profile,level,bit_rate,extradata', '-show_data', '-of', 'json', source,
-  ], { timeout: 18000, maxBuffer: 512000 }, (error, stdout) => error ? reject(error) : resolve(stdout)));
+  const buffered = Buffer.isBuffer(source);
+  const args = ['-v', 'error'];
+  if (buffered) args.push('-f', 'mpegts');
+  else args.push('-rw_timeout', '12000000', '-user_agent', ORIGIN_USER_AGENT, '-live_start_index', '-1');
+  args.push('-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate,profile,level,bit_rate,extradata', '-show_data', '-of', 'json', buffered ? 'pipe:0' : source);
+  const data = await new Promise((resolve, reject) => {
+    const child = execFile(process.env.FFPROBE_PATH || 'ffprobe', args, { timeout: 18000, maxBuffer: 512000 },
+      (error, stdout) => error ? reject(error) : resolve(stdout));
+    if (buffered) { child.stdin.on('error', () => {}); child.stdin.end(source); }
+  });
   const streams = JSON.parse(data).streams || [];
   const video = streams.find(s => s.codec_type === 'video');
   const audio = streams.find(s => s.codec_type === 'audio');
@@ -49,11 +56,13 @@ export function ffmpegArguments(source, directory, profile, renditions = renditi
   const split = encoded.map((_, i) => `[v${i}]`).join('');
   const filters = encoded.length ? `[0:v:0]split=${encoded.length}${split};` + encoded.map((r, i) =>
     `[v${i}]scale=${r.width}:${r.height}:force_original_aspect_ratio=decrease:flags=fast_bilinear,pad=${r.width}:${r.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[out${i}]`).join(';') : null;
+  const piped = source === 'pipe:0';
   const args = ['-hide_banner', '-loglevel', 'error', '-nostats', '-stats_period', '2', '-progress', 'pipe:3',
-    '-thread_queue_size', '512', '-threads', '2', '-filter_complex_threads', '2', '-dts_delta_threshold', '1', '-rw_timeout', '15000000',
-    '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '3',
-    '-user_agent', ORIGIN_USER_AGENT, '-live_start_index', '-1', '-http_multiple', '1', '-http_persistent', '1',
-    '-fflags', '+discardcorrupt', '-i', source];
+    '-thread_queue_size', '512', '-threads', '2', '-filter_complex_threads', '2', '-dts_delta_threshold', '1'];
+  if (piped) args.push('-f', 'mpegts');
+  else args.push('-rw_timeout', '15000000', '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '3',
+    '-user_agent', ORIGIN_USER_AGENT, '-live_start_index', '-1', '-http_multiple', '1', '-http_persistent', '1');
+  args.push('-fflags', '+discardcorrupt', '-i', source);
   if (filters) args.push('-filter_complex', filters);
   renditions.forEach((r, i) => {
     if (r.name === 'original') args.push('-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2', '-af', 'aresample=async=1');
@@ -114,7 +123,7 @@ export function createLiveServer(options = {}) {
     externalChannelIds: Object.keys(emissionKeys).map(Number),
     authorizationTiming: { ...authorizationTiming },
     activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, source: j.profile ? { width: j.profile.width, height: j.profile.height, fps: j.profile.fps } : null, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
-      lastProgressMs: Date.now() - j.lastProgress, maxProgressGapMs: j.maxProgressGapMs || 0, maxPublishGapMs: j.maxPublishGapMs || 0 })) });
+      lastProgressMs: Date.now() - j.lastProgress, maxProgressGapMs: j.maxProgressGapMs || 0, maxPublishGapMs: j.maxPublishGapMs || 0, inputMode: j.input ? 'prefetched-ts' : 'direct-hls', inputNotice: j.ingestFallback || null, ingest: j.input ? { ...j.input.stats } : null })) });
   async function requireAdmin(token) {
     const response = await fetch(`${config.apiBase}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000),
@@ -208,6 +217,7 @@ export function createLiveServer(options = {}) {
     job.stopping = true;
     jobs.delete(job.id);
     if (reason !== 'idle' && reason !== 'shutdown' && reason !== 'disabled') cooldown.set(job.id, Date.now() + 180000);
+    job.input?.close();
     job.child?.kill('SIGTERM');
     const force = setTimeout(() => job.child?.kill('SIGKILL'), 5000); force.unref();
     if (!job.child) rm(job.directory, { recursive: true, force: true }).catch(() => {});
@@ -226,13 +236,17 @@ export function createLiveServer(options = {}) {
       lastSeen: Date.now(), started: Date.now(), lastProgress: Date.now(), slowSince: null, child: null, stopping: false, ready: false };
     jobs.set(channel.id, job);
     job.readiness = (async () => {
-      job.profile = await probeSource(channel.streamUrl);
+      let sample;
+      try { job.input = await createHlsInput(channel.streamUrl, { userAgent: ORIGIN_USER_AGENT }); sample = await job.input.peek(); }
+      catch (error) { job.input?.close(); job.input = null; job.ingestFallback = cleanError(error.message); }
+      job.profile = await probeSource(sample || channel.streamUrl); sample = null;
       job.renditions = renditionsFor(job.profile);
       await Promise.all(job.renditions.map(r => mkdir(path.join(job.directory, r.name), { recursive: true, mode: 0o700 })));
       if (job.stopping) throw new Error('Stopped');
-      const child = spawn('python3', [fileURLToPath(new URL('./ffmpeg-child.py', import.meta.url)), String(process.pid), process.env.FFMPEG_PATH || 'ffmpeg', ...ffmpegArguments(channel.streamUrl, job.directory, job.profile, job.renditions)],
-        { stdio: ['ignore', 'ignore', 'pipe', 'pipe'] });
+      const child = spawn('python3', [fileURLToPath(new URL('./ffmpeg-child.py', import.meta.url)), String(process.pid), process.env.FFMPEG_PATH || 'ffmpeg', ...ffmpegArguments(job.input ? 'pipe:0' : channel.streamUrl, job.directory, job.profile, job.renditions)],
+        { stdio: [job.input ? 'pipe' : 'ignore', 'ignore', 'pipe', 'pipe'] });
       job.child = child;
+      job.input?.pipeTo(child.stdin).catch(error => { if (!job.stopping) { job.lastError = cleanError(error.message); stop(job, 'source-ingest-failed'); } });
       child.on('error', () => stop(job, 'ffmpeg-unavailable'));
       child.stderr.on('data', bytes => { job.lastError = cleanError(bytes.toString()); });
       let progress = '';
@@ -259,7 +273,7 @@ export function createLiveServer(options = {}) {
           console.error(JSON.stringify({ event: 'live-exit', channel: job.id, code, detail: job.lastError || '' }));
           stop(job, 'ffmpeg-exit');
         }
-        rm(job.directory, { recursive: true, force: true }).catch(() => {});
+        const cleanup = setTimeout(() => rm(job.directory, { recursive: true, force: true }).catch(() => {}), 60000); cleanup.unref();
       });
       console.log(JSON.stringify({ event: 'live-start', channel: job.id, pid: child.pid }));
       while (!job.stopping && Date.now() - job.started < config.warmupMs) {
@@ -289,6 +303,25 @@ export function createLiveServer(options = {}) {
     return job;
   }
 
+  let pruning = false;
+  const cacheCleaner = setInterval(async () => {
+    if (pruning) return; pruning = true;
+    try {
+      for (const channel of await readdir(config.directory, { withFileTypes: true })) {
+        if (!channel.isDirectory() || !/^[1-9]\d*$/.test(channel.name)) continue;
+        const channelPath = path.join(config.directory, channel.name);
+        for (const generation of await readdir(channelPath, { withFileTypes: true })) {
+          if (!generation.isDirectory() || !/^[a-z0-9]+-[a-f0-9]+$/.test(generation.name)) continue;
+          if (jobs.get(Number(channel.name))?.generation === generation.name) continue;
+          const directory = path.join(channelPath, generation.name);
+          const info = await stat(path.join(directory, 'original', 'index.m3u8')).catch(() => stat(directory));
+          if (Date.now() - info.mtimeMs > 60000) await rm(directory, { recursive: true, force: true });
+        }
+      }
+    } catch { /* Empty caches and concurrent retirement are normal. */ }
+    finally { pruning = false; }
+  }, 30000); cacheCleaner.unref();
+
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const [token, entry] of authorizations) if (entry.expires < now) authorizations.delete(token);
@@ -300,7 +333,7 @@ export function createLiveServer(options = {}) {
       }
       if (job.ready && now - job.lastSeen > config.idleMs) stop(job, 'idle');
       else if (now - job.lastProgress > 35000) stop(job, 'source-stalled');
-      else if (job.slowSince && now - job.slowSince > 30000) stop(job, 'delivery-below-realtime');
+      // A temporary origin slowdown must not destroy the URLs existing viewers are using.
     }
   }, 2000); sweep.unref();
 
@@ -386,9 +419,11 @@ export function createLiveServer(options = {}) {
         return;
       }
       const job = jobs.get(id);
-      if (!job || job.generation !== match[3] || !job.ready) { res.writeHead(404); res.end(); return; }
-      job.lastSeen = Date.now();
-      const file = path.join(job.directory, match[4], match[5]);
+      const active = job && job.generation === match[3] && job.ready;
+      if (!active && match[5] === 'index.m3u8') { await fallback(); return; }
+      if (active) job.lastSeen = Date.now();
+      const directory = active ? job.directory : path.join(config.directory, String(id), match[3]);
+      const file = path.join(directory, match[4], match[5]);
       if (match[5] === 'index.m3u8') {
         let text = await readFile(file, 'utf8');
         const prefix = `/api/live/channels/${id}/${job.generation}/${match[4]}/`;
@@ -410,7 +445,7 @@ export function createLiveServer(options = {}) {
   server.requestTimeout = 60000;
   server.headersTimeout = 65000;
   return { server, jobs, ready, async close() {
-    clearInterval(sweep);
+    clearInterval(sweep); clearInterval(cacheCleaner);
     for (const job of [...jobs.values()]) stop(job, 'shutdown');
     await database.close();
     server.closeAllConnections();

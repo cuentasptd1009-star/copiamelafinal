@@ -58,7 +58,7 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
   assert.ok(first.includes('viewer-one') && !first.includes('viewer-two'));
   assert.ok(second.includes('viewer-two') && !second.includes('viewer-one'));
   for(let i=0;i<10;i++){ await fetch(`${base}/api/live/channels/1/master.m3u8?token=viewer-one`); await new Promise(resolve=>setTimeout(resolve,500)); }
-  const starts = []; const durationsByLevel = [];
+  const starts = []; const durationsByLevel = []; let firstSegmentUrl;
   const variants = first.split('\n').filter(line => line.startsWith('/api/'));
   for (const [i, variant] of variants.entries()) {
     const response = await fetch(base + variant); assert.equal(response.status, 200);
@@ -71,6 +71,7 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
     const unauthorized = await fetch(base + segment.replace('viewer-one', 'expired-viewer')); assert.equal(unauthorized.status, 401);
     const video = await fetch(base + segment); assert.equal(video.status, 200);
     if (i === 0) {
+      firstSegmentUrl = base + segment;
       const viewers = await Promise.all(Array.from({length:50}, () => fetch(base + segment).then(async r => ({status:r.status,size:(await r.arrayBuffer()).byteLength}))));
       assert.ok(viewers.every(v=>v.status===200 && v.size>0)); assert.equal(live.jobs.size,1);
     }
@@ -91,6 +92,10 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
   assert.equal(live.jobs.size, 1);
   await new Promise(resolve => setTimeout(resolve, 6500));
   assert.equal(live.jobs.size, 0, 'encoder stops when viewers leave');
+  const retired = await fetch(base + variants[0], { redirect: 'manual' });
+  assert.equal(retired.status,302,'existing viewers can recover through the original playlist after retirement');
+  assert.match(retired.headers.get('location'), /hls-proxy/);
+  assert.equal((await fetch(firstSegmentUrl)).status,200,'already published segments survive the retirement grace period');
 
   // A populated HLS window is insufficient when the encoder cannot replenish it in real time.
   playbackManifestStarted = null;
@@ -145,6 +150,8 @@ test('only admins can persist up to five selected channels; disabling preserves 
   const issued = await (await issue()).json();
   const relative = value => { const u = new URL(value); return u.pathname + u.search; };
   const publicPath = relative(issued.url);
+  const retiredExternal = await fetch(base + publicPath.replace('master.m3u8','old-0123abcd/original/index.m3u8'));
+  assert.equal(retiredExternal.status,200,'external clients can follow the original playlist after a conversion ends');
   const stream = await fetch(base + publicPath); assert.equal(stream.status, 200);
   const manifest = await stream.text();
   assert.ok(manifest.includes('key=') && !manifest.includes('administrator'));
