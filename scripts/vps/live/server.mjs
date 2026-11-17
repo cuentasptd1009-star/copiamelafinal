@@ -224,7 +224,8 @@ export function createLiveServer(options = {}) {
       while (!job.stopping && Date.now() - job.started < config.warmupMs) {
         try {
           const lists = await Promise.all(job.renditions.map(r => readFile(path.join(job.directory, r.name, 'index.m3u8'), 'utf8')));
-          if (lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2)) {
+          // Do not publish a ladder that is already consuming its reserve faster than it can refill.
+          if (job.speed >= 1 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2)) {
             const original = job.renditions.find(r => r.name === 'original');
             const originalText = lists[job.renditions.findIndex(r => r.name === 'original')];
             const durations = [...originalText.matchAll(/^#EXTINF:([\d.]+)/gm)].map(m => Number(m[1]));

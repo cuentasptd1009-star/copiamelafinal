@@ -72,6 +72,19 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
   assert.equal(live.jobs.size, 1);
   await new Promise(resolve => setTimeout(resolve, 6500));
   assert.equal(live.jobs.size, 0, 'encoder stops when viewers leave');
+
+  // A populated HLS window is insufficient when the encoder cannot replenish it in real time.
+  const slow = createLiveServer({ apiBase: backendBase, directory: path.join(root, 'slow-output'), allowed: new Set([1]), warmupMs: 8000 });
+  const slowBase = await listen(slow.server); t.after(() => slow.close());
+  const guarded = setInterval(() => {
+    const job = slow.jobs.get(1);
+    if (job && !Object.getOwnPropertyDescriptor(job, 'speed')?.get) Object.defineProperty(job, 'speed', { get: () => 0.5, set() {}, configurable: true });
+  }, 1);
+  try {
+    const response = await fetch(`${slowBase}/api/live/channels/1/master.m3u8?token=viewer-one`, { redirect: 'manual' });
+    assert.equal(response.status, 302, 'a half-speed encoder must use the original stream');
+    assert.match(response.headers.get('location'), /hls-proxy/);
+  } finally { clearInterval(guarded); }
 });
 
 test('only admins can persist up to five selected channels; disabling preserves originals', async t => {

@@ -13,7 +13,7 @@ reconstruct video that the origin never delivered.
 ## Capacity
 
 The CX23 initially permits one encoder job shared by all viewers of the same channel. The admin displays this simultaneous-processing limit separately from the five saved selections. It produces 360p, 480p, and (for sources above 720p) 720p. The highest variant copies the original video and audio without re-encoding. Lower variants follow the source keyframes and timestamps, so one master playlist can adapt up and down including the original. Sources at 720p use Original 720p + 480p + 360p. Sources above 1080p/30fps or with unsupported codecs fall back to the original proxy. FFmpeg
-runs at lower priority with limited encoder/filter threads. Idle jobs stop after two
+runs at lower priority, with two decode/filter threads and one thread per rendition encoder. Fast bilinear scaling reduces work on the shared two-vCPU VPS. A ladder is not published during warmup unless FFmpeg reports at least real-time speed. Idle jobs stop after two
 minutes. Warmup failure, sustained processing below realtime, or source stalls cause
 fallback to the existing original stream. The encoder dies if its Node parent dies.
 
@@ -64,3 +64,5 @@ The tests check 50 simultaneous reads of the same channel/segment, one shared en
 per-channel key scope, segment authentication, key renewal/revocation, and persistence.
 This is not a promise of 50 uninterrupted full-time viewers at every source bitrate:
 network throughput, origin availability, and included egress traffic still apply.
+
+For a bounded isolated sustained check, run `node scripts/vps/live/diagnose.mjs CHANNEL_ID 240` on the VPS from a private release directory. It does not change channel selections, publishes no endpoint, and removes its temporary media after the check. Do not run it alongside an active production conversion on this small VPS. Check actual client playback and buffer health over several minutes as well as encoder speed.
