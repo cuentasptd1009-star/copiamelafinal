@@ -47,9 +47,9 @@ export function ffmpegArguments(source, directory, profile, renditions = renditi
   const encoded = renditions.filter(r => r.name !== 'original');
   const split = encoded.map((_, i) => `[v${i}]`).join('');
   const filters = encoded.length ? `[0:v:0]split=${encoded.length}${split};` + encoded.map((r, i) =>
-    `[v${i}]scale=${r.width}:${r.height}:force_original_aspect_ratio=decrease,pad=${r.width}:${r.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[out${i}]`).join(';') : null;
+    `[v${i}]scale=${r.width}:${r.height}:force_original_aspect_ratio=decrease:flags=fast_bilinear,pad=${r.width}:${r.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[out${i}]`).join(';') : null;
   const args = ['-hide_banner', '-loglevel', 'error', '-nostats', '-stats_period', '2', '-progress', 'pipe:3',
-    '-threads', '1', '-filter_complex_threads', '1', '-copyts', '-start_at_zero', '-rw_timeout', '15000000',
+    '-threads', '2', '-filter_complex_threads', '2', '-copyts', '-start_at_zero', '-rw_timeout', '15000000',
     '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '3',
     '-user_agent', 'Mozilla/5.0 (compatible; SuperTV/1.0)', '-live_start_index', '-2',
     '-fflags', '+discardcorrupt', '-i', source];
