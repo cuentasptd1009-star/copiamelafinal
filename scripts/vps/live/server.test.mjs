@@ -9,7 +9,7 @@ import { createLiveServer } from './server.mjs';
 
 const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)));
 
-test('authenticated viewers share a bounded adaptive encoder including untouched original and private playlists', { timeout: 60000 }, async t => {
+test('authenticated viewers share a bounded adaptive encoder including untouched original and private playlists', { timeout: 90000 }, async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'supertv-live-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const fixture = path.join(root, 'input.m3u8');
@@ -20,6 +20,7 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
   const playlist = (await readFile(fixture, 'utf8')).replace('#EXT-X-ENDLIST', '');
   let backendBase;
   let thirdViewerAuthorizations = 0;
+  let playbackManifestStarted = null;
   const backend = http.createServer(async (req, res) => {
     if (req.url === '/api/channels') {
       if (req.headers.authorization === 'Bearer viewer-three') { thirdViewerAuthorizations++; await new Promise(resolve => setTimeout(resolve, 50)); }
@@ -27,7 +28,13 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify([1, 2].map(id => ({ id, streamUrl: `${backendBase}/input.m3u8` })))); return;
     }
-    if (req.url === '/input.m3u8') { res.end(playlist); return; }
+    if (req.url === '/input.m3u8') {
+      // The newest segment alone has ten seconds: publish another on the next live reload.
+      // This verifies a fresh-edge ingest still waits for a genuine twelve-second reserve.
+      if (req.headers['user-agent'] === 'Mozilla/5.0') { playbackManifestStarted = null; res.end(playlist); }
+      else { playbackManifestStarted ??= Date.now(); res.end(Date.now() - playbackManifestStarted < 2500 ? playlist.slice(0, playlist.lastIndexOf('#EXTINF')) : playlist); }
+      return;
+    }
     if (/^\/input\d+\.ts$/.test(req.url)) { res.end(await readFile(path.join(root, req.url.slice(1)))); return; }
     res.writeHead(404); res.end();
   });
@@ -79,11 +86,11 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
   assert.equal(live.jobs.size, 0, 'encoder stops when viewers leave');
 
   // A populated HLS window is insufficient when the encoder cannot replenish it in real time.
-  const slow = createLiveServer({ apiBase: backendBase, directory: path.join(root, 'slow-output'), allowed: new Set([1]), warmupMs: 8000 });
+  const slow = createLiveServer({ apiBase: backendBase, directory: path.join(root, 'slow-output'), allowed: new Set([1]), warmupMs: 18000 });
   const slowBase = await listen(slow.server); t.after(() => slow.close());
   const guarded = setInterval(() => {
     const job = slow.jobs.get(1);
-    if (job && !Object.getOwnPropertyDescriptor(job, 'speed')?.get) Object.defineProperty(job, 'speed', { get: () => 0.5, set() {}, configurable: true });
+    if (job && !Object.getOwnPropertyDescriptor(job, 'recentSpeed')?.get) Object.defineProperty(job, 'recentSpeed', { get: () => 0.5, set() {}, configurable: true });
   }, 1);
   try {
     const response = await fetch(`${slowBase}/api/live/channels/1/master.m3u8?token=viewer-one`, { redirect: 'manual' });

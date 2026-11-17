@@ -49,9 +49,9 @@ export function ffmpegArguments(source, directory, profile, renditions = renditi
   const filters = encoded.length ? `[0:v:0]split=${encoded.length}${split};` + encoded.map((r, i) =>
     `[v${i}]scale=${r.width}:${r.height}:force_original_aspect_ratio=decrease:flags=fast_bilinear,pad=${r.width}:${r.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[out${i}]`).join(';') : null;
   const args = ['-hide_banner', '-loglevel', 'error', '-nostats', '-stats_period', '2', '-progress', 'pipe:3',
-    '-threads', '2', '-filter_complex_threads', '2', '-copyts', '-start_at_zero', '-rw_timeout', '15000000',
+    '-thread_queue_size', '512', '-threads', '2', '-filter_complex_threads', '2', '-copyts', '-start_at_zero', '-rw_timeout', '15000000',
     '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '3',
-    '-user_agent', 'Mozilla/5.0 (compatible; SuperTV/1.0)', '-live_start_index', '-2',
+    '-user_agent', 'Mozilla/5.0 (compatible; SuperTV/1.0)', '-live_start_index', '-1', '-http_multiple', '1', '-http_persistent', '1',
     '-fflags', '+discardcorrupt', '-i', source];
   if (filters) args.push('-filter_complex', filters);
   renditions.forEach((r, i) => {
@@ -113,7 +113,7 @@ export function createLiveServer(options = {}) {
     externalChannelIds: Object.keys(emissionKeys).map(Number),
     authorizationTiming: { ...authorizationTiming },
     activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
-      lastProgressMs: Date.now() - j.lastProgress, maxProgressGapMs: j.maxProgressGapMs || 0 })) });
+      lastProgressMs: Date.now() - j.lastProgress, maxProgressGapMs: j.maxProgressGapMs || 0, maxPublishGapMs: j.maxPublishGapMs || 0 })) });
   async function requireAdmin(token) {
     const response = await fetch(`${config.apiBase}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000),
@@ -179,6 +179,29 @@ export function createLiveServer(options = {}) {
     }
   }
 
+  function observePublishedMedia(job, text) {
+    const now = Date.now();
+    const samples = (job.edgeSamples ||= []);
+    if (samples.length && now - samples.at(-1).wall < 1000) return;
+    let date = NaN, duration = 0, edge = NaN;
+    for (const line of text.split('\n')) {
+      if (line.startsWith('#EXT-X-PROGRAM-DATE-TIME:')) date = Date.parse(line.slice(25));
+      else if (line.startsWith('#EXTINF:')) duration = Number.parseFloat(line.slice(8));
+      else if (/^seg_\d+\.ts$/.test(line.trim()) && Number.isFinite(date)) edge = date + duration * 1000;
+    }
+    if (!Number.isFinite(edge)) return;
+    if (edge > (job.publishedEdge || 0)) {
+      if (job.publishedEdge) job.maxPublishGapMs = Math.max(job.maxPublishGapMs || 0, now - job.lastPublished);
+      job.publishedEdge = edge; job.lastPublished = now;
+    }
+    samples.push({ wall: now, edge });
+    while (samples.length > 2 && now - samples[0].wall > 30000) samples.shift();
+    const elapsed = now - samples[0].wall;
+    if (elapsed >= 10000) job.recentSpeed = Number(((edge - samples[0].edge) / elapsed).toFixed(3));
+    if (job.ready && job.recentSpeed < 0.95) job.slowSince ??= now;
+    else job.slowSince = null;
+  }
+
   function stop(job, reason) {
     if (job.stopping) return;
     job.stopping = true;
@@ -222,16 +245,11 @@ export function createLiveServer(options = {}) {
               const now = Date.now();
               if (job.mediaTime) job.maxProgressGapMs = Math.max(job.maxProgressGapMs || 0, now - job.lastProgress);
               job.lastProgress = now; job.mediaTime = value;
-              (job.samples ||= []).push({ wall: now, media: value });
-              if (job.samples.length > 16) job.samples.shift();
-              const first = job.samples[0]; const elapsed = now - first.wall;
-              if (elapsed >= 10000) job.recentSpeed = Number(((value - first.media) / (elapsed * 1000)).toFixed(3));
             }
           }
           if (line.startsWith('speed=')) {
             job.speed = Number.parseFloat(line.slice(6));
-            if (job.speed < 0.9 && Date.now() - job.started > 30000) job.slowSince ??= Date.now();
-            else job.slowSince = null;
+
           }
         }
       });
@@ -246,8 +264,9 @@ export function createLiveServer(options = {}) {
       while (!job.stopping && Date.now() - job.started < config.warmupMs) {
         try {
           const lists = await Promise.all(job.renditions.map(r => readFile(path.join(job.directory, r.name, 'index.m3u8'), 'utf8')));
-          // Do not publish a ladder that is already consuming its reserve faster than it can refill.
-          if (job.speed >= 1 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2)) {
+          observePublishedMedia(job, lists[job.renditions.findIndex(r => r.name === 'original')]);
+          // Use actual published media, not FFmpeg's timestamp-offset-dependent average speed.
+          if (job.recentSpeed >= 0.98 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2)) {
             const original = job.renditions.find(r => r.name === 'original');
             const originalText = lists[job.renditions.findIndex(r => r.name === 'original')];
             const durations = [...originalText.matchAll(/^#EXTINF:([\d.]+)/gm)].map(m => Number(m[1]));
@@ -274,11 +293,15 @@ export function createLiveServer(options = {}) {
     for (const [token, entry] of authorizations) if (entry.expires < now) authorizations.delete(token);
     for (const [id, until] of cooldown) if (until < now) cooldown.delete(id);
     for (const job of jobs.values()) {
+      if (!job.observing && job.profile) {
+        job.observing = true;
+        readFile(path.join(job.directory, 'original', 'index.m3u8'), 'utf8').then(text => observePublishedMedia(job, text)).catch(() => {}).finally(() => { job.observing = false; });
+      }
       if (job.ready && now - job.lastSeen > config.idleMs) stop(job, 'idle');
       else if (now - job.lastProgress > 35000) stop(job, 'source-stalled');
-      else if (job.slowSince && now - job.slowSince > 30000) stop(job, 'insufficient-capacity');
+      else if (job.slowSince && now - job.slowSince > 30000) stop(job, 'delivery-below-realtime');
     }
-  }, 5000); sweep.unref();
+  }, 2000); sweep.unref();
 
   const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');

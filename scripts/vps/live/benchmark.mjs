@@ -19,7 +19,7 @@ const renditions=renditionsFor(profile);
 function cascade(){const descending=renditions.filter(r=>r.name!=='original').slice().reverse();let previous='0:v:0';return descending.map((r,i)=>{const index=renditions.indexOf(r);const scale=`[${previous}]scale=${r.width}:${r.height}:force_original_aspect_ratio=decrease:flags=fast_bilinear,pad=${r.width}:${r.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`;previous=`scale${i}`;return scale+(i<descending.length-1?`,split=2[out${index}][${previous}]`:`[out${index}]`)}).join(';')}
 for(const mode of ['baseline','parallel720','cascade720']){
  const directory=path.join(root,'output-'+mode);await Promise.all(renditions.map(r=>mkdir(path.join(directory,r.name),{recursive:true,mode:0o700})));
- let args=ffmpegArguments(sample,directory,profile,renditions);const httpFlags=new Set(['-rw_timeout','-reconnect','-reconnect_streamed','-reconnect_delay_max','-user_agent','-live_start_index']);
+ let args=ffmpegArguments(sample,directory,profile,renditions);const httpFlags=new Set(['-rw_timeout','-reconnect','-reconnect_streamed','-reconnect_delay_max','-user_agent','-live_start_index','-http_multiple','-http_persistent']);
  args=args.filter((value,i)=>!httpFlags.has(value)&&!httpFlags.has(args[i-1]));
  const at=args.indexOf('-i');args.splice(at,0,'-stream_loop','-1');
  if(mode!=='baseline'){
