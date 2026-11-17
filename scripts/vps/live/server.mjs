@@ -10,8 +10,8 @@ import { sameSecret, createChannelLookup, createOriginRelay } from './sharing.mj
 export const DELAY_SECONDS = 10;
 const ENCODED_PROFILES = [
   { name: '360p', width: 640, height: 360, bitrate: '500k', maxrate: '650k', bandwidth: 800000 },
-  { name: '480p', width: 854, height: 480, bitrate: '800k', maxrate: '950k', bandwidth: 1100000 },
-  { name: '720p', width: 1280, height: 720, bitrate: '1600k', maxrate: '1900k', bandwidth: 2200000 },
+  { name: '480p', width: 854, height: 480, bitrate: '800k', maxrate: '950k', bandwidth: 1300000 },
+  { name: '720p', width: 1280, height: 720, bitrate: '1600k', maxrate: '1900k', bandwidth: 2500000 },
 ];
 
 export async function probeSource(source) {
