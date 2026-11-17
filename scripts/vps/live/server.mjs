@@ -8,6 +8,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { sameSecret, createChannelLookup, createOriginRelay } from './sharing.mjs';
 
 export const DELAY_SECONDS = 10;
+export const ORIGIN_USER_AGENT = 'Mozilla/5.0 (compatible; SuperTV/1.0)';
 const ENCODED_PROFILES = [
   { name: '360p', width: 640, height: 360, bitrate: '500k', maxrate: '650k', bandwidth: 800000 },
   { name: '480p', width: 854, height: 480, bitrate: '800k', maxrate: '950k', bandwidth: 1300000 },
@@ -16,7 +17,7 @@ const ENCODED_PROFILES = [
 
 export async function probeSource(source) {
   const data = await new Promise((resolve, reject) => execFile(process.env.FFPROBE_PATH || 'ffprobe', [
-    '-v', 'error', '-rw_timeout', '12000000', '-user_agent', 'Mozilla/5.0', '-live_start_index', '-1',
+    '-v', 'error', '-rw_timeout', '12000000', '-user_agent', ORIGIN_USER_AGENT, '-live_start_index', '-1',
     '-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate,profile,level,bit_rate,extradata', '-show_data', '-of', 'json', source,
   ], { timeout: 18000, maxBuffer: 512000 }, (error, stdout) => error ? reject(error) : resolve(stdout)));
   const streams = JSON.parse(data).streams || [];
@@ -49,9 +50,9 @@ export function ffmpegArguments(source, directory, profile, renditions = renditi
   const filters = encoded.length ? `[0:v:0]split=${encoded.length}${split};` + encoded.map((r, i) =>
     `[v${i}]scale=${r.width}:${r.height}:force_original_aspect_ratio=decrease:flags=fast_bilinear,pad=${r.width}:${r.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[out${i}]`).join(';') : null;
   const args = ['-hide_banner', '-loglevel', 'error', '-nostats', '-stats_period', '2', '-progress', 'pipe:3',
-    '-thread_queue_size', '512', '-threads', '2', '-filter_complex_threads', '2', '-copyts', '-start_at_zero', '-rw_timeout', '15000000',
+    '-thread_queue_size', '512', '-threads', '2', '-filter_complex_threads', '2', '-dts_delta_threshold', '1', '-rw_timeout', '15000000',
     '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '3',
-    '-user_agent', 'Mozilla/5.0 (compatible; SuperTV/1.0)', '-live_start_index', '-1', '-http_multiple', '1', '-http_persistent', '1',
+    '-user_agent', ORIGIN_USER_AGENT, '-live_start_index', '-1', '-http_multiple', '1', '-http_persistent', '1',
     '-fflags', '+discardcorrupt', '-i', source];
   if (filters) args.push('-filter_complex', filters);
   renditions.forEach((r, i) => {
@@ -112,7 +113,7 @@ export function createLiveServer(options = {}) {
     maxConcurrentChannels: config.maxChannels, delaySeconds: DELAY_SECONDS,
     externalChannelIds: Object.keys(emissionKeys).map(Number),
     authorizationTiming: { ...authorizationTiming },
-    activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
+    activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, source: j.profile ? { width: j.profile.width, height: j.profile.height, fps: j.profile.fps } : null, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
       lastProgressMs: Date.now() - j.lastProgress, maxProgressGapMs: j.maxProgressGapMs || 0, maxPublishGapMs: j.maxPublishGapMs || 0 })) });
   async function requireAdmin(token) {
     const response = await fetch(`${config.apiBase}/api/auth/me`, {
@@ -210,7 +211,7 @@ export function createLiveServer(options = {}) {
     job.child?.kill('SIGTERM');
     const force = setTimeout(() => job.child?.kill('SIGKILL'), 5000); force.unref();
     if (!job.child) rm(job.directory, { recursive: true, force: true }).catch(() => {});
-    console.log(JSON.stringify({ event: 'live-stop', channel: job.id, reason }));
+    console.log(JSON.stringify({ event: 'live-stop', channel: job.id, reason, publishedRate: job.recentSpeed, detail: job.lastError || undefined }));
   }
 
   function start(channel) {

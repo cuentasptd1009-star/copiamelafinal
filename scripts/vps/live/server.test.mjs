@@ -9,7 +9,7 @@ import { createLiveServer } from './server.mjs';
 
 const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)));
 
-test('authenticated viewers share a bounded adaptive encoder including untouched original and private playlists', { timeout: 90000 }, async t => {
+test('authenticated viewers share a bounded adaptive encoder with repaired timestamps, original video and private playlists', { timeout: 90000 }, async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'supertv-live-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const fixture = path.join(root, 'input.m3u8');
@@ -17,6 +17,12 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
     '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', '30', '-c:v', 'libx264', '-preset', 'veryfast', '-bf', '2',
     '-threads', '1', '-b:v', '2000k', '-g', '50', '-sc_threshold', '0', '-c:a', 'aac', '-f', 'hls', '-hls_time', '10', '-hls_list_size', '0', fixture], { timeout: 30000 });
   assert.equal(generated.status, 0, generated.stderr?.toString());
+  { // Model an unannounced backwards jump in the source TS clock.
+    const shifted = path.join(root, 'shifted.ts');
+    const reset = spawnSync('ffmpeg', ['-hide_banner','-loglevel','error','-copyts','-itsoffset','-3','-i',path.join(root,'input2.ts'),'-map','0','-c','copy','-mpegts_copyts','1','-f','mpegts',shifted]);
+    assert.equal(reset.status,0,reset.stderr?.toString());
+    await writeFile(path.join(root,'input2.ts'),await readFile(shifted));
+  }
   const playlist = (await readFile(fixture, 'utf8')).replace('#EXT-X-ENDLIST', '');
   let backendBase;
   let thirdViewerAuthorizations = 0;
@@ -31,8 +37,7 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
     if (req.url === '/input.m3u8') {
       // The newest segment alone has ten seconds: publish another on the next live reload.
       // This verifies a fresh-edge ingest still waits for a genuine twelve-second reserve.
-      if (req.headers['user-agent'] === 'Mozilla/5.0') { playbackManifestStarted = null; res.end(playlist); }
-      else { playbackManifestStarted ??= Date.now(); res.end(Date.now() - playbackManifestStarted < 2500 ? playlist.slice(0, playlist.lastIndexOf('#EXTINF')) : playlist); }
+      playbackManifestStarted ??= Date.now(); res.end(Date.now() - playbackManifestStarted < 2500 ? playlist.slice(0, playlist.lastIndexOf('#EXTINF')) : playlist);
       return;
     }
     if (/^\/input\d+\.ts$/.test(req.url)) { res.end(await readFile(path.join(root, req.url.slice(1)))); return; }
@@ -52,6 +57,7 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
   assert.match(first, /TIME-OFFSET=-10/);
   assert.ok(first.includes('viewer-one') && !first.includes('viewer-two'));
   assert.ok(second.includes('viewer-two') && !second.includes('viewer-one'));
+  for(let i=0;i<10;i++){ await fetch(`${base}/api/live/channels/1/master.m3u8?token=viewer-one`); await new Promise(resolve=>setTimeout(resolve,500)); }
   const starts = []; const durationsByLevel = [];
   const variants = first.split('\n').filter(line => line.startsWith('/api/'));
   for (const [i, variant] of variants.entries()) {
@@ -60,6 +66,7 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
     const durations = [...body.matchAll(/#EXTINF:([\d.]+)/g)].map(m => Number(m[1]));
     assert.ok(durations.reduce((a, b) => a + b, 0) >= 12);
     durationsByLevel.push(durations);
+    assert.ok(durations.reduce((a,b)=>a+b,0)>=17.9,'source timestamp reset must not discard three seconds of footage');
     const segment = body.split('\n').find(line => line.startsWith('/api/'));
     const unauthorized = await fetch(base + segment.replace('viewer-one', 'expired-viewer')); assert.equal(unauthorized.status, 401);
     const video = await fetch(base + segment); assert.equal(video.status, 200);
@@ -86,6 +93,7 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
   assert.equal(live.jobs.size, 0, 'encoder stops when viewers leave');
 
   // A populated HLS window is insufficient when the encoder cannot replenish it in real time.
+  playbackManifestStarted = null;
   const slow = createLiveServer({ apiBase: backendBase, directory: path.join(root, 'slow-output'), allowed: new Set([1]), warmupMs: 18000 });
   const slowBase = await listen(slow.server); t.after(() => slow.close());
   const guarded = setInterval(() => {
