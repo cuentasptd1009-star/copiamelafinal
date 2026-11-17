@@ -12,6 +12,8 @@ const emit = data => console.log(JSON.stringify(data));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const runtime = process.env.LIVE_RUNTIME || '/opt/supertv-live';
 const ids = process.argv.slice(2).map(Number);
+const repairIds = new Set((process.env.CAPACITY_REPAIR_VIDEO_IDS || '').split(',').map(Number));
+const iterations = Math.max(1, Math.min(2, Math.trunc(Number(process.env.CAPACITY_RUNS) || 2)));
 if (!ids.length || ids.length > 5 || ids.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new Error('Pass one to five channel IDs');
 const group = (await readFile('/proc/self/cgroup', 'utf8')).trim().split('\n').find(x => x.startsWith('0::'))?.slice(3);
 if (!group || group === '/') throw new Error('A quota-limited transient cgroup is required');
@@ -118,17 +120,23 @@ try {
       const data = JSON.parse(await run('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate,profile,level', '-of', 'json', sample]));
       const video = data.streams.find(s => s.codec_type === 'video'); const audio = data.streams.find(s => s.codec_type === 'audio');
       const [n, d] = String(video?.r_frame_rate || '0/1').split('/').map(Number); const fps = n / (d || 1);
-      const info = { id, captureMode, width: video?.width, height: video?.height, fps: +fps.toFixed(3), video: video?.codec_name, audio: audio?.codec_name || null, currentWorkerCompatible: video?.codec_name === 'h264' && (!audio || audio.codec_name === 'aac') && video.height <= 1080 && fps > 0 && fps <= 31 };
+      const info = { id, captureMode, width: video?.width, height: video?.height, fps: +fps.toFixed(3), video: video?.codec_name, audio: audio?.codec_name || null, videoReencoded: repairIds.has(id), currentWorkerCompatible: video?.codec_name === 'h264' && (!audio || audio.codec_name === 'aac') && video.height <= 1080 && fps > 0 && fps <= 31 };
       emit({ event: 'profile', ...info });
       // The offline candidate also measures 60fps/MP2 inputs. This does not
       // change the production worker's stricter admission rules.
       if (video?.codec_name !== 'h264' || video.height > 1080 || !(fps > 0 && fps <= 61)) { results.push({ ...info, measured: false }); continue; }
       const profile = { width: video.width, height: video.height, fps, profile: /high/i.test(video.profile) ? 'high' : /main/i.test(video.profile) ? 'main' : 'baseline', level: (video.level || 40) / 10, codecs: 'avc1.640028', bandwidth: 5000000 };
       const renditions = renditionsFor(profile); const runs = [];
-      for (let iteration = 0; iteration < 2 && !stop; iteration++) {
+      for (let iteration = 0; iteration < iterations && !stop; iteration++) {
         const output = path.join(directory, `output-${iteration}`); await Promise.all(renditions.map(r => mkdir(path.join(output, r.name), { recursive: true, mode: 0o700 })));
         const flags = new Set(['-rw_timeout', '-reconnect', '-reconnect_streamed', '-reconnect_delay_max', '-user_agent', '-live_start_index', '-http_multiple', '-http_persistent']);
         const original = ffmpegArguments(sample, output, profile, renditions);
+        if (repairIds.has(id)) {
+          const at = original.findIndex((value, i) => value === '-c:v' && original[i + 1] === 'copy');
+          if (at < 0) throw new Error('Original rendition unavailable');
+          original.splice(at, 2, '-c:v', 'libx264', '-threads', '1', '-preset', 'ultrafast', '-tune', 'zerolatency', '-profile:v', 'high', '-level:v', String(profile.level), '-8x8dct', '1', '-pix_fmt', 'yuv420p', '-b:v', '4000k', '-maxrate', '6000k', '-bufsize', '8000k', '-g', String(Math.round(fps * 2)), '-sc_threshold', '0', '-force_key_frames', 'expr:gte(t,n_forced*2)');
+          for (let i = 0; i < original.length; i++) if (original[i] === '-force_key_frames') original[i + 1] = 'expr:gte(t,n_forced*2)';
+        }
         let args = original.filter((value, i) => !flags.has(value) && !flags.has(original[i - 1]));
         args.splice(args.indexOf('-i'), 0, '-stream_loop', '-1');
         args = args.flatMap(x => x === '-output_ts_offset' ? ['-t', '8', x] : [x]).map(x => x === 'pipe:3' ? 'pipe:1' : x);
@@ -140,7 +148,7 @@ try {
         const result = { cpuCores: +(usage.cpuSeconds / seconds).toFixed(3), peakMiB: +usage.peakMiB.toFixed(1), mediaSeconds: +seconds.toFixed(3), wallSeconds: +usage.wallSeconds.toFixed(1) };
         runs.push(result); emit({ event: 'run', id, iteration: iteration + 1, ...result }); await rm(output, { recursive: true, force: true });
       }
-      results.push({ ...info, measured: runs.length === 2, qualities: renditions.map(r => r.height), runs });
+      results.push({ ...info, measured: runs.length === iterations, qualities: renditions.map(r => r.height), runs });
     } catch (error) { results.push({ id, measured: false, error: String(error.code || 'sample-unavailable') }); emit({ event: 'channel-failed', id, code: String(error.code || 'sample-unavailable') }); }
     finally { await rm(directory, { recursive: true, force: true }); }
   }
