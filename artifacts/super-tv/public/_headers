@@ -1,2 +1,4 @@
 /*
   Permissions-Policy: fullscreen=(self)
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate

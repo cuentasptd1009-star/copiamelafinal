@@ -1,10 +1,18 @@
-const CACHE_VERSION = 'super-tv-v8';
+const CACHE_VERSION = 'super-tv-v9';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
 ];
+
+function usableAsset(response, path) {
+  if (!response || !response.ok) return false;
+  var type = response.headers.get('content-type') || '';
+  if (/\.js$/.test(path)) return /javascript|ecmascript/i.test(type);
+  if (/\.css$/.test(path)) return /text\/css/i.test(type);
+  return !/text\/html/i.test(type);
+}
 
 // On install: cache static shell immediately
 self.addEventListener('install', function(event) {
@@ -21,7 +29,7 @@ self.addEventListener('activate', function(event) {
   event.waitUntil(
     caches.keys().then(function(keys) {
       return Promise.all(
-        keys.filter(function(k) { return k !== CACHE_VERSION; }).map(function(k) { return caches.delete(k); })
+        keys.filter(function(k) { return k.indexOf('super-tv-') === 0 && k !== CACHE_VERSION; }).map(function(k) { return caches.delete(k); })
       );
     }).then(function() { return clients.claim(); })
   );
@@ -48,14 +56,16 @@ self.addEventListener('fetch', function(event) {
   if (/\.(js|css|woff2?|ttf|otf)(\?.*)?$/.test(path)) {
     event.respondWith(
       caches.match(req).then(function(cached) {
-        if (cached) return cached;
+        if (usableAsset(cached, path)) return cached;
         return fetch(req).then(function(response) {
-          if (response.ok) {
+          // Pages may return the SPA's HTML for a missing asset. Never retain
+          // that HTML as JavaScript: it would break every subsequent startup.
+          if (usableAsset(response, path)) {
             var clone = response.clone();
             caches.open(CACHE_VERSION).then(function(cache) { cache.put(req, clone); });
           }
           return response;
-        }).catch(function() { return caches.match(req); });
+        }).catch(function() { return new Response('Asset unavailable', { status: 503 }); });
       })
     );
     return;

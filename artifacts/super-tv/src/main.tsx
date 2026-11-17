@@ -1,8 +1,10 @@
 import { createRoot } from "react-dom/client";
+import { useEffect } from "react";
 import { setBaseUrl } from "@workspace/api-client-react";
 import { loadYouTubeApi } from "./lib/youtube-api";
 import App from "./App";
 import "./index.css";
+import { apiBase } from "./lib/api";
 
 // Preload the YouTube IFrame API in idle time so it's already ready
 // by the time the user opens a YouTube movie — same pattern as hls.js preloading.
@@ -20,20 +22,31 @@ function showError() {
   if (errorEl) errorEl.style.display = 'flex';
 }
 
+function MountedApp() {
+  useEffect(() => {
+    // root.render schedules work; only a committed tree is a successful boot.
+    (window as any).__appStarted = true;
+    (window as any).__clearLiteTimer?.();
+    const loadingEl = document.getElementById('app-loading');
+    const errorEl = document.getElementById('app-error');
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl) errorEl.style.display = 'none';
+  }, []);
+  return <App />;
+}
+
 try {
-  const apiUrl = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
-  if (apiUrl) setBaseUrl(apiUrl);
+  setBaseUrl(apiBase);
 
   const rootEl = document.getElementById("root");
   if (!rootEl) throw new Error("Root element not found");
 
-  const root = createRoot(rootEl);
+  const root = createRoot(rootEl, { onUncaughtError: error => {
+    showError();
+    console.error('Super TV render failed', error);
+  } });
 
-  root.render(<App />);
-
-  const loadingEl = document.getElementById('app-loading');
-  if (loadingEl) loadingEl.style.display = 'none';
-  (window as any).__appStarted = true;
+  root.render(<MountedApp />);
 } catch (e) {
   showError();
   throw e;

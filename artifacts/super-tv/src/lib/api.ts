@@ -1,4 +1,6 @@
-const BASE = (import.meta.env.VITE_API_URL || import.meta.env.BASE_URL || '').replace(/\/+$/, '');
+// Production builds made outside Cloudflare must use the same VPS as CI builds.
+// BASE_URL is the SPA's path, not the address of its API.
+const BASE = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://167-233-103-143.sslip.io' : '')).replace(/\/+$/, '');
 
 /**
  * Base URL for all API calls.
