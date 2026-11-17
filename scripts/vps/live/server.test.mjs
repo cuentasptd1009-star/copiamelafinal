@@ -54,7 +54,7 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
   const [first, second] = await Promise.all([a.text(), b.text()]);
   assert.equal(live.jobs.size, 1);
   assert.match(first, /RESOLUTION=640x360/); assert.match(first, /RESOLUTION=854x480/);
-  assert.match(first, /TIME-OFFSET=-10/);
+  assert.match(first, /TIME-OFFSET=-6/);
   assert.ok(first.includes('viewer-one') && !first.includes('viewer-two'));
   assert.ok(second.includes('viewer-two') && !second.includes('viewer-one'));
   for(let i=0;i<10;i++){ await fetch(`${base}/api/live/channels/1/master.m3u8?token=viewer-one`); await new Promise(resolve=>setTimeout(resolve,500)); }
@@ -64,9 +64,11 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
     const response = await fetch(base + variant); assert.equal(response.status, 200);
     const body = await response.text();
     const durations = [...body.matchAll(/#EXTINF:([\d.]+)/g)].map(m => Number(m[1]));
-    assert.ok(durations.reduce((a, b) => a + b, 0) >= 12);
+    assert.ok(durations.reduce((a, b) => a + b, 0) >= 8);
     durationsByLevel.push(durations);
-    assert.ok(durations.reduce((a,b)=>a+b,0)>=17.9,'source timestamp reset must not discard three seconds of footage');
+    const encoded = await readFile(path.join(live.jobs.get(1).directory, ['360p','480p','720p','original'][i], 'index.m3u8'),'utf8');
+    const encodedDuration = [...encoded.matchAll(/#EXTINF:([\d.]+)/g)].reduce((sum,m)=>sum+Number(m[1]),0);
+    assert.ok(encodedDuration>=17.9,'source timestamp reset must not discard three seconds of footage');
     const segment = body.split('\n').find(line => line.startsWith('/api/'));
     const unauthorized = await fetch(base + segment.replace('viewer-one', 'expired-viewer')); assert.equal(unauthorized.status, 401);
     const video = await fetch(base + segment); assert.equal(video.status, 200);

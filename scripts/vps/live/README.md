@@ -5,8 +5,7 @@ It does not replace the application's API or its database. All playlists and seg
 validate the existing user's session through the local API. Tokens never enter the
 shared media files, and each response receives the requesting viewer's token.
 
-For enabled channels, the frontend targets **10 seconds behind the available HLS edge**, with a 20-second
-forward buffer. This is approximate: source segment duration, missing source footage,
+For enabled channels, a **ten-second combined reserve** is split between four seconds of paced server playout and six seconds behind that playlist edge in the player, with a 20-second forward buffer. The master and media playlists request the six-second client offset, so independent HLS players receive the same hint. Cached segments are exposed on the playout clock rather than in source-sized bursts. This is approximate: source segment duration, missing source footage,
 native player behavior, and network conditions affect the actual delay. It cannot
 reconstruct video that the origin never delivered.
 

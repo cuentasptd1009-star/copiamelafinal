@@ -1,12 +1,15 @@
 import { apiBase } from './api';
 
 export const LIVE_DELAY_SECONDS = 10;
+export const LIVE_SERVER_BUFFER_SECONDS = 4;
+export const LIVE_CLIENT_BUFFER_SECONDS = LIVE_DELAY_SECONDS - LIVE_SERVER_BUFFER_SECONDS;
 
-// This is an offset from the available HLS edge, not an exact wall-clock delay.
+// Split the ten-second reserve between paced VPS playlists (4s) and the player (6s).
+// This is not an exact wall-clock delay from the original broadcast.
 // A larger playable window absorbs brief interruptions without racing back live.
 export const liveBufferConfig = {
   lowLatencyMode: false,
-  liveSyncDuration: LIVE_DELAY_SECONDS,
+  liveSyncDuration: LIVE_CLIENT_BUFFER_SECONDS,
   liveMaxLatencyDuration: 40,
   maxLiveSyncPlaybackRate: 1,
   abrEwmaFastLive: 1,

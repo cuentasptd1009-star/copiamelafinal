@@ -5,10 +5,11 @@ import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { playoutPlaylist, TOTAL_RESERVE_SECONDS, SERVER_RESERVE_SECONDS, CLIENT_RESERVE_SECONDS } from './playout.mjs';
 import { createHlsInput } from './ingest.mjs';
 import { sameSecret, createChannelLookup, createOriginRelay } from './sharing.mjs';
 
-export const DELAY_SECONDS = 10;
+export const DELAY_SECONDS = TOTAL_RESERVE_SECONDS;
 export const ORIGIN_USER_AGENT = 'Mozilla/5.0 (compatible; SuperTV/1.0)';
 const ENCODED_PROFILES = [
   { name: '360p', width: 640, height: 360, bitrate: '500k', maxrate: '650k', bandwidth: 800000 },
@@ -119,7 +120,7 @@ export function createLiveServer(options = {}) {
   })();
   let updates = Promise.resolve();
   const summary = () => ({ enabledChannelIds: [...config.allowed], maxSelectedChannels: 5,
-    maxConcurrentChannels: config.maxChannels, delaySeconds: DELAY_SECONDS,
+    maxConcurrentChannels: config.maxChannels, delaySeconds: DELAY_SECONDS, serverBufferSeconds: SERVER_RESERVE_SECONDS, clientBufferSeconds: CLIENT_RESERVE_SECONDS,
     externalChannelIds: Object.keys(emissionKeys).map(Number),
     authorizationTiming: { ...authorizationTiming },
     activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, source: j.profile ? { width: j.profile.width, height: j.profile.height, fps: j.profile.fps } : null, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
@@ -281,7 +282,7 @@ export function createLiveServer(options = {}) {
           const lists = await Promise.all(job.renditions.map(r => readFile(path.join(job.directory, r.name, 'index.m3u8'), 'utf8')));
           observePublishedMedia(job, lists[job.renditions.findIndex(r => r.name === 'original')]);
           // Use actual published media, not FFmpeg's timestamp-offset-dependent average speed.
-          if (job.recentSpeed >= 0.98 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2)) {
+          if (job.recentSpeed >= 0.98 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2 && playlistDuration(playoutPlaylist(text)) >= CLIENT_RESERVE_SECONDS + 2)) {
             const original = job.renditions.find(r => r.name === 'original');
             const originalText = lists[job.renditions.findIndex(r => r.name === 'original')];
             const durations = [...originalText.matchAll(/^#EXTINF:([\d.]+)/gm)].map(m => Number(m[1]));
@@ -402,7 +403,7 @@ export function createLiveServer(options = {}) {
       if (match[2] === 'status') {
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ enabled: config.allowed.has(id), ready: !!jobs.get(id)?.ready,
-          delaySeconds: DELAY_SECONDS, qualities: config.allowed.has(id) ? (jobs.get(id)?.renditions?.map(r => r.height) || []) : [] }));
+          delaySeconds: DELAY_SECONDS, serverBufferSeconds: SERVER_RESERVE_SECONDS, clientBufferSeconds: CLIENT_RESERVE_SECONDS, qualities: config.allowed.has(id) ? (jobs.get(id)?.renditions?.map(r => r.height) || []) : [] }));
         return;
       }
       if (match[2] === 'master.m3u8') {
@@ -414,7 +415,7 @@ export function createLiveServer(options = {}) {
         if (res.destroyed) return;
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('X-SuperTV-Live', 'transcoded');
-        res.end('#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=-10,PRECISE=YES\n' + job.renditions.map(r =>
+        res.end(`#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=-${CLIENT_RESERVE_SECONDS},PRECISE=YES\n` + job.renditions.map(r =>
           `#EXT-X-STREAM-INF:BANDWIDTH=${r.bandwidth},RESOLUTION=${r.width}x${r.height},FRAME-RATE=${r.fps.toFixed(3)},CODECS="${r.codecs},mp4a.40.2",NAME="SuperTV ${r.name === 'original' ? 'Original ' + r.height + 'p' : r.name}"\n/api/live/channels/${id}/${job.generation}/${r.name}/index.m3u8?${credentialQuery}\n`).join(''));
         return;
       }
@@ -425,9 +426,9 @@ export function createLiveServer(options = {}) {
       const directory = active ? job.directory : path.join(config.directory, String(id), match[3]);
       const file = path.join(directory, match[4], match[5]);
       if (match[5] === 'index.m3u8') {
-        let text = await readFile(file, 'utf8');
+        let text = playoutPlaylist(await readFile(file, 'utf8'));
         const prefix = `/api/live/channels/${id}/${job.generation}/${match[4]}/`;
-        text = text.replace('#EXTM3U', '#EXTM3U\n#EXT-X-START:TIME-OFFSET=-10,PRECISE=YES')
+        text = text.replace('#EXTM3U', `#EXTM3U\n#EXT-X-START:TIME-OFFSET=-${CLIENT_RESERVE_SECONDS},PRECISE=YES`)
           .split('\n').map(line => /^seg_\d+\.ts$/.test(line.trim()) ? `${prefix}${line.trim()}?${credentialQuery}` : line).join('\n');
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl'); res.end(text);
       } else {
