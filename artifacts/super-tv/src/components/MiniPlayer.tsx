@@ -48,7 +48,7 @@ export function MiniPlayer() {
     const activeChannel = getMiniPlayerState()?.channelId ?? null;
     if (activeChannel !== activeChannelRef.current) { activeChannelRef.current = activeChannel; fallbackRef.current = false; }
     if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
-    video.src = '';
+    video.removeAttribute('src');
     video.load();
 
     const lower = url.toLowerCase().split('?')[0];

@@ -144,6 +144,8 @@ export default function PlayerPage() {
   const progressRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const mediaRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const savedTimeRef = useRef(0);
   const lastSaveRef = useRef(0);
   const movieNumIdRef = useRef<number | null>(null);
@@ -241,6 +243,14 @@ export default function PlayerPage() {
   }, []);
 
   const setupVideoEvents = useCallback((video: HTMLVideoElement) => {
+    const clearRecoveredError = () => {
+      if (video.error || video.readyState < 2 || !video.videoWidth) return;
+      setError(null);
+      setIsLoading(false);
+      setIsBuffering(false);
+      if (mediaRetryTimerRef.current) { clearTimeout(mediaRetryTimerRef.current); mediaRetryTimerRef.current = null; }
+    };
+    const onPlaying = () => { clearRecoveredError(); decodeRetryRef.current = 0; };
     const onPlay = () => {
       setIsPlaying(true);
       setIsLoading(false);
@@ -275,8 +285,9 @@ export default function PlayerPage() {
       };
     const onPause = () => setIsPlaying(false);
     const onWaiting = () => setIsBuffering(true);
-    const onCanPlay = () => { setIsBuffering(false); setIsLoading(false); };
+    const onCanPlay = () => { setIsBuffering(false); setIsLoading(false); clearRecoveredError(); };
     const onTimeUpdate = () => {
+      if (!video.paused) clearRecoveredError();
       const now = Date.now();
       // Only update React state every 500ms ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ live channels don't need time tracking at all
       if (!isLiveRef.current && now - lastDisplayUpdateRef.current > 500) {
@@ -314,6 +325,9 @@ export default function PlayerPage() {
     const onVolumeChange = () => { setVolume(video.volume); setIsMuted(video.muted); };
     const onError = () => {
       const err = video.error;
+      // An error queued by a detached/cleared source can arrive after HLS
+      // has already attached a healthy source. It is not a current failure.
+      if (!err) return;
       // Auto-retry with HLS proxy for channels whose URLs don't expose .m3u8
       // but are actually HLS streams (e.g. ESPN 3, many Latin IPTV providers)
       if (
@@ -347,6 +361,9 @@ export default function PlayerPage() {
             msg = 'Formato no soportado. El canal puede no ser compatible con este navegador.';
           }
         } else if (err.code === 3 || err.code === 2) {
+            // Hls.js owns MediaSource recovery; reloading its blob URL here
+            // competes with that recovery and can produce a second error.
+            if (hlsRef.current) return;
             // On slow connections the browser throws code 3 (decode) or 2 (network)
             // even when the stream is perfectly fine. Auto-retry up to 3 times with
             // back-off before showing an error screen, just like TikTok/YouTube do.
@@ -356,9 +373,13 @@ export default function PlayerPage() {
               setIsLoading(true);
               setError(null);
               const backoffMs = 2000 * decodeRetryRef.current; // 2 s, 4 s, 6 s
-              setTimeout(() => {
+              const retrySource = currentUrlRef.current;
+              if (mediaRetryTimerRef.current) clearTimeout(mediaRetryTimerRef.current);
+              mediaRetryTimerRef.current = setTimeout(() => {
+                mediaRetryTimerRef.current = null;
                 const v = videoRef.current;
-                if (!v) return;
+                if (v !== video || currentUrlRef.current !== retrySource) return;
+                if (!v.error && v.readyState >= 2 && !v.paused) return;
                 const src = v.src || v.currentSrc;
                 if (src) v.src = src;
                 v.load();
@@ -377,6 +398,7 @@ export default function PlayerPage() {
     };
 
     video.addEventListener('play', onPlay);
+    video.addEventListener('playing', onPlaying);
     video.addEventListener('pause', onPause);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('canplay', onCanPlay);
@@ -389,6 +411,8 @@ export default function PlayerPage() {
 
     return () => {
       video.removeEventListener('play', onPlay);
+      video.removeEventListener('playing', onPlaying);
+      if (mediaRetryTimerRef.current) { clearTimeout(mediaRetryTimerRef.current); mediaRetryTimerRef.current = null; }
       video.removeEventListener('pause', onPause);
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('canplay', onCanPlay);
@@ -629,10 +653,10 @@ export default function PlayerPage() {
       }
       removeEvents();
       if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
-      video.src = '';
+      video.removeAttribute('src');
       video.load();
     };
-  }, [currentUrl]);
+  }, [currentUrl, retryNonce]);
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
@@ -1350,7 +1374,7 @@ export default function PlayerPage() {
           <p className="text-white text-lg font-medium max-w-sm">{error}</p>
           <div className="flex gap-3">
             <button
-              onClick={() => { setError(null); setIsLoading(true); const v = videoRef.current; if (v) { v.load(); v.play().catch(() => {}); } }}
+              onClick={() => { setError(null); setIsLoading(true); setRetryNonce(value => value + 1); }}
               className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-lg text-sm hover:bg-primary/90 transition-colors"
             >
               <RotateCcw className="w-4 h-4" /> Reintentar
