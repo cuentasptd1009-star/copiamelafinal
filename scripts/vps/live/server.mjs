@@ -55,7 +55,7 @@ export function ffmpegArguments(source, directory, profile, renditions = renditi
     '-fflags', '+discardcorrupt', '-i', source];
   if (filters) args.push('-filter_complex', filters);
   renditions.forEach((r, i) => {
-    if (r.name === 'original') args.push('-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'copy', '-c:a', 'copy');
+    if (r.name === 'original') args.push('-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2', '-af', 'aresample=async=1');
     else {
       args.push('-map', `[out${i}]`, '-map', '0:a:0?', '-c:v', 'libx264', '-threads', '1',
         '-preset', 'ultrafast', '-tune', 'zerolatency', '-profile:v', profile.profile, '-level:v', String(profile.level),
