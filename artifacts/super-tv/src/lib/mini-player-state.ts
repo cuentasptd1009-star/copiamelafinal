@@ -13,6 +13,8 @@ export interface MiniPlayerState {
   channelId?: number | null;
   streamFormat?: string | null;
   isMinimized: boolean;
+  preferOriginal?: boolean;
+  qualityPreference?: 'auto' | 'original' | number;
   isFocused?: boolean;
   channels: ChannelEntry[];
   channelIndex: number;

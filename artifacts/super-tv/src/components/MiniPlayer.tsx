@@ -4,6 +4,7 @@ import { Maximize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
 import { getMiniPlayerState, setMiniPlayerState, subscribeMiniPlayer, updateMiniPlayerState } from '@/lib/mini-player-state';
 import { getToken } from '@/lib/auth';
 import { apiBase } from '@/lib/api';
+import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, forgetLiveCapability } from '@/lib/live-playback';
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 
 export function MiniPlayer() {
@@ -12,6 +13,9 @@ export function MiniPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const [showOsd, setShowOsd] = useState(false);
+  const loadGenerationRef = useRef(0);
+  const fallbackRef = useRef(false);
+  const activeChannelRef = useRef<number | null>(null);
   const osdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionsRef = useRef<{ flashOsd: () => void; handleMaximize: () => void; handleClose: () => void }>({
     flashOsd: () => {},
@@ -40,6 +44,9 @@ export function MiniPlayer() {
   const loadStream = useCallback(async (url: string) => {
     const video = videoRef.current;
     if (!video) return;
+    const generation = ++loadGenerationRef.current;
+    const activeChannel = getMiniPlayerState()?.channelId ?? null;
+    if (activeChannel !== activeChannelRef.current) { activeChannelRef.current = activeChannel; fallbackRef.current = false; }
     if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
     video.src = '';
     video.load();
@@ -49,21 +56,24 @@ export function MiniPlayer() {
 
     if (isHls) {
       try {
+        const current = getMiniPlayerState();
+        const token = getToken('user') || getToken('admin') || '';
+        const enhanced = current?.channelId ? await isLiveChannelEnabled(current.channelId, token) : false;
+        if (loadGenerationRef.current !== generation) return;
+        if (enhanced && current?.channelId && !fallbackRef.current) url = liveMasterUrl(current.channelId, token);
         const Hls = (await import('hls.js')).default;
+        if (loadGenerationRef.current !== generation) return;
         if (Hls.isSupported()) {
           const hls = new Hls({
             enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 3,
-            maxBufferLength: 8,
-            maxMaxBufferLength: 15,
+            ...(enhanced ? liveBufferConfig : { lowLatencyMode: true, backBufferLength: 3, maxBufferLength: 8, maxMaxBufferLength: 15 }),
             startFragPrefetch: true,
             startLevel: -1,
             abrEwmaDefaultEstimate: 500_000,
             progressive: true,
             testBandwidth: true,
             fragLoadingTimeOut: 3000,
-            manifestLoadingTimeOut: 5000,
+            manifestLoadingTimeOut: enhanced ? 50000 : 5000,
             levelLoadingTimeOut: 5000,
             fragLoadingMaxRetry: 5,
             manifestLoadingMaxRetry: 5,
@@ -72,13 +82,23 @@ export function MiniPlayer() {
           });
           hls.loadSource(url);
           hls.attachMedia(video);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            const selected = getMiniPlayerState()?.qualityPreference;
+            const original = hls.levels.findIndex(level => String(level.name || '').includes('Original'));
+            hls.loadLevel = selected === 'original' ? (original >= 0 ? original : hls.levels.length - 1) : typeof selected === 'number' ? hls.levels.findIndex(level => level.height === selected) : -1;
+            video.play().catch(() => {});
+          });
           hls.on(Hls.Events.ERROR, (_: unknown, data: { fatal?: boolean; type?: string }) => {
-            if (data.fatal && data.type === 'networkError' && state?.channelId) {
+            const active = getMiniPlayerState();
+            if (loadGenerationRef.current !== generation) return;
+            if (data.fatal && data.type === 'networkError' && active?.channelId) {
+              if (!url.includes('/api/live/')) { hls.startLoad(); return; }
               const t = getToken('user') || getToken('admin') || '';
+              fallbackRef.current = true;
+              forgetLiveCapability(active.channelId, t);
               hls.destroy();
               cleanupRef.current = null;
-              const proxyUrl = `${apiBase}/api/channels/${state.channelId}/hls-proxy?token=${encodeURIComponent(t)}`;
+              const proxyUrl = `${apiBase}/api/channels/${active.channelId}/hls-proxy?token=${encodeURIComponent(t)}`;
               updateMiniPlayerState({ url: proxyUrl, streamFormat: 'hls' });
             }
           });
@@ -96,6 +116,7 @@ export function MiniPlayer() {
     if (state?.isMinimized && state.url) {
       loadStream(state.url);
     } else if (!state?.isMinimized) {
+      loadGenerationRef.current++;
       const video = videoRef.current;
       if (video) { video.src = ''; video.load(); }
       if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
@@ -137,15 +158,7 @@ export function MiniPlayer() {
     const token = getToken('user') || getToken('admin') || '';
     if (isDash) return { url: ch.streamUrl, streamFormat: 'dash' };
     if (isFlv) return { url: ch.streamUrl, streamFormat: 'flv' };
-    if (lower.endsWith('.m3u8') || lower.includes('/hls/')) {
-      // Only try direct for HTTPS streams â HTTP streams blocked as mixed content on HTTPS sites
-      if (ch.streamUrl.startsWith('https://')) {
-        return { url: ch.streamUrl, streamFormat: 'hls' };
-      }
-      // HTTP stream â fall through to proxy immediately
-    }
-    // IPTV panel URL (/live/user/pass/id) â use proxy so loadStream detects as HLS
-    return { url: `${apiBase}/api/channels/${ch.id}/hls-proxy?token=${encodeURIComponent(token)}`, streamFormat: 'hls' };
+    return { url: channelHlsUrl(ch.id, token), streamFormat: 'hls' };
   }
 
   const handlePrev = () => {

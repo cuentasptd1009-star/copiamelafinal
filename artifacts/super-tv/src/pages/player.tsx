@@ -12,6 +12,7 @@ import { getMiniPlayerState, setMiniPlayerState, updateMiniPlayerState } from '@
 import { getToken } from '@/lib/auth';
 import { apiBase } from '@/lib/api';
 import { normalizeKey } from '@/lib/tv-remote';
+import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, forgetLiveCapability } from '@/lib/live-playback';
 
 type VideoFormat = 'hls' | 'dash' | 'flv' | 'native' | 'youtube';
 
@@ -97,7 +98,7 @@ export default function PlayerPage() {
     if (fmt === 'youtube' && directUrl) return directUrl;
     // All streams go through the VPS proxy for consistent caching across clients.
     if (fmt === 'hls') {
-      return `${apiBase}/api/channels/${chId}/hls-proxy?token=${encodeURIComponent(authToken)}`;
+      return channelHlsUrl(chId, authToken);
     }
     return `${apiBase}/api/channels/${chId}/stream?token=${encodeURIComponent(authToken)}`;
   }
@@ -110,6 +111,15 @@ export default function PlayerPage() {
 
   const [currentUrl, setCurrentUrl] = useState(initialUrl || rawUrl);
   const [currentFormat, setCurrentFormat] = useState(initialFormat);
+  type QualityChoice = 'auto' | 'original' | number;
+  const hlsRef = useRef<InstanceType<typeof import('hls.js')['default']> | null>(null);
+  const desiredQualityRef = useRef<QualityChoice>(miniState?.qualityPreference ?? (miniState?.preferOriginal ? 'original' : 'auto'));
+  const processedQualitiesRef = useRef<number[]>([]);
+  const processingFallbackRef = useRef(false);
+  const [qualityChoice, setQualityChoice] = useState<QualityChoice>(miniState?.qualityPreference ?? (miniState?.preferOriginal ? 'original' : 'auto'));
+  const [qualityOptions, setQualityOptions] = useState<number[]>([]);
+  const [canChooseOriginal, setCanChooseOriginal] = useState(false);
+
 
   useEffect(() => {
     if (!initialUrl && !rawUrl && channelId) {
@@ -451,6 +461,11 @@ export default function PlayerPage() {
       video.muted = true;
       try {
         if (fmt === 'hls') {
+          const enhanced = type === 'channel' && channelId ? await isLiveChannelEnabled(channelId, authToken) : false;
+          if (destroyed) return;
+          if (enhanced && !processingFallbackRef.current && currentUrl !== liveMasterUrl(channelId, authToken)) {
+            setCurrentUrl(liveMasterUrl(channelId, authToken)); return;
+          }
           // iOS Safari: use native HLS directly ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ hls.js uses MediaSource API
           // which AirPlay cannot stream. Native HLS on iOS supports AirPlay natively.
           if (isIOS && video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -468,6 +483,7 @@ export default function PlayerPage() {
               backBufferLength: isChannel ? 2 : 5,
               maxBufferLength: isChannel ? 4 : 10,
               maxMaxBufferLength: isChannel ? 8 : 20,
+              ...(isChannel && enhanced ? liveBufferConfig : {}),
               startFragPrefetch: true,
               // Start at lowest quality immediately for channels (ramps up fast),
               // auto-select for VOD so we don't waste time on a bad first segment
@@ -480,7 +496,7 @@ export default function PlayerPage() {
               // Tight timeouts: fail fast so proxy fallback kicks in quickly
               // Higher timeouts to survive Vercel cold starts (3-5s) and large 4K segments
               fragLoadingTimeOut: isChannel ? 15000 : 5000,
-              manifestLoadingTimeOut: isChannel ? 10000 : 6000,
+              manifestLoadingTimeOut: isChannel ? (enhanced ? 50000 : 10000) : 6000,
               levelLoadingTimeOut: isChannel ? 10000 : 6000,
               fragLoadingMaxRetry: 6,
               manifestLoadingMaxRetry: 5,
@@ -490,10 +506,29 @@ export default function PlayerPage() {
               // Skip stall recovery delay for channels ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ jump immediately
               stallReported: isChannel ? 0.3 : 1,
             });
+            hlsRef.current = hls;
             hls.loadSource(currentUrl);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
               if (!destroyed) {
+                const originalIndex = hls.levels.findIndex(level => String(level.name || '').includes('Original'));
+                const heights = [...new Set(hls.levels.filter((_, index) => index !== originalIndex).map(level => level.height).filter(Boolean))].sort((a, b) => a - b);
+                const processed = hls.levels.some(level => String(level.name || '').startsWith('SuperTV '));
+                if (processed) {
+                  processedQualitiesRef.current = heights;
+                  setCanChooseOriginal(true);
+                  setQualityOptions(heights);
+                } else if (desiredQualityRef.current !== 'original') {
+                  processedQualitiesRef.current = [];
+                  setCanChooseOriginal(false);
+                  setQualityOptions(heights.length > 1 ? heights : []);
+                }
+                const desired = desiredQualityRef.current;
+                const level = desired === 'original' ? (originalIndex >= 0 ? originalIndex : hls.levels.length - 1) : typeof desired === 'number' ? hls.levels.findIndex(item => item.height === desired) : -1;
+                hls.loadLevel = level;
+                if (typeof desired === 'number' && level < 0) {
+                  desiredQualityRef.current = 'auto'; setQualityChoice('auto');
+                }
                 if (savedTimeRef.current > 0) {
                   video.currentTime = savedTimeRef.current;
                   savedTimeRef.current = 0;
@@ -506,11 +541,16 @@ export default function PlayerPage() {
               if (data.fatal) {
                 if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retryCountRef.current === 0 && type === 'channel' && channelId) {
                   // Direct stream failed (CORS or network) ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ fall back to server proxy
-                  retryCountRef.current = 1;
-                  cleanupRef.current = null;
-                  hls.destroy();
                   const t = getToken('user') || getToken('admin') || '';
-                  setCurrentUrl(`${apiBase}/api/channels/${channelId}/hls-proxy?token=${encodeURIComponent(t)}`);
+                  const originalUrl = `${apiBase}/api/channels/${channelId}/hls-proxy?token=${encodeURIComponent(t)}`;
+                  if (currentUrl === originalUrl) { hls.startLoad(); return; }
+                  retryCountRef.current = 1;
+                  processingFallbackRef.current = true;
+                  forgetLiveCapability(channelId, t);
+                  cleanupRef.current = null;
+                  if (hlsRef.current === hls) hlsRef.current = null;
+                  hls.destroy();
+                  setCurrentUrl(originalUrl);
                 } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                   hls.startLoad();
                 } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
@@ -521,7 +561,7 @@ export default function PlayerPage() {
                 }
               }
             });
-            cleanupRef.current = () => hls.destroy();
+            cleanupRef.current = () => { if (hlsRef.current === hls) hlsRef.current = null; hls.destroy(); };
           } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = currentUrl;
             video.play().catch(() => {});
@@ -865,7 +905,9 @@ export default function PlayerPage() {
     if (!ch) return;
     const fmt = ch.streamFormat || detectFormat(ch.streamUrl || '');
     const proxyUrl = buildChannelUrl(ch.id, fmt, fmt === 'youtube' ? ch.streamUrl : undefined);
-    updateMiniPlayerState({ channelId: ch.id, channelIndex: newIdx, url: proxyUrl, title: ch.name, streamFormat: fmt });
+    desiredQualityRef.current = 'auto'; processedQualitiesRef.current = []; processingFallbackRef.current = false;
+    setQualityChoice('auto'); setQualityOptions([]); setCanChooseOriginal(false);
+    updateMiniPlayerState({ qualityPreference: 'auto', preferOriginal: false, channelId: ch.id, channelIndex: newIdx, url: proxyUrl, title: ch.name, streamFormat: fmt });
     setChannelId(String(ch.id));
     setCurrentFormat(fmt);
     setCurrentUrl(proxyUrl);
@@ -945,7 +987,23 @@ export default function PlayerPage() {
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
   }, [isPlaying]);
 
-  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', 'cast', 'pip', 'fullscreen'], [hasChannels]);
+  const hasQualityChoices = type === 'channel' && (qualityOptions.length > 1 || canChooseOriginal);
+  const qualityLabel = qualityChoice === 'auto' ? 'Auto' : qualityChoice === 'original' ? 'Original' : `${qualityChoice}p`;
+  const cycleQuality = useCallback(() => {
+    const choices: QualityChoice[] = ['auto', ...qualityOptions, ...(canChooseOriginal ? ['original' as const] : [])];
+    const next = choices[(choices.indexOf(desiredQualityRef.current) + 1) % choices.length];
+    desiredQualityRef.current = next; setQualityChoice(next);
+    updateMiniPlayerState({ preferOriginal: next === 'original', qualityPreference: next });
+    if (hlsRef.current) {
+      const levels = hlsRef.current.levels;
+      const original = levels.findIndex(level => String(level.name || '').includes('Original'));
+      hlsRef.current.loadLevel = next === 'original' ? (original >= 0 ? original : levels.length - 1)
+        : typeof next === 'number' ? levels.findIndex(level => level.height === next) : -1;
+    }
+    showControlsTemporarily();
+  }, [channelId, authToken, qualityOptions, canChooseOriginal, showControlsTemporarily]);
+
+  const controls = useMemo(() => ['back', ...(hasChannels ? ['prevch'] : []), 'skipback', 'play', 'skipfwd', ...(hasChannels ? ['nextch'] : []), 'mute', ...(hasQualityChoices ? ['quality'] : []), 'cast', 'pip', 'fullscreen'], [hasChannels, hasQualityChoices]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -993,6 +1051,7 @@ export default function PlayerPage() {
             case 'skipfwd': skip(10); break;
             case 'nextch': goNextChannel(); break;
             case 'mute': toggleMute(); break;
+            case 'quality': cycleQuality(); break;
             case 'cast': handleCast(); break;
             case 'pip': togglePiP(); break;
               case 'fullscreen': toggleFullscreen(); break;
@@ -1049,7 +1108,7 @@ export default function PlayerPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [ctrlIndex, backUrl, togglePlay, toggleMute, toggleFullscreen, togglePiP, skip, handleVolumeChange, showControlsTemporarily, hasChannels, goPrevChannel, goNextChannel, handleMinimize, handleBack, controls]);
+  }, [ctrlIndex, backUrl, togglePlay, toggleMute, toggleFullscreen, togglePiP, skip, handleVolumeChange, showControlsTemporarily, hasChannels, goPrevChannel, goNextChannel, handleMinimize, handleBack, controls, cycleQuality]);
 
   useEffect(() => {
     showControlsTemporarily();
@@ -1404,6 +1463,17 @@ export default function PlayerPage() {
             )}
             {/* Chromecast ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ only on non-AirPlay devices (Android/Desktop Chrome).
                 On iOS/macOS Safari supportsAirPlay=true so this is hidden. */}
+            {hasQualityChoices && (
+              <button
+                onClick={cycleQuality}
+                title="Calidad de video"
+                aria-label={`Calidad de video: ${qualityLabel}`}
+                className={`px-3 py-2 rounded-full bg-black/50 text-white text-xs font-semibold backdrop-blur transition-all ${ctrlIndex === controls.indexOf('quality') ? 'ring-2 ring-primary' : 'hover:bg-black/70'}`}
+              >
+                Calidad: {qualityLabel}
+              </button>
+            )}
+
             {!supportsAirPlay && (
               <CastButton
                 castState={castState}

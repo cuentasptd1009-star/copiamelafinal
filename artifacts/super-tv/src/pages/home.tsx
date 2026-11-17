@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, startTransition } from 'react';
 import { normalizeKey } from '@/lib/tv-remote';
+import { channelHlsUrl } from '@/lib/live-playback';
 import { useLocation } from 'wouter';
 import { apiBase } from '@/lib/api';
 import { YouTubePlayerPage } from '@/components/YouTubePlayerPage';
@@ -94,13 +95,7 @@ function buildMiniProxyUrl(ch: { id: number; streamUrl: string }): { url: string
   }
   const lower = ch.streamUrl.toLowerCase().split('?')[0];
   const token = getToken('user') || getToken('admin') || '';
-  if (lower.endsWith('.m3u8') || lower.includes('/hls/')) {
-    // Only try direct for HTTPS streams — HTTP streams are blocked as mixed content on HTTPS sites
-    if (ch.streamUrl.startsWith('https://')) {
-      return { url: ch.streamUrl, streamFormat: 'hls' };
-    }
-    // HTTP stream → use proxy immediately (no mixed-content attempt)
-  }
+  if (lower.endsWith('.m3u8') || lower.includes('/hls/')) return { url: channelHlsUrl(ch.id, token), streamFormat: 'hls' };
   const isDash = lower.endsWith('.mpd') || lower.includes('/dash/');
   const isFlv = lower.endsWith('.flv');
   return { url: `${apiBase}/api/channels/${ch.id}/stream?token=${encodeURIComponent(token)}`, streamFormat: isDash ? 'dash' : isFlv ? 'flv' : 'native' };

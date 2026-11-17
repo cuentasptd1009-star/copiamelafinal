@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { apiBase } from '@/lib/api';
 import {
   useGetMe, getGetMeQueryKey, useAdminLogin,
@@ -18,6 +18,8 @@ import {
 import type { AdminStats } from '@workspace/api-client-react';
 import { getToken, setToken, clearTokens } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { forgetLiveCapability } from '@/lib/live-playback';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -1124,7 +1126,7 @@ function CategoryChipPicker({ channelId, currentCategory, existingCategories, on
   );
 }
 
-function SortableChannelRow({ ch, onEdit, onDelete, testing, testResult, onTest, selected, onSelect, selectionMode, existingCategories, onCategoryChange }: {
+function SortableChannelRow({ ch, onEdit, onDelete, testing, testResult, onTest, selected, onSelect, selectionMode, existingCategories, onCategoryChange, liveControl }: {
   ch: { id: number; name: string; category?: string | null; streamUrl: string; logo?: string | null };
   onEdit: () => void;
   onDelete: () => void;
@@ -1136,6 +1138,7 @@ function SortableChannelRow({ ch, onEdit, onDelete, testing, testResult, onTest,
   selectionMode: boolean;
   existingCategories: string[];
   onCategoryChange: (channelId: number, category: string | null) => Promise<void>;
+  liveControl: React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ch.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
@@ -1166,6 +1169,7 @@ function SortableChannelRow({ ch, onEdit, onDelete, testing, testResult, onTest,
       <TableCell>
         <MaskedLink publicUrl={publicUrl} realUrl={ch.streamUrl} />
       </TableCell>
+      {!selectionMode && <TableCell>{liveControl}</TableCell>}
       {!selectionMode && <TableCell>
         {testing ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           : testResult ? (
@@ -1378,6 +1382,26 @@ function parseTextWithLogos(content: string, prefix: string): string {
 }
 
 const ADMIN_CHANNELS_KEY = ['admin', 'channels'] as const;
+const ADMIN_LIVE_KEY = ['admin', 'live-config'] as const;
+interface LiveAdminConfig {
+  enabledChannelIds: number[];
+  maxSelectedChannels: number;
+  maxConcurrentChannels: number;
+  externalChannelIds?: number[];
+  activeChannels: { id: number; ready: boolean }[];
+}
+async function liveAdminRequest(path: string, enabled?: boolean): Promise<LiveAdminConfig> {
+  const response = await fetch(`${apiBase}/api/live/admin/${path}`, {
+    method: enabled === undefined ? 'GET' : 'PUT',
+    headers: { Authorization: `Bearer ${getToken('admin') || ''}`, ...(enabled === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    ...(enabled === undefined ? {} : { body: JSON.stringify({ enabled }) }),
+  });
+  let data;
+  try { data = await response.json(); } catch { throw new Error('El servicio de calidades no está disponible.'); }
+  if (!response.ok) throw new Error(data.error || 'No se pudo guardar el cambio.');
+  return data;
+}
+
 
 function ChannelsManager() {
   const qc = useQueryClient();
@@ -1388,6 +1412,67 @@ function ChannelsManager() {
   const updateMutation = useUpdateChannel();
   const deleteMutation = useDeleteChannel();
   const importMutation = useImportChannels();
+
+  const liveConfig = useQuery({ queryKey: ADMIN_LIVE_KEY, queryFn: () => liveAdminRequest('config'), retry: 1, refetchInterval: 8000 });
+  const liveMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => liveAdminRequest(`channels/${id}`, enabled),
+    onMutate: () => qc.cancelQueries({ queryKey: ADMIN_LIVE_KEY }),
+    onSuccess: (data, input) => {
+      qc.setQueryData(ADMIN_LIVE_KEY, data);
+      forgetLiveCapability(input.id, getToken('admin') || '');
+      toast({ title: input.enabled ? 'Calidades y búfer activados' : 'Retransmisión original restaurada', description: 'La elección quedó guardada para este canal.' });
+    },
+    onError: (error: Error) => toast({ title: 'No se pudo cambiar la señal', description: error.message, variant: 'destructive' }),
+  });
+  const [linkBusy, setLinkBusy] = useState<number | null>(null);
+  const [externalLink, setExternalLink] = useState<{ name: string; url: string } | null>(null);
+  const handleExternalLink = async (ch: { id: number; name: string }, action: 'copy' | 'renew' | 'revoke') => {
+    setLinkBusy(ch.id);
+    try {
+      const response = await fetch(`${apiBase}/api/live/admin/channels/${ch.id}/link`, {
+        method: action === 'revoke' ? 'DELETE' : 'POST',
+        headers: { Authorization: `Bearer ${getToken('admin') || ''}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ renew: action === 'renew' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo preparar el enlace.');
+      await qc.invalidateQueries({ queryKey: ADMIN_LIVE_KEY });
+      if (action === 'revoke') toast({ title: 'Enlace externo revocado' });
+      else {
+        setExternalLink({ name: ch.name.trim(), url: data.url });
+        try { await navigator.clipboard.writeText(data.url); toast({ title: action === 'renew' ? 'Enlace renovado y copiado' : 'Enlace copiado' }); }
+        catch { toast({ title: 'Enlace listo', description: 'Puedes copiarlo desde el campo de texto.' }); }
+      }
+    } catch (error) { toast({ title: 'No se pudo crear el enlace', description: (error as Error).message, variant: 'destructive' }); }
+    finally { setLinkBusy(null); }
+  };
+  const renderLiveControl = (ch: { id: number; name: string; streamUrl: string; streamFormat?: string | null }) => {
+    const enabled = !!liveConfig.data?.enabledChannelIds.includes(ch.id);
+    const active = liveConfig.data?.activeChannels.find(item => item.id === ch.id);
+    const atLimit = (liveConfig.data?.enabledChannelIds.length || 0) >= (liveConfig.data?.maxSelectedChannels || 5);
+    const supported = ch.streamFormat === 'hls' || /\.m3u8(?:[?#]|$)|\/hls\//i.test(ch.streamUrl);
+    const capacityBusy = !!liveConfig.data && liveConfig.data.activeChannels.length >= liveConfig.data.maxConcurrentChannels;
+    return (
+      <div className="min-w-[240px] space-y-2">
+        <div className="flex items-center gap-2"><Switch
+          aria-label={`Mejorar transmisión de ${ch.name.trim()}`}
+          checked={enabled}
+          disabled={!liveConfig.data || liveMutation.isPending || sortMode || (!enabled && (!supported || atLimit))}
+          onCheckedChange={value => liveMutation.mutate({ id: ch.id, enabled: value })}
+        />
+        <span className="text-[11px] text-muted-foreground">
+          {liveMutation.isPending && liveMutation.variables.id === ch.id ? 'Guardando…' : !liveConfig.data ? 'Sin conexión' : !enabled ? 'Original' : active?.ready ? 'Calidad Auto · 10 s' : active ? 'Preparando…' : capacityBusy ? 'En espera de capacidad' : 'Activado · 10 s'}
+        </span></div>
+        {!sortMode && <div className="flex gap-1 flex-wrap">
+          <Button size="sm" variant="outline" className="h-7 text-[11px]" aria-label={`Copiar enlace externo de ${ch.name.trim()}`} disabled={!liveConfig.data || !supported || linkBusy !== null} onClick={() => handleExternalLink(ch, 'copy')}>Copiar enlace</Button>
+          {liveConfig.data?.externalChannelIds?.includes(ch.id) && <>
+            <Button size="sm" variant="ghost" className="h-7 text-[11px]" title="El enlace anterior dejará de funcionar" aria-label={`Renovar enlace de ${ch.name.trim()}`} disabled={linkBusy !== null} onClick={() => handleExternalLink(ch, 'renew')}>Renovar</Button>
+            <Button size="sm" variant="ghost" className="h-7 text-[11px] text-destructive" aria-label={`Revocar enlace de ${ch.name.trim()}`} disabled={linkBusy !== null} onClick={() => handleExternalLink(ch, 'revoke')}>Revocar</Button>
+          </>}
+        </div>}
+      </div>
+    );
+  };
 
   const [showForm, setShowForm] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -1793,6 +1878,13 @@ function ChannelsManager() {
         </div>
       </div>
 
+      <div className="rounded-lg border border-border bg-card px-4 py-3 space-y-1">
+        <p className="text-sm font-medium">Calidades y búfer de 10 segundos · {liveConfig.data?.enabledChannelIds.length || 0}/5 canales</p>
+        <p className="text-xs text-muted-foreground">Activa el interruptor en los canales que quieras procesar. Los demás mantienen su retransmisión original. Se aplica al abrir el canal.</p>
+        {liveConfig.data && <p className="text-xs text-muted-foreground">Procesamiento disponible: {liveConfig.data.maxConcurrentChannels} canal{liveConfig.data.maxConcurrentChannels !== 1 ? 'es' : ''} a la vez. Activos: {liveConfig.data.activeChannels.length}.</p>}
+        {liveConfig.isError && <Button size="sm" variant="outline" onClick={() => liveConfig.refetch()}>Reintentar conexión al servicio</Button>}
+      </div>
+
       {bulkCategoryOpen && selectionMode && (
         <div className="flex flex-wrap gap-2 items-center p-3 rounded-lg border border-primary/30 bg-primary/5">
           <Tag className="w-4 h-4 text-primary shrink-0" />
@@ -2092,6 +2184,7 @@ function ChannelsManager() {
                   <TableHead>Canal</TableHead>
                   <TableHead>Categoría</TableHead>
                   <TableHead>Stream</TableHead>
+                  {!selectionMode && <TableHead>Calidades, búfer y enlace</TableHead>}
                   {!selectionMode && !sortMode && <TableHead>Test</TableHead>}
                   <TableHead className="text-right">{selectionMode ? '' : 'Acciones'}</TableHead>
                 </TableRow>
@@ -2111,6 +2204,7 @@ function ChannelsManager() {
                     selectionMode={selectionMode}
                     existingCategories={existingCategories}
                     onCategoryChange={handleQuickCategory}
+                    liveControl={renderLiveControl(ch)}
                   />
                 ))}
                 {channelsList.length === 0 && (
@@ -2122,6 +2216,15 @@ function ChannelsManager() {
         </SortableContext>
       </DndContext>
       )}
+
+      <Dialog open={!!externalLink} onOpenChange={open => { if (!open) setExternalLink(null); }}>
+        <DialogContent className="bg-card border-border max-w-2xl">
+          <DialogHeader><DialogTitle>Enlace externo · {externalLink?.name}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Pégalo en un reproductor HLS de tu otra página. Funciona sin sesión de Super TV y conserva la configuración del canal. No caduca automáticamente; puedes renovarlo o revocarlo.</p>
+          <Input aria-label="Enlace externo HLS" readOnly value={externalLink?.url || ''} onFocus={event => event.target.select()} />
+          <DialogFooter><Button onClick={async () => { if (externalLink) { try { await navigator.clipboard.writeText(externalLink.url); toast({ title: 'Enlace copiado' }); } catch { toast({ title: 'Selecciona y copia el campo de texto' }); } } }}>Copiar enlace</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editCh} onOpenChange={(o) => !o && setEditCh(null)}>
         <DialogContent className="bg-card border-border max-w-lg">
