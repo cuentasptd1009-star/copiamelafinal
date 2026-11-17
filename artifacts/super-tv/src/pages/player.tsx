@@ -14,6 +14,8 @@ import { apiBase } from '@/lib/api';
 import { normalizeKey } from '@/lib/tv-remote';
 import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, forgetLiveCapability, attachLiveQualityRecovery } from '@/lib/live-playback';
 
+import { createLiveFragmentTransport, createLiveMediaRecovery, relayBufferConfig } from '@/lib/live-hls-transport';
+
 type VideoFormat = 'hls' | 'dash' | 'flv' | 'native' | 'youtube';
 
 function extractYouTubeId(url: string): string | null {
@@ -499,21 +501,21 @@ export default function PlayerPage() {
           if (destroyed) return;
           if (Hls.isSupported()) {
             const isChannel = type === 'channel';
+            const transport = isChannel ? createLiveFragmentTransport(Hls) : null;
             const hls = new Hls({
+              ...(transport ? { fLoader: transport.fLoader } : {}),
               enableWorker: true,
-              lowLatencyMode: false, // Regular HLS streams; LL-HLS not used here
-              // For channels: tiny buffer = instant start; for VOD: bigger = smooth
-              backBufferLength: isChannel ? 2 : 5,
-              maxBufferLength: isChannel ? 4 : 10,
-              maxMaxBufferLength: isChannel ? 8 : 20,
-              ...(isChannel && enhanced ? liveBufferConfig : {}),
+              ...(isChannel ? (enhanced ? liveBufferConfig : relayBufferConfig) : {
+                lowLatencyMode: false, backBufferLength: 5, maxBufferLength: 10, maxMaxBufferLength: 20,
+              }),
               startFragPrefetch: true,
               // Start at lowest quality immediately for channels (ramps up fast),
               // auto-select for VOD so we don't waste time on a bad first segment
               startLevel: isChannel ? 0 : -1,
               // Assume 2Mbps connection so ABR doesn't waste time probing bandwidth
               abrEwmaDefaultEstimate: 2_000_000,
-              progressive: true,
+              progressive: !isChannel,
+              startOnSegmentBoundary: isChannel,
               // Skip bandwidth test on channels ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ we want immediate playback
               testBandwidth: !isChannel,
               // Tight timeouts: fail fast so proxy fallback kicks in quickly
@@ -526,11 +528,9 @@ export default function PlayerPage() {
               nudgeMaxRetry: 6,
               nudgeOffset: 0.1,
               highBufferWatchdogPeriod: 1,
-              // Skip stall recovery delay for channels ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ jump immediately
-              stallReported: isChannel ? 0.3 : 1,
             });
-            let mediaRecoveryAttempts = 0;
-            let lastMediaRecovery = 0;
+            const mediaRecovery = createLiveMediaRecovery(hls, () => { setError(null); setIsLoading(true); });
+            if (transport) hls.on(Hls.Events.MEDIA_ATTACHING, transport.reset);
             hlsRef.current = hls;
             hls.loadSource(currentUrl);
             hls.attachMedia(video);
@@ -576,32 +576,21 @@ export default function PlayerPage() {
                   cleanupRef.current = null;
                   if (hlsRef.current === hls) hlsRef.current = null;
                   stopRecovery();
+                  mediaRecovery.destroy();
                   hls.destroy();
                   setCurrentUrl(originalUrl);
                 } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                   hls.startLoad();
                 } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                  // A broken/incompatible source can fail again immediately after
-                  // recovering MediaSource. Do not rebuild it forever and flash
-                  // between video and a loading screen on every bad fragment.
-                  const now = Date.now();
-                  if (now - lastMediaRecovery > 30_000) mediaRecoveryAttempts = 0;
-                  if (mediaRecoveryAttempts >= 2) {
-                    hls.stopLoad();
-                    setError('La señal tiene un problema de decodificación. Intenta otra señal de este canal o vuelve a intentarlo más tarde.');
-                    setIsLoading(false);
-                    return;
-                  }
-                  mediaRecoveryAttempts += 1;
-                  lastMediaRecovery = now;
-                  hls.recoverMediaError();
+                  if (isChannel) mediaRecovery.recover();
+                  else hls.recoverMediaError();
                 } else {
                   setError('No se pudo cargar el stream. El canal puede estar sin señal.');
                   setIsLoading(false);
                 }
               }
             });
-            cleanupRef.current = () => { stopRecovery(); if (hlsRef.current === hls) hlsRef.current = null; hls.destroy(); };
+            cleanupRef.current = () => { stopRecovery(); mediaRecovery.destroy(); if (hlsRef.current === hls) hlsRef.current = null; hls.destroy(); };
           } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = currentUrl;
             video.play().catch(() => {});

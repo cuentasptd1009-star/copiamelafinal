@@ -1,3 +1,4 @@
+import { createLiveFragmentTransport, createLiveMediaRecovery, relayBufferConfig } from '@/lib/live-hls-transport';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { Maximize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
@@ -64,13 +65,16 @@ export function MiniPlayer() {
         const Hls = (await import('hls.js')).default;
         if (loadGenerationRef.current !== generation) return;
         if (Hls.isSupported()) {
+          const transport = createLiveFragmentTransport(Hls);
           const hls = new Hls({
+            fLoader: transport.fLoader,
             enableWorker: true,
-            ...(enhanced ? liveBufferConfig : { lowLatencyMode: true, backBufferLength: 3, maxBufferLength: 8, maxMaxBufferLength: 15 }),
+            ...(enhanced ? liveBufferConfig : relayBufferConfig),
             startFragPrefetch: true,
             startLevel: -1,
             abrEwmaDefaultEstimate: 500_000,
-            progressive: true,
+            progressive: false,
+            startOnSegmentBoundary: true,
             testBandwidth: true,
             fragLoadingTimeOut: enhanced ? 15000 : 3000,
             manifestLoadingTimeOut: enhanced ? 50000 : 5000,
@@ -80,6 +84,8 @@ export function MiniPlayer() {
             nudgeMaxRetry: 10,
             highBufferWatchdogPeriod: 1,
           });
+          const mediaRecovery = createLiveMediaRecovery(hls);
+          hls.on(Hls.Events.MEDIA_ATTACHING, transport.reset);
           hls.loadSource(url);
           hls.attachMedia(video);
           const stopRecovery = enhanced ? attachLiveQualityRecovery(hls, video) : () => {};
@@ -92,11 +98,13 @@ export function MiniPlayer() {
           hls.on(Hls.Events.ERROR, (_: unknown, data: { fatal?: boolean; type?: string }) => {
             const active = getMiniPlayerState();
             if (loadGenerationRef.current !== generation) return;
+            if (data.fatal && data.type === 'mediaError') { mediaRecovery.recover(); return; }
             if (data.fatal && data.type === 'networkError' && active?.channelId) {
               if (!url.includes('/api/live/')) { hls.startLoad(); return; }
               const t = getToken('user') || getToken('admin') || '';
               fallbackRef.current = true;
               stopRecovery();
+              mediaRecovery.destroy();
               forgetLiveCapability(active.channelId, t);
               hls.destroy();
               cleanupRef.current = null;
@@ -104,7 +112,7 @@ export function MiniPlayer() {
               updateMiniPlayerState({ url: proxyUrl, streamFormat: 'hls' });
             }
           });
-          cleanupRef.current = () => { stopRecovery(); hls.destroy(); };
+          cleanupRef.current = () => { stopRecovery(); mediaRecovery.destroy(); hls.destroy(); };
           return;
         }
       } catch {}
