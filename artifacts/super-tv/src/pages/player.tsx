@@ -246,11 +246,9 @@ export default function PlayerPage() {
     const clearRecoveredError = () => {
       if (video.error || video.readyState < 2 || !video.videoWidth) return;
       setError(null);
-      setIsLoading(false);
-      setIsBuffering(false);
       if (mediaRetryTimerRef.current) { clearTimeout(mediaRetryTimerRef.current); mediaRetryTimerRef.current = null; }
     };
-    const onPlaying = () => { clearRecoveredError(); decodeRetryRef.current = 0; };
+    const onPlaying = () => { clearRecoveredError(); setIsLoading(false); setIsBuffering(false); decodeRetryRef.current = 0; };
     const onPlay = () => {
       setIsPlaying(true);
       setIsLoading(false);
