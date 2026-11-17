@@ -529,6 +529,8 @@ export default function PlayerPage() {
               // Skip stall recovery delay for channels ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ jump immediately
               stallReported: isChannel ? 0.3 : 1,
             });
+            let mediaRecoveryAttempts = 0;
+            let lastMediaRecovery = 0;
             hlsRef.current = hls;
             hls.loadSource(currentUrl);
             hls.attachMedia(video);
@@ -579,6 +581,19 @@ export default function PlayerPage() {
                 } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                   hls.startLoad();
                 } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                  // A broken/incompatible source can fail again immediately after
+                  // recovering MediaSource. Do not rebuild it forever and flash
+                  // between video and a loading screen on every bad fragment.
+                  const now = Date.now();
+                  if (now - lastMediaRecovery > 30_000) mediaRecoveryAttempts = 0;
+                  if (mediaRecoveryAttempts >= 2) {
+                    hls.stopLoad();
+                    setError('La señal tiene un problema de decodificación. Intenta otra señal de este canal o vuelve a intentarlo más tarde.');
+                    setIsLoading(false);
+                    return;
+                  }
+                  mediaRecoveryAttempts += 1;
+                  lastMediaRecovery = now;
                   hls.recoverMediaError();
                 } else {
                   setError('No se pudo cargar el stream. El canal puede estar sin señal.');
