@@ -19,9 +19,11 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
   assert.equal(generated.status, 0, generated.stderr?.toString());
   const playlist = (await readFile(fixture, 'utf8')).replace('#EXT-X-ENDLIST', '');
   let backendBase;
+  let thirdViewerAuthorizations = 0;
   const backend = http.createServer(async (req, res) => {
     if (req.url === '/api/channels') {
-      if (!['Bearer viewer-one', 'Bearer viewer-two'].includes(req.headers.authorization)) { res.writeHead(401); res.end(); return; }
+      if (req.headers.authorization === 'Bearer viewer-three') { thirdViewerAuthorizations++; await new Promise(resolve => setTimeout(resolve, 50)); }
+      if (!['Bearer viewer-one', 'Bearer viewer-two', 'Bearer viewer-three'].includes(req.headers.authorization)) { res.writeHead(401); res.end(); return; }
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify([1, 2].map(id => ({ id, streamUrl: `${backendBase}/input.m3u8` })))); return;
     }
@@ -64,6 +66,9 @@ test('authenticated viewers share a bounded adaptive encoder including untouched
     const timestamps = spawnSync('ffprobe', ['-v','error','-select_streams','v:0','-show_entries','packet=pts_time,flags','-of','json',file]);
     const keyframe = JSON.parse(timestamps.stdout).packets.find(p=>p.flags.includes('K')); starts.push(Number(keyframe.pts_time));
   }
+  const simultaneous = await Promise.all(Array.from({length:50}, () => fetch(`${base}/api/live/channels/1/status?token=viewer-three`)));
+  assert.ok(simultaneous.every(r => r.status === 200));
+  assert.equal(thirdViewerAuthorizations, 1, 'parallel media requests share one session authorization lookup');
   assert.equal(variants.length, 4);
   assert.ok(Math.max(...starts)-Math.min(...starts) < 0.08, JSON.stringify({starts,durationsByLevel}));
   assert.ok(durationsByLevel.every(d=>Math.abs(d[0]-durationsByLevel[0][0])<0.08), JSON.stringify(durationsByLevel));

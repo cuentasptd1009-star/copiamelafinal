@@ -89,6 +89,8 @@ export function createLiveServer(options = {}) {
   };
   const jobs = new Map();
   const authorizations = new Map();
+  const authorizationRequests = new Map();
+  const authorizationTiming = { requests: 0, slow: 0, lastMs: 0, maxMs: 0 };
   const cooldown = new Map();
   let emissionKeys = {}; let relaySecret = randomBytes(32).toString('base64url');
   const database = createChannelLookup();
@@ -109,7 +111,9 @@ export function createLiveServer(options = {}) {
   const summary = () => ({ enabledChannelIds: [...config.allowed], maxSelectedChannels: 5,
     maxConcurrentChannels: config.maxChannels, delaySeconds: DELAY_SECONDS,
     externalChannelIds: Object.keys(emissionKeys).map(Number),
-    activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, speed: j.speed || null })) });
+    authorizationTiming: { ...authorizationTiming },
+    activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
+      lastProgressMs: Date.now() - j.lastProgress, maxProgressGapMs: j.maxProgressGapMs || 0 })) });
   async function requireAdmin(token) {
     const response = await fetch(`${config.apiBase}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000),
@@ -153,6 +157,9 @@ export function createLiveServer(options = {}) {
     if (!token || token.length < 8 || token.length > 256) throw Object.assign(new Error('Unauthorized'), { status: 401 });
     const cached = authorizations.get(token);
     if (cached && cached.expires > Date.now()) return cached.channels;
+    if (authorizationRequests.has(token)) return authorizationRequests.get(token);
+    const started = Date.now();
+    const request = (async () => {
     const response = await fetch(`${config.apiBase}/api/channels`, {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000),
     });
@@ -163,6 +170,13 @@ export function createLiveServer(options = {}) {
     if (authorizations.size >= 256) authorizations.delete(authorizations.keys().next().value);
     authorizations.set(token, { expires: Date.now() + 10000, channels });
     return channels;
+    })();
+    authorizationRequests.set(token, request);
+    try { return await request; } finally {
+      authorizationRequests.delete(token);
+      const ms = Date.now() - started; authorizationTiming.requests++; authorizationTiming.lastMs = ms;
+      authorizationTiming.maxMs = Math.max(authorizationTiming.maxMs, ms); if (ms > 750) authorizationTiming.slow++;
+    }
   }
 
   function stop(job, reason) {
@@ -204,7 +218,15 @@ export function createLiveServer(options = {}) {
         for (const line of lines) {
           if (line.startsWith('out_time_us=')) {
             const value = Number(line.slice(12));
-            if (value > (job.mediaTime || 0)) { job.lastProgress = Date.now(); job.mediaTime = value; }
+            if (value > (job.mediaTime || 0)) {
+              const now = Date.now();
+              if (job.mediaTime) job.maxProgressGapMs = Math.max(job.maxProgressGapMs || 0, now - job.lastProgress);
+              job.lastProgress = now; job.mediaTime = value;
+              (job.samples ||= []).push({ wall: now, media: value });
+              if (job.samples.length > 16) job.samples.shift();
+              const first = job.samples[0]; const elapsed = now - first.wall;
+              if (elapsed >= 10000) job.recentSpeed = Number(((value - first.media) / (elapsed * 1000)).toFixed(3));
+            }
           }
           if (line.startsWith('speed=')) {
             job.speed = Number.parseFloat(line.slice(6));
