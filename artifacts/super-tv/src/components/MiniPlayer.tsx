@@ -4,7 +4,7 @@ import { Maximize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
 import { getMiniPlayerState, setMiniPlayerState, subscribeMiniPlayer, updateMiniPlayerState } from '@/lib/mini-player-state';
 import { getToken } from '@/lib/auth';
 import { apiBase } from '@/lib/api';
-import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, forgetLiveCapability } from '@/lib/live-playback';
+import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, forgetLiveCapability, attachLiveQualityRecovery } from '@/lib/live-playback';
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 
 export function MiniPlayer() {
@@ -82,6 +82,7 @@ export function MiniPlayer() {
           });
           hls.loadSource(url);
           hls.attachMedia(video);
+          const stopRecovery = enhanced ? attachLiveQualityRecovery(hls, video) : () => {};
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             const selected = getMiniPlayerState()?.qualityPreference;
             const original = hls.levels.findIndex(level => String(level.name || '').includes('Original'));
@@ -95,6 +96,7 @@ export function MiniPlayer() {
               if (!url.includes('/api/live/')) { hls.startLoad(); return; }
               const t = getToken('user') || getToken('admin') || '';
               fallbackRef.current = true;
+              stopRecovery();
               forgetLiveCapability(active.channelId, t);
               hls.destroy();
               cleanupRef.current = null;
@@ -102,7 +104,7 @@ export function MiniPlayer() {
               updateMiniPlayerState({ url: proxyUrl, streamFormat: 'hls' });
             }
           });
-          cleanupRef.current = () => hls.destroy();
+          cleanupRef.current = () => { stopRecovery(); hls.destroy(); };
           return;
         }
       } catch {}

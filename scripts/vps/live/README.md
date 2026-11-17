@@ -14,6 +14,12 @@ the visible history while waiting on the paced playout clock. This history does 
 increase the requested playback offset. Masters include an average bandwidth estimate
 as well as peak headroom for each rendition. The original retains the probe's nominal
 bitrate floor so low-motion warmup footage cannot understate later requirements.
+Super TV's Hls.js player can recheck a higher rendition's transfer speed when Auto
+has at least five seconds buffered. Samples stop after approximately 512 KiB or
+three seconds, run at most once per thirty seconds, and never select a manual level.
+The standard ABR algorithm still chooses the rendition and reduces quality when needed.
+Independent/native players apply their own ABR rules; the M3U8 cannot install this
+recovery behavior into another website's player.
 
 ## Capacity
 

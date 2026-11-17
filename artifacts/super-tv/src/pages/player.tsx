@@ -12,7 +12,7 @@ import { getMiniPlayerState, setMiniPlayerState, updateMiniPlayerState } from '@
 import { getToken } from '@/lib/auth';
 import { apiBase } from '@/lib/api';
 import { normalizeKey } from '@/lib/tv-remote';
-import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, forgetLiveCapability } from '@/lib/live-playback';
+import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, forgetLiveCapability, attachLiveQualityRecovery } from '@/lib/live-playback';
 
 type VideoFormat = 'hls' | 'dash' | 'flv' | 'native' | 'youtube';
 
@@ -119,6 +119,7 @@ export default function PlayerPage() {
   const [qualityChoice, setQualityChoice] = useState<QualityChoice>(miniState?.qualityPreference ?? (miniState?.preferOriginal ? 'original' : 'auto'));
   const [qualityOptions, setQualityOptions] = useState<number[]>([]);
   const [canChooseOriginal, setCanChooseOriginal] = useState(false);
+  const [actualQualityHeight, setActualQualityHeight] = useState(0);
 
 
   useEffect(() => {
@@ -509,6 +510,7 @@ export default function PlayerPage() {
             hlsRef.current = hls;
             hls.loadSource(currentUrl);
             hls.attachMedia(video);
+            const stopRecovery = isChannel && enhanced ? attachLiveQualityRecovery(hls, video) : () => {};
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
               if (!destroyed) {
                 const originalIndex = hls.levels.findIndex(level => String(level.name || '').includes('Original'));
@@ -549,6 +551,7 @@ export default function PlayerPage() {
                   forgetLiveCapability(channelId, t);
                   cleanupRef.current = null;
                   if (hlsRef.current === hls) hlsRef.current = null;
+                  stopRecovery();
                   hls.destroy();
                   setCurrentUrl(originalUrl);
                 } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -561,7 +564,7 @@ export default function PlayerPage() {
                 }
               }
             });
-            cleanupRef.current = () => { if (hlsRef.current === hls) hlsRef.current = null; hls.destroy(); };
+            cleanupRef.current = () => { stopRecovery(); if (hlsRef.current === hls) hlsRef.current = null; hls.destroy(); };
           } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = currentUrl;
             video.play().catch(() => {});
@@ -988,7 +991,7 @@ export default function PlayerPage() {
   }, [isPlaying]);
 
   const hasQualityChoices = type === 'channel' && (qualityOptions.length > 1 || canChooseOriginal);
-  const qualityLabel = qualityChoice === 'auto' ? 'Auto' : qualityChoice === 'original' ? 'Original' : `${qualityChoice}p`;
+  const qualityLabel = qualityChoice === 'auto' ? (actualQualityHeight ? `Auto (${actualQualityHeight}p)` : 'Auto') : qualityChoice === 'original' ? 'Original' : `${qualityChoice}p`;
   const cycleQuality = useCallback(() => {
     const choices: QualityChoice[] = ['auto', ...qualityOptions, ...(canChooseOriginal ? ['original' as const] : [])];
     const next = choices[(choices.indexOf(desiredQualityRef.current) + 1) % choices.length];
@@ -1203,6 +1206,9 @@ export default function PlayerPage() {
         webkit-playsinline=""
         x-webkit-airplay="allow"
         controlsList="nofullscreen nodownload"
+        onResize={event => setActualQualityHeight(event.currentTarget.videoHeight)}
+        onLoadedMetadata={event => setActualQualityHeight(event.currentTarget.videoHeight)}
+        onEmptied={() => setActualQualityHeight(0)}
         onPlay={() => {
           // Guard: if casting is active, immediately stop local playback.
           // Prevents double audio when HLS reloads (e.g. on channel change).
