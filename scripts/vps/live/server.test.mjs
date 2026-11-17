@@ -62,3 +62,44 @@ test('authenticated viewers share a bounded two-quality encoder and private play
   await new Promise(resolve => setTimeout(resolve, 6500));
   assert.equal(live.jobs.size, 0, 'encoder stops when viewers leave');
 });
+
+test('only admins can persist up to five selected channels; disabling preserves originals', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'supertv-live-config-'));
+  const stateFile = path.join(root, 'channels.json');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const backend = http.createServer((req, res) => {
+    const admin = req.headers.authorization === 'Bearer administrator';
+    const viewer = req.headers.authorization === 'Bearer viewer-one';
+    if (!admin && !viewer) { res.writeHead(401); res.end(); return; }
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/auth/me') res.end(JSON.stringify({ type: admin ? 'admin' : 'user', role: admin ? 'admin' : null }));
+    else res.end(JSON.stringify(Array.from({ length: 6 }, (_, i) => ({ id: i + 1, streamUrl: 'https://example.com/input.m3u8', streamFormat: 'hls' }))));
+  });
+  const apiBase = await listen(backend);
+  t.after(() => new Promise(resolve => { backend.closeAllConnections(); backend.close(resolve); }));
+  let live = createLiveServer({ apiBase, directory: path.join(root, 'output'), stateFile, allowed: new Set(), maxChannels: 0 });
+  let base = await listen(live.server);
+  t.after(() => live.close());
+  const headers = { Authorization: 'Bearer administrator', 'Content-Type': 'application/json' };
+  const change = (id, enabled, authorization = headers) => fetch(`${base}/api/live/admin/channels/${id}`, {
+    method: 'PUT', headers: authorization, body: JSON.stringify({ enabled }),
+  });
+  assert.equal((await change(1, true, { ...headers, Authorization: 'Bearer viewer-one' })).status, 403);
+  assert.equal((await fetch(`${base}/api/live/admin/config`)).status, 401);
+  const changes = await Promise.all([change(1, true), change(2, true)]);
+  assert.ok(changes.every(response => response.status === 200));
+  for (const id of [3, 4, 5]) assert.equal((await change(id, true)).status, 200);
+  assert.equal((await change(6, true)).status, 409);
+  const persisted = JSON.parse(await readFile(stateFile, 'utf8'));
+  assert.deepEqual(persisted.enabledChannelIds.sort(), [1, 2, 3, 4, 5]);
+  assert.equal((await change(1, false)).status, 200);
+  await live.close();
+  live = createLiveServer({ apiBase, directory: path.join(root, 'output'), stateFile, allowed: new Set(), maxChannels: 0 });
+  await live.ready; base = await listen(live.server);
+  const restored = await (await fetch(`${base}/api/live/admin/config`, { headers })).json();
+  assert.deepEqual(restored.enabledChannelIds.sort(), [2, 3, 4, 5]);
+  const original = await fetch(`${base}/api/live/channels/1/master.m3u8?token=viewer-one`, { redirect: 'manual' });
+  assert.equal(original.status, 302);
+  const disabledStatus = await (await fetch(`${base}/api/live/channels/1/status?token=viewer-one`)).json();
+  assert.equal(disabledStatus.enabled, false);
+});

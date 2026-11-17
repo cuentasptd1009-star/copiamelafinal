@@ -13,7 +13,12 @@ for live_file in server.mjs ffmpeg-child.py ecosystem.config.cjs; do
   install -m 600 "$LIVE_SOURCE_DIR/$live_file" "/opt/supertv-live/$live_file"
 done
 pm2 startOrReload /opt/supertv-live/ecosystem.config.cjs --only supertv-live --update-env
-LIVE_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-connrefused http://127.0.0.1:8790/api/live/channels/450/status)
+LIVE_STATUS=000
+for live_attempt in $(seq 1 20); do
+  LIVE_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8790/api/live/channels/450/status || true)
+  [ "$LIVE_STATUS" = 401 ] && break
+  sleep 1
+done
 [ "$LIVE_STATUS" = 401 ]
 python3 - "$LIVE_CONFIG" <<'PY'
 from pathlib import Path
