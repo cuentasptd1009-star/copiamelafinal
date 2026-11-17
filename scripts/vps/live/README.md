@@ -13,7 +13,7 @@ reconstruct video that the origin never delivered.
 
 The CX23 initially permits one encoder job shared by all viewers of the same channel. The admin displays this simultaneous-processing limit separately from the five saved selections. It produces 360p, 480p, and (for sources above 720p) 720p. The highest variant copies the original video without re-encoding; AAC audio is normalized to a continuous 48 kHz timeline in every variant, including the original-video variant. Input timestamp discontinuities are normalized rather than copied blindly. Lower variants follow the source keyframes on the same normalized timeline, so one master playlist can adapt up and down including the original. Sources at 720p use Original 720p + 480p + 360p. Sources above 1080p/30fps or with unsupported codecs fall back to the original proxy. FFmpeg
 runs at lower priority, with two decode/filter threads and one thread per rendition encoder. Fast bilinear scaling reduces work on the shared two-vCPU VPS. For unencrypted MPEG-TS HLS, a bounded reader polls source playlists independently, prefetches at most two segments, and feeds FFmpeg in sequence through a pipe. It starts at the newest complete source segment. Encrypted/fMP4 or other unsupported input forms retain direct FFmpeg ingest. The decoder also has a bounded 512-packet queue. A cold start waits for new source media to build the playable reserve. A ladder is not published during warmup unless the actual published media edge advances at real-time speed over a measured interval. FFmpeg's average speed is retained only as a diagnostic because source timestamp offsets can distort it. Idle jobs stop after two
-minutes. Warmup failure, sustained processing below realtime, or source stalls cause
+minutes. Warmup failure, an encoder exit, or source stalls cause
 fallback to the existing original stream. The encoder dies if its Node parent dies.
 
 Other channels use their existing original stream; native multi-quality HLS sources
@@ -22,7 +22,7 @@ No server resize or billing-plan change is performed by this installer.
 
 ## Install
 
-Copy the runtime files (`server.mjs`, `sharing.mjs`, `ingest.mjs`, `ffmpeg-child.py`, `ecosystem.config.cjs`,
+Copy the runtime files (`server.mjs`, `sharing.mjs`, `ingest.mjs`, `playout.mjs`, `ffmpeg-child.py`, `ecosystem.config.cjs`,
 `install.sh`) from the same reviewed Git commit into a root-only release directory.
 Run `bash install.sh` as root. Requirements: Node 18+, Python 3, FFmpeg with libx264,
 PM2, and the existing `/etc/nginx/copiamelafinal-api-tls.conf` HTTPS proxy.
