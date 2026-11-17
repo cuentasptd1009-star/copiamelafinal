@@ -17,7 +17,7 @@ minutes. Warmup failure, an encoder exit, or source stalls cause
 fallback to the existing original stream. The encoder dies if its Node parent dies.
 
 Other channels use their existing original stream; native multi-quality HLS sources
-retain their available renditions. On conversion retirement, old media segments remain available for sixty seconds and old variant playlists fall back to the original, rather than becoming permanent 404 responses. Inactive cache generations are pruned. Selections are persisted in `/opt/supertv-live/channels.json` through admin-only API routes. The installer preserves this file. Do not expand `LIVE_MAX_CHANNELS` without measuring CPU, memory, encoding speed, and disk usage.
+retain their available renditions. On conversion retirement, old media segments remain available for sixty seconds and old variant playlists fall back to the original, rather than becoming permanent 404 responses. This fallback does not guarantee a seamless timeline transition in an already-open external player: reopen the channel after changing its conversion setting. Inactive cache generations are pruned. Selections are persisted in `/opt/supertv-live/channels.json` through admin-only API routes. The installer preserves this file. Do not expand `LIVE_MAX_CHANNELS` without measuring CPU, memory, encoding speed, and disk usage.
 No server resize or billing-plan change is performed by this installer.
 
 ## Install
