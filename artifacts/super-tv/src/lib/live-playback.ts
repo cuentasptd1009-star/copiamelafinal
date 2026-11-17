@@ -68,9 +68,9 @@ export function attachLiveQualityRecovery(hls: AdaptiveHls, video: HTMLVideoElem
       }
       const elapsed = performance.now() - firstAt;
       if (!disposed && !controller.signal.aborted && hls.autoLevelEnabled && bytes >= 128 * 1024 && elapsed >= 100 && reserve() >= 3) {
-        const estimate = bytes * 8000 / elapsed * 0.9;
+        const estimate = bytes * 8000 / elapsed;
         const required = level.averageBitrate || level.bitrate;
-        if (estimate * liveBufferConfig.abrBandWidthUpFactor >= required && estimate > hls.bandwidthEstimate * 1.15) hls.bandwidthEstimate = estimate;
+        if (estimate * liveBufferConfig.abrBandWidthUpFactor >= required && estimate > hls.bandwidthEstimate) hls.bandwidthEstimate = estimate;
       }
     } catch { /* A failed sample never interrupts or selects a playback level. */ }
     finally {
