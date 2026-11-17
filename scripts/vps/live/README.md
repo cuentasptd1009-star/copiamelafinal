@@ -1,6 +1,6 @@
 # Super TV live pilot
 
-This service adds a shared, on-demand 360p/480p HLS ladder for channels selected by the administrator (up to five selections). All channels start disabled.
+This service adds a shared, on-demand adaptive HLS ladder up to the original resolution for channels selected by the administrator (up to five selections). All channels start disabled.
 It does not replace the application's API or its database. All playlists and segments
 validate the existing user's session through the local API. Tokens never enter the
 shared media files, and each response receives the requesting viewer's token.
@@ -12,8 +12,7 @@ reconstruct video that the origin never delivered.
 
 ## Capacity
 
-The CX23 initially permits one encoder job shared by all viewers of the same channel. The admin displays this simultaneous-processing limit separately from the five saved selections. It
-produces 640x360 at 500 kbps and 854x480 at 800 kbps, with 64 kbps AAC audio. FFmpeg
+The CX23 initially permits one encoder job shared by all viewers of the same channel. The admin displays this simultaneous-processing limit separately from the five saved selections. It produces 360p, 480p, and (for sources above 720p) 720p. The highest variant copies the original video and audio without re-encoding. Lower variants follow the source keyframes and timestamps, so one master playlist can adapt up and down including the original. Sources at 720p use Original 720p + 480p + 360p. Sources above 1080p/30fps or with unsupported codecs fall back to the original proxy. FFmpeg
 runs at lower priority with limited encoder/filter threads. Idle jobs stop after two
 minutes. Warmup failure, sustained processing below realtime, or source stalls cause
 fallback to the existing original stream. The encoder dies if its Node parent dies.
@@ -24,7 +23,7 @@ No server resize or billing-plan change is performed by this installer.
 
 ## Install
 
-Copy the four runtime files (`server.mjs`, `ffmpeg-child.py`, `ecosystem.config.cjs`,
+Copy the runtime files (`server.mjs`, `sharing.mjs`, `ffmpeg-child.py`, `ecosystem.config.cjs`,
 `install.sh`) from the same reviewed Git commit into a root-only release directory.
 Run `bash install.sh` as root. Requirements: Node 18+, Python 3, FFmpeg with libx264,
 PM2, and the existing `/etc/nginx/copiamelafinal-api-tls.conf` HTTPS proxy.
@@ -46,3 +45,22 @@ a real generated HLS input and verifies both encoded resolutions, shared jobs,
 private token rewriting, unauthorized access, fallback, and idle shutdown. On the VPS,
 verify authenticated manifests and segments, then watch the FFmpeg process's CPU/RSS
 and `speed` under normal source load before expanding the pilot.
+
+## External players
+
+An administrator can copy, renew, or revoke a channel-specific external link. It has
+no automatic expiry and is independent of Super TV user/admin sessions. Anyone with
+the link can play that channel, so the other website controls access for its own users.
+Renewing or revoking invalidates the old key immediately on subsequent requests.
+The channel toggle also controls what this stable link serves on a fresh playback:
+adaptive processed HLS when enabled and capacity is available, original HLS otherwise.
+Keys and the relay encryption secret are stored only in the root-readable runtime
+configuration. External metadata lookups use a bounded read-only-query PG pool through
+the API's existing local database configuration; no database credentials reach clients.
+Origin relay URLs are authenticated and encrypted, and shared origin fetches are
+bounded to 64 MiB of cache and four concurrent downloads.
+
+The tests check 50 simultaneous reads of the same channel/segment, one shared encoder,
+per-channel key scope, segment authentication, key renewal/revocation, and persistence.
+This is not a promise of 50 uninterrupted full-time viewers at every source bitrate:
+network throughput, origin availability, and included egress traffic still apply.
