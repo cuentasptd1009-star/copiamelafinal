@@ -5,8 +5,7 @@ const BASE = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://1
 /**
  * Base URL for all API calls.
  * In development: empty string (relative to current host).
- * In production with VITE_API_URL set: points to the backend host (e.g. Replit Deploy),
- * so API traffic goes to the backend server and NOT through Vercel.
+ * In production: uses the configured API origin or this project's VPS fallback.
  */
 export const apiBase = BASE;
 
