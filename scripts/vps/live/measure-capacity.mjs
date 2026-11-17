@@ -60,7 +60,15 @@ async function capture(id, sample) {
   } catch { /* A channel without a live job needs a bounded source sample. */ }
   const channel = await lookup.get(id);
   if (!channel) throw new Error('Channel unavailable');
-  const input = await createHlsInput(channel.streamUrl); activeInput = input;
+  let input;
+  try { input = await createHlsInput(channel.streamUrl); }
+  catch {
+    // Match the worker's direct-FFmpeg fallback for encrypted/fMP4 playlists.
+    // Automatic stream selection chooses the highest-resolution source video.
+    await run('ffmpeg', ['-hide_banner', '-v', 'error', '-rw_timeout', '8000000', '-user_agent', 'Mozilla/5.0 (compatible; SuperTV/1.0)', '-live_start_index', '-1', '-i', channel.streamUrl, '-t', '8', '-c', 'copy', sample], 35000);
+    return 'direct-hls-stream-copy';
+  }
+  activeInput = input;
   const chunks = []; let bytes = 0;
   const sink = new Writable({ write(chunk, encoding, callback) {
     bytes += chunk.length;
@@ -112,7 +120,9 @@ try {
       const [n, d] = String(video?.r_frame_rate || '0/1').split('/').map(Number); const fps = n / (d || 1);
       const info = { id, captureMode, width: video?.width, height: video?.height, fps: +fps.toFixed(3), video: video?.codec_name, audio: audio?.codec_name || null, currentWorkerCompatible: video?.codec_name === 'h264' && (!audio || audio.codec_name === 'aac') && video.height <= 1080 && fps > 0 && fps <= 31 };
       emit({ event: 'profile', ...info });
-      if (video?.codec_name !== 'h264' || (audio && audio.codec_name !== 'aac') || video.height > 1080 || !(fps > 0 && fps <= 61)) { results.push({ ...info, measured: false }); continue; }
+      // The offline candidate also measures 60fps/MP2 inputs. This does not
+      // change the production worker's stricter admission rules.
+      if (video?.codec_name !== 'h264' || video.height > 1080 || !(fps > 0 && fps <= 61)) { results.push({ ...info, measured: false }); continue; }
       const profile = { width: video.width, height: video.height, fps, profile: /high/i.test(video.profile) ? 'high' : /main/i.test(video.profile) ? 'main' : 'baseline', level: (video.level || 40) / 10, codecs: 'avc1.640028', bandwidth: 5000000 };
       const renditions = renditionsFor(profile); const runs = [];
       for (let iteration = 0; iteration < 2 && !stop; iteration++) {
