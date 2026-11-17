@@ -14,8 +14,8 @@ export const liveBufferConfig = {
   maxLiveSyncPlaybackRate: 1,
   abrEwmaFastLive: 1,
   abrEwmaSlowLive: 3,
-  // Retain 15% headroom when recovering quality instead of the default 30%.
-  abrBandWidthUpFactor: 0.85,
+  // Retain 20% headroom when recovering quality instead of the default 30%.
+  abrBandWidthUpFactor: 0.8,
   abrMaxWithRealBitrate: true,
   backBufferLength: 15,
   maxBufferLength: 20,

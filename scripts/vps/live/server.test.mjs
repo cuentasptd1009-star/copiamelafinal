@@ -66,6 +66,10 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
     const peak = Number(/(?:[:,])BANDWIDTH=(\d+)/.exec(line)?.[1]);
     const average = Number(/AVERAGE-BANDWIDTH=(\d+)/.exec(line)?.[1]);
     assert.ok(average > 0 && average <= peak, line);
+    if (line.includes('NAME="SuperTV Original')) {
+      assert.ok(peak >= live.jobs.get(1).profile.bandwidth);
+      assert.ok(average >= Math.ceil(live.jobs.get(1).profile.bandwidth / 1.3));
+    }
   }
   assert.ok(first.includes('viewer-one') && !first.includes('viewer-two'));
   assert.ok(second.includes('viewer-two') && !second.includes('viewer-one'));

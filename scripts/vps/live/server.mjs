@@ -75,7 +75,9 @@ export function ffmpegArguments(source, directory, profile, renditions = renditi
         '-g', '10000', '-keyint_min', '1', '-sc_threshold', '0', '-force_key_frames', 'source', '-fps_mode', 'passthrough',
         '-c:a', 'aac', '-b:a', '64k', '-ar', '48000', '-ac', '2', '-af', 'aresample=async=1');
     }
-    args.push('-output_ts_offset', '1', '-f', 'hls', '-hls_time', '2', '-hls_list_size', '12', '-hls_delete_threshold', '4',
+    // Retain enough history when prefetched input briefly runs ahead of the
+    // paced playout clock. A short raw window could expire all visible segments.
+    args.push('-output_ts_offset', '1', '-f', 'hls', '-hls_time', '2', '-hls_list_size', '30', '-hls_delete_threshold', '4',
       '-hls_segment_options', 'mpegts_copyts=1', '-hls_flags', 'delete_segments+independent_segments+program_date_time+temp_file',
       '-hls_segment_filename', path.join(directory, r.name, 'seg_%08d.ts'), path.join(directory, r.name, 'index.m3u8'));
   });
@@ -299,8 +301,12 @@ export function createLiveServer(options = {}) {
                 const measured = segmentBandwidth(durations, sizes);
                 // Keep peak headroom for bursts and advertise the measured average too.
                 // Otherwise an unvisited higher rendition is judged only by its peak.
-                rendition.bandwidth = rendition.name === 'original' ? measured.bandwidth : Math.max(rendition.bandwidth, measured.bandwidth);
-                rendition.averageBandwidth = measured.averageBandwidth;
+                rendition.bandwidth = Math.max(rendition.bandwidth, measured.bandwidth);
+                // Original video is VBR: an advert or still frame during warmup
+                // must not lower the probe's nominal requirement for later action.
+                rendition.averageBandwidth = rendition.name === 'original'
+                  ? Math.max(Math.ceil(job.profile.bandwidth / 1.3), measured.averageBandwidth)
+                  : measured.averageBandwidth;
               } catch { /* A rolling segment may expire while measuring; retain the conservative estimate. */ }
             }));
             job.ready = true; job.lastSeen = Date.now(); return;
