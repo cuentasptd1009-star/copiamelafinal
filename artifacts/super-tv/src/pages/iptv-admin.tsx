@@ -29,18 +29,21 @@ export function IptvAdmin() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<number> | null>(null);
   const [copyValue, setCopyValue] = useState('');
   const [accessUrl, setAccessUrl] = useState('');
   const users = useQuery({ queryKey: usersKey, queryFn: async () => (await (await request('/users')).json()) as Account[] });
   const channels = useQuery({ queryKey: ['admin', 'iptv', 'channels'], queryFn: async () => (await (await request('/channels')).json()) as Channel[] });
+  const available = channels.data ?? [];
+  const assigned = available.filter(channel => selected === null || selected.has(channel.id));
+  const allAssigned = available.length > 0 && assigned.length === available.length;
   const showError = (error: Error) => toast({ variant: 'destructive', title: error.message });
 
   const create = useMutation({
     mutationFn: async () => {
       const response = await request('/users', {
         method: 'POST',
-        body: JSON.stringify({ username, password, channelIds: [...selected] }),
+        body: JSON.stringify({ username, password, channelIds: assigned.map(channel => channel.id) }),
       });
       const account: Account & { accessUrl: string } = await response.json();
       return account.accessUrl;
@@ -49,7 +52,7 @@ export function IptvAdmin() {
       setAccessUrl(url);
       setUsername('');
       setPassword('');
-      setSelected(new Set());
+      setSelected(null);
       void client.invalidateQueries({ queryKey: usersKey });
       toast({ title: 'Usuario IPTV creado' });
     },
@@ -97,7 +100,7 @@ export function IptvAdmin() {
     create.mutate();
   }
 
-  const matches = (channels.data ?? []).filter(channel =>
+  const matches = available.filter(channel =>
     `${channel.name} ${channel.category ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()));
 
   return (
@@ -113,7 +116,11 @@ export function IptvAdmin() {
             required minLength={8} maxLength={128} disabled={create.isPending} />
         </label>
         <fieldset disabled={create.isPending} className="space-y-2">
-          <legend className="text-sm">Canales asignados ({selected.size})</legend>
+          <legend className="text-sm">Canales asignados ({assigned.length})</legend>
+          <Button type="button" size="sm" variant={allAssigned ? 'default' : 'outline'} aria-pressed={allAssigned}
+            disabled={!available.length} onClick={() => setSelected(allAssigned ? new Set() : null)}>
+            Asignar todo
+          </Button>
           <Input aria-label="Buscar canales IPTV" placeholder="Buscar por nombre o categoría" value={search}
             onChange={event => setSearch(event.target.value)} />
           <div className="max-h-56 overflow-y-auto rounded border border-border p-2">
@@ -122,10 +129,10 @@ export function IptvAdmin() {
             {!channels.isPending && !channels.isError && !matches.length && <p className="text-sm">No hay canales HLS para esta búsqueda.</p>}
             {matches.map(channel => (
               <label key={channel.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm hover:bg-muted">
-                <input type="checkbox" checked={selected.has(channel.id)} onChange={event => {
+                <input type="checkbox" checked={selected === null || selected.has(channel.id)} onChange={event => {
                   const checked = event.target.checked;
                   setSelected(current => {
-                    const next = new Set(current);
+                    const next = new Set(current ?? available.map(item => item.id));
                     if (checked) next.add(channel.id); else next.delete(channel.id);
                     return next;
                   });
@@ -136,7 +143,7 @@ export function IptvAdmin() {
             ))}
           </div>
         </fieldset>
-        <Button type="submit" disabled={create.isPending || !selected.size}>
+        <Button type="submit" disabled={create.isPending || !assigned.length}>
           {create.isPending ? 'Creando…' : 'Crear usuario IPTV'}
         </Button>
         {accessUrl && (
