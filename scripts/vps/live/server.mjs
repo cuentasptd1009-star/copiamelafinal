@@ -101,16 +101,16 @@ export function createLiveServer(options = {}) {
     apiBase: process.env.LIVE_API_BASE || 'http://127.0.0.1:4000',
     directory: process.env.LIVE_DIRECTORY || '/var/cache/supertv-live',
     allowed: new Set((process.env.LIVE_CHANNEL_IDS || '').split(',').map(Number).filter(id => Number.isSafeInteger(id) && id > 0)),
-    maxChannels: Math.max(1, Math.min(5, Number(process.env.LIVE_MAX_CHANNELS) || 1)),
+    originalOnly: process.env.LIVE_ORIGINAL_ONLY === '1',
+    maxChannels: Math.max(1, Number(process.env.LIVE_MAX_CHANNELS) || 1),
     stateFile: process.env.LIVE_CONFIG_FILE || null,
     publicBase: process.env.LIVE_PUBLIC_BASE || 'https://167-233-103-143.sslip.io',
     idleMs: Number(process.env.LIVE_IDLE_MS) || 120000,
     warmupMs: Number(process.env.LIVE_WARMUP_MS) || 45000,
-    protectionOnly: process.env.LIVE_PROTECTION_ONLY === '1',
     ...options,
   };
-  const publicPath = config.protectionOnly ? '/api/protection' : '/api/live';
-  const unavailable = id => config.protectionOnly && id === 412;
+  const maxSelectedChannels = config.originalOnly ? 6 : 5;
+  config.maxChannels = Math.min(maxSelectedChannels, config.maxChannels);
   const jobs = new Map();
   const authorizations = new Map();
   const authorizationRequests = new Map();
@@ -124,16 +124,16 @@ export function createLiveServer(options = {}) {
     if (!config.stateFile) return;
     try {
       const data = JSON.parse(await readFile(config.stateFile, 'utf8'));
-      if (!Array.isArray(data.enabledChannelIds) || data.enabledChannelIds.length > 5 || !data.enabledChannelIds.every(id => Number.isSafeInteger(id) && id > 0)) throw new Error('Invalid live configuration');
-      config.allowed = new Set(data.enabledChannelIds.filter(id => !unavailable(id)));
+      if (!Array.isArray(data.enabledChannelIds) || data.enabledChannelIds.length > maxSelectedChannels || !data.enabledChannelIds.every(id => Number.isSafeInteger(id) && id > 0)) throw new Error('Invalid live configuration');
+      config.allowed = new Set(data.enabledChannelIds);
       emissionKeys = data.emissionKeys || {};
       if (typeof emissionKeys !== 'object' || Array.isArray(emissionKeys) || !Object.entries(emissionKeys).every(([id,key]) => /^[1-9]\d*$/.test(id) && typeof key === 'string' && key.length >= 32 && key.length <= 128)) throw new Error('Invalid emission key configuration');
       relaySecret = data.relaySecret || relaySecret;
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
   })();
   let updates = Promise.resolve();
-  const summary = () => ({ enabledChannelIds: [...config.allowed], maxSelectedChannels: 5,
-    maxConcurrentChannels: config.maxChannels, protectionOnly: config.protectionOnly, delaySeconds: DELAY_SECONDS, serverBufferSeconds: SERVER_RESERVE_SECONDS, clientBufferSeconds: CLIENT_RESERVE_SECONDS,
+  const summary = () => ({ enabledChannelIds: [...config.allowed], maxSelectedChannels, originalOnly: config.originalOnly,
+    maxConcurrentChannels: config.maxChannels, delaySeconds: DELAY_SECONDS, serverBufferSeconds: SERVER_RESERVE_SECONDS, clientBufferSeconds: CLIENT_RESERVE_SECONDS,
     externalChannelIds: Object.keys(emissionKeys).map(Number),
     authorizationTiming: { ...authorizationTiming },
     activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, source: j.profile ? { width: j.profile.width, height: j.profile.height, fps: j.profile.fps } : null, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
@@ -166,7 +166,7 @@ export function createLiveServer(options = {}) {
     const update = updates.then(async () => {
       const next = new Set([...config.allowed].filter(value => channels.has(value)));
       if (enabled) next.add(id); else next.delete(id);
-      if (next.size > 5) throw Object.assign(new Error('Puedes activar hasta 5 canales. Desactiva uno antes de añadir otro.'), { status: 409 });
+      if (next.size > maxSelectedChannels) throw Object.assign(new Error(`Puedes activar hasta ${maxSelectedChannels} canales. Desactiva uno antes de añadir otro.`), { status: 409 });
       await persist(next, emissionKeys);
       config.allowed = next;
       for (const job of [...jobs.values()]) if (!next.has(job.id)) stop(job, 'disabled');
@@ -254,7 +254,7 @@ export function createLiveServer(options = {}) {
       try { job.input = await createHlsInput(channel.streamUrl, { userAgent: ORIGIN_USER_AGENT }); sample = await job.input.peek(); }
       catch (error) { job.input?.close(); job.input = null; job.ingestFallback = cleanError(error.message); }
       job.profile = await probeSource(sample || channel.streamUrl); sample = null;
-      job.renditions = renditionsFor(job.profile).filter(r => !config.protectionOnly || r.name === 'original');
+      job.renditions = renditionsFor(job.profile).filter(r => !config.originalOnly || r.name === 'original');
       await Promise.all(job.renditions.map(r => mkdir(path.join(job.directory, r.name), { recursive: true, mode: 0o700 })));
       if (job.stopping) throw new Error('Stopped');
       const child = spawn('python3', [fileURLToPath(new URL('./ffmpeg-child.py', import.meta.url)), String(process.pid), process.env.FFMPEG_PATH || 'ffmpeg', ...ffmpegArguments(job.input ? 'pipe:0' : channel.streamUrl, job.directory, job.profile, job.renditions)],
@@ -372,16 +372,14 @@ export function createLiveServer(options = {}) {
     try { url = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400); res.end(); return; }
     try { await ready; } catch { res.writeHead(503); res.end('Live configuration unavailable'); return; }
     const token = url.searchParams.get('token') || req.headers.authorization?.replace(/^Bearer /i, '') || '';
-    if (!url.pathname.startsWith(publicPath + '/')) { res.writeHead(404); res.end(); return; }
-    const route = '/api/live' + url.pathname.slice(publicPath.length);
-    if (route.startsWith('/api/live/admin/')) {
+    if (url.pathname.startsWith('/api/live/admin/')) {
       try {
         const channels = await authorize(token);
         await requireAdmin(token);
         res.setHeader('Content-Type', 'application/json');
-        if (route === '/api/live/admin/config' && req.method === 'GET') { res.end(JSON.stringify(summary())); return; }
-        const link = /^\/api\/live\/admin\/channels\/(\d+)\/link$/.exec(route);
-        if (!config.protectionOnly && link && ['POST', 'DELETE'].includes(req.method)) {
+        if (url.pathname === '/api/live/admin/config' && req.method === 'GET') { res.end(JSON.stringify(summary())); return; }
+        const link = /^\/api\/live\/admin\/channels\/(\d+)\/link$/.exec(url.pathname);
+        if (link && ['POST', 'DELETE'].includes(req.method)) {
           const id = Number(link[1]); const channel = channels.get(id);
           if (!channel) throw Object.assign(new Error('Canal no encontrado.'), { status: 404 });
           if (!(channel.streamFormat === 'hls' || /\.m3u8(?:[?#]|$)|\/hls\//i.test(channel.streamUrl))) throw Object.assign(new Error('El enlace externo requiere un canal HLS.'), { status: 400 });
@@ -389,13 +387,12 @@ export function createLiveServer(options = {}) {
           let data; try { data = body ? JSON.parse(body) : {}; } catch { throw Object.assign(new Error('Invalid JSON'), { status: 400 }); }
           res.end(JSON.stringify(await updateEmissionKey(id, data.renew === true, req.method === 'DELETE'))); return;
         }
-        const setting = /^\/api\/live\/admin\/channels\/(\d+)$/.exec(route);
+        const setting = /^\/api\/live\/admin\/channels\/(\d+)$/.exec(url.pathname);
         if (!setting || req.method !== 'PUT') { res.writeHead(404); res.end(); return; }
         let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 4096) throw Object.assign(new Error('Request too large'), { status: 413 }); }
         let data; try { data = JSON.parse(body); } catch { throw Object.assign(new Error('Invalid JSON'), { status: 400 }); }
         if (typeof data.enabled !== 'boolean') throw Object.assign(new Error('enabled must be boolean'), { status: 400 });
         const id = Number(setting[1]); const channel = channels.get(id);
-        if (unavailable(id)) throw Object.assign(new Error('WIN usa su propia configuración.'), { status: 409 });
         if (data.enabled && (!channel || !/^https?:\/\//.test(channel.streamUrl) || !(channel.streamFormat === 'hls' || /\.m3u8(?:[?#]|$)|\/hls\//i.test(channel.streamUrl)))) {
           throw Object.assign(new Error('Selecciona un canal HLS (M3U8) válido.'), { status: 400 });
         }
@@ -404,10 +401,9 @@ export function createLiveServer(options = {}) {
       return;
     }
     if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
-    const match = /^\/api\/live\/channels\/(\d+)\/(status|relay|master\.m3u8|([a-z0-9-]{1,50})\/(360p|480p|720p|original)\/(index\.m3u8|seg_\d+\.ts))$/.exec(route);
+    const match = /^\/api\/live\/channels\/(\d+)\/(status|relay|master\.m3u8|([a-z0-9-]{1,50})\/(360p|480p|720p|original)\/(index\.m3u8|seg_\d+\.ts))$/.exec(url.pathname);
     if (!match) { res.writeHead(404); res.end(); return; }
     const id = Number(match[1]);
-    if (unavailable(id)) { res.writeHead(404); res.end(); return; }
     const externalKey = url.searchParams.get('key');
     const credentialQuery = externalKey ? `key=${encodeURIComponent(externalKey)}` : `token=${encodeURIComponent(token)}`;
     let channel;
@@ -441,7 +437,7 @@ export function createLiveServer(options = {}) {
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('X-SuperTV-Live', 'transcoded');
         res.end(`#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-START:TIME-OFFSET=-${CLIENT_RESERVE_SECONDS},PRECISE=YES\n` + job.renditions.map(r =>
-          `#EXT-X-STREAM-INF:BANDWIDTH=${r.bandwidth}${r.averageBandwidth ? `,AVERAGE-BANDWIDTH=${r.averageBandwidth}` : ''},RESOLUTION=${r.width}x${r.height},FRAME-RATE=${r.fps.toFixed(3)},CODECS="${r.codecs},mp4a.40.2",NAME="SuperTV ${r.name === 'original' ? 'Original ' + r.height + 'p' : r.name}"\n${publicPath}/channels/${id}/${job.generation}/${r.name}/index.m3u8?${credentialQuery}\n`).join(''));
+          `#EXT-X-STREAM-INF:BANDWIDTH=${r.bandwidth}${r.averageBandwidth ? `,AVERAGE-BANDWIDTH=${r.averageBandwidth}` : ''},RESOLUTION=${r.width}x${r.height},FRAME-RATE=${r.fps.toFixed(3)},CODECS="${r.codecs},mp4a.40.2",NAME="SuperTV ${r.name === 'original' ? 'Original ' + r.height + 'p' : r.name}"\n/api/live/channels/${id}/${job.generation}/${r.name}/index.m3u8?${credentialQuery}\n`).join(''));
         return;
       }
       const job = jobs.get(id);
@@ -452,7 +448,7 @@ export function createLiveServer(options = {}) {
       const file = path.join(directory, match[4], match[5]);
       if (match[5] === 'index.m3u8') {
         let text = playoutPlaylist(await readFile(file, 'utf8'));
-        const prefix = `${publicPath}/channels/${id}/${job.generation}/${match[4]}/`;
+        const prefix = `/api/live/channels/${id}/${job.generation}/${match[4]}/`;
         text = text.replace('#EXTM3U', `#EXTM3U\n#EXT-X-START:TIME-OFFSET=-${CLIENT_RESERVE_SECONDS},PRECISE=YES`)
           .split('\n').map(line => /^seg_\d+\.ts$/.test(line.trim()) ? `${prefix}${line.trim()}?${credentialQuery}` : line).join('\n');
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl'); res.end(text);
