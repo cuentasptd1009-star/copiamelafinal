@@ -7,6 +7,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createLiveServer, segmentBandwidth } from './server.mjs';
 
+const iptvTestKey = 'iptv_' + 'T'.repeat(43);
+
 const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)));
 
 test('bitrate metadata separates weighted average consumption from peak headroom', () => {
@@ -35,9 +37,13 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
   let thirdViewerAuthorizations = 0;
   let playbackManifestStarted = null;
   const backend = http.createServer(async (req, res) => {
+    if (req.url === '/api/auth/me' && req.headers.authorization === 'Bearer test-administrator') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ type: 'admin', role: 'admin' })); return;
+    }
     if (req.url === '/api/channels') {
       if (req.headers.authorization === 'Bearer viewer-three') { thirdViewerAuthorizations++; await new Promise(resolve => setTimeout(resolve, 50)); }
-      if (!['Bearer viewer-one', 'Bearer viewer-two', 'Bearer viewer-three'].includes(req.headers.authorization)) { res.writeHead(401); res.end(); return; }
+      if (!['Bearer viewer-one', 'Bearer viewer-two', 'Bearer viewer-three', 'Bearer test-administrator'].includes(req.headers.authorization)) { res.writeHead(401); res.end(); return; }
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify([1, 2].map(id => ({ id, streamUrl: `${backendBase}/input.m3u8` })))); return;
     }
@@ -52,13 +58,37 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
   });
   backendBase = await listen(backend);
   t.after(() => new Promise(resolve => { backend.closeAllConnections(); backend.close(resolve); }));
-  const live = createLiveServer({ apiBase: backendBase, directory: path.join(root, 'output'), allowed: new Set([1]), idleMs: 1000, warmupMs: 30000 });
+  const live = createLiveServer({ apiBase: backendBase, directory: path.join(root, 'output'), allowed: new Set([1]), idleMs: 1000, warmupMs: 30000, lookupChannel: async id => ({ id, streamUrl: backendBase + '/input.m3u8' }),
+    lookupIptvChannel: async (key, id) => key === iptvTestKey && id === 1 ? { id, streamUrl: backendBase + '/input.m3u8' } : null });
   const base = await listen(live.server); t.after(() => live.close());
   assert.equal((await fetch(`${base}/api/live/channels/1/master.m3u8`)).status, 401);
   assert.equal(live.jobs.size, 0);
   const [a, b] = await Promise.all(['viewer-one', 'viewer-two'].map(token => fetch(`${base}/api/live/channels/1/master.m3u8?token=${token}`, { redirect: 'manual' })));
   assert.equal(a.status, 200); assert.equal(b.status, 200);
   const [first, second] = await Promise.all([a.text(), b.text()]);
+  const externalLink = await fetch(base + '/api/live/admin/channels/1/link', {
+    method: 'POST', headers: { Authorization: 'Bearer test-administrator' },
+  });
+  assert.equal(externalLink.status, 200);
+  const externalUrl = new URL((await externalLink.json()).url);
+  const externalManifest = await fetch(base + externalUrl.pathname + externalUrl.search, {
+    headers: { Origin: 'https://player.example' },
+  });
+  assert.equal(externalManifest.status, 200);
+  assert.equal(externalManifest.headers.get('access-control-allow-origin'), '*');
+  assert.equal(externalManifest.headers.get('x-supertv-live'), 'transcoded');
+  const accountMaster = await fetch(base + '/api/live/channels/1/master.m3u8?key=' + iptvTestKey);
+  assert.equal(accountMaster.headers.get('x-supertv-live'), 'transcoded');
+  const accountVariant = (await accountMaster.text()).split('\n').find(line => line.startsWith('/api/'));
+  assert.equal((await fetch(base + accountVariant)).status, 200);
+  assert.equal((await fetch(base + '/api/live/channels/2/master.m3u8?key=' + iptvTestKey)).status, 401);
+  const externalVariant = (await externalManifest.text()).split('\n').find(line => line.startsWith('/api/'));
+  const externalPlaylist = await fetch(base + externalVariant);
+  assert.equal(externalPlaylist.status, 200);
+  const externalFragment = (await externalPlaylist.text()).split('\n').find(line => line.startsWith('/api/'));
+  const externalVideo = await fetch(base + externalFragment);
+  assert.equal(externalVideo.status, 200);
+  assert.ok((await externalVideo.arrayBuffer()).byteLength > 0);
   assert.equal(live.jobs.size, 1);
   assert.match(first, /RESOLUTION=640x360/); assert.match(first, /RESOLUTION=854x480/);
   assert.match(first, /TIME-OFFSET=-6/);
@@ -148,7 +178,8 @@ test(`admin persists the ${originalOnly ? 'six-channel Original' : 'five-channel
   });
   const apiBase = await listen(backend);
   t.after(() => new Promise(resolve => { backend.closeAllConnections(); backend.close(resolve); }));
-  const options = { apiBase, directory: path.join(root, 'output'), stateFile, originalOnly, maxChannels: 0, allowPrivateOrigins: true, lookupChannel: async id => ({ id, streamUrl: `${apiBase}/input.m3u8` }) };
+  const options = { apiBase, directory: path.join(root, 'output'), stateFile, originalOnly, maxChannels: 0, allowPrivateOrigins: true, lookupChannel: async id => ({ id, streamUrl: `${apiBase}/input.m3u8` }),
+    lookupIptvChannel: async (key, id) => key === iptvTestKey && id === 1 ? { id, streamUrl: `${apiBase}/input.m3u8` } : null };
   let live = createLiveServer(options);
   let base = await listen(live.server);
   t.after(() => live.close());
@@ -167,6 +198,11 @@ test(`admin persists the ${originalOnly ? 'six-channel Original' : 'five-channel
   assert.deepEqual(persisted.enabledChannelIds.sort(), originalOnly ? [1, 2, 3, 4, 412, 5].sort() : [1, 2, 3, 4, 5]);
   assert.equal((await change(1, false)).status, 200);
   const issue = () => fetch(`${base}/api/live/admin/channels/1/link`, { method: 'POST', headers, body: '{}' });
+  const account = await fetch(base + '/api/live/channels/1/master.m3u8?key=' + iptvTestKey);
+  assert.equal(account.status, 200);
+  assert.equal(account.headers.get('x-supertv-live'), null);
+  const accountSegment = (await account.text()).split('\n').find(line => line.startsWith('/api/'));
+  assert.equal((await fetch(base + accountSegment)).status, 200);
   const issued = await (await issue()).json();
   const relative = value => { const u = new URL(value); return u.pathname + u.search; };
   const publicPath = relative(issued.url);
@@ -202,3 +238,33 @@ test(`admin persists the ${originalOnly ? 'six-channel Original' : 'five-channel
   assert.equal(disabledStatus.enabled, false);
 });
 }
+
+test('two-channel warm mode persists the initial slots and permits replacing either from Admin', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'supertv-two-warm-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const stateFile = path.join(root, 'channels.json');
+  await writeFile(stateFile, JSON.stringify({ enabledChannelIds: [412, 430] }));
+  const lookedUp = [];
+  const backend = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(req.url === '/api/auth/me' ? { type: 'admin', role: 'admin' } :
+      [412, 430, 433].map(id => ({ id, streamFormat: 'hls', streamUrl: `${apiBase}/source.m3u8` }))));
+  });
+  const apiBase = await listen(backend);
+  t.after(() => new Promise(resolve => { backend.closeAllConnections(); backend.close(resolve); }));
+  const live = createLiveServer({ apiBase, directory: root, stateFile, originalOnly: true, keepWarm: true, maxChannels: 2,
+    lookupChannel: async id => { lookedUp.push(id); return null; } });
+  const base = await listen(live.server);
+  t.after(() => live.close());
+  const headers = { Authorization: 'Bearer administrator', 'Content-Type': 'application/json' };
+  const change = (id, enabled) => fetch(`${base}/api/live/admin/channels/${id}`, {
+    method: 'PUT', headers, body: JSON.stringify({ enabled }),
+  });
+  await live.ready;
+  assert.deepEqual(lookedUp.sort(), [412, 430]);
+  assert.equal((await change(433, true)).status, 409);
+  assert.equal((await change(430, false)).status, 200);
+  const updated = await change(433, true);
+  assert.equal(updated.status, 200);
+  assert.deepEqual((await updated.json()).enabledChannelIds, [412, 433]);
+});

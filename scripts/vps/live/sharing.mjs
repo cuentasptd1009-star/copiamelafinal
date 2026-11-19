@@ -12,12 +12,7 @@ export function sameSecret(a, b) {
 export function createChannelLookup() {
   let pool; let opening;
   const cache = new Map(); const pending = new Map();
-  return {
-    async get(id) {
-      const cached = cache.get(id);
-      if (cached?.expires > Date.now()) return cached.channel;
-      if (pending.has(id)) return pending.get(id);
-      const request = (async () => {
+  async function openPool() {
       if (!opening) opening = (async () => {
         const env = await readFile(process.env.LIVE_DB_ENV || '/opt/copiamelafinal/artifacts/api-server/.env', 'utf8');
         const match = /^(?:export )?DATABASE_URL=(.+)$/m.exec(env);
@@ -27,8 +22,18 @@ export function createChannelLookup() {
         const { Pool } = require(process.env.LIVE_PG_MODULE || '/opt/copiamelafinal/lib/db/node_modules/pg');
         pool = new Pool({ connectionString, max: 2, connectionTimeoutMillis: 8000, idleTimeoutMillis: 20000 });
         return pool;
-      })();
-      await opening;
+      })().catch(error => { opening = undefined; throw error; });
+      return opening;
+  }
+  const iptvCache = new Map();
+  const iptvPending = new Map();
+  return {
+    async get(id) {
+      const cached = cache.get(id);
+      if (cached?.expires > Date.now()) return cached.channel;
+      if (pending.has(id)) return pending.get(id);
+      const request = (async () => {
+      await openPool();
       const result = await pool.query('SELECT id, stream_url AS "streamUrl" FROM channels WHERE id=$1', [id]);
       const channel = result.rows[0] || null;
       if (cache.size >= 100) cache.delete(cache.keys().next().value);
@@ -37,6 +42,28 @@ export function createChannelLookup() {
       })();
       pending.set(id, request);
       try { return await request; } finally { pending.delete(id); }
+    },
+    async getForIptv(key, id) {
+      let entry = iptvCache.get(key);
+      if (!entry || entry.expires < Date.now()) {
+        let request = iptvPending.get(key);
+        if (!request) {
+          request = (async () => {
+            const db = await openPool();
+            const result = await db.query(
+              'SELECT c.id, c.stream_url AS "streamUrl" FROM iptv_users u JOIN channels c ON c.id = ANY(u.channel_ids) WHERE u.playlist_key = $1 AND u.enabled',
+              [key],
+            );
+            const current = { channels: new Map(result.rows.map(row => [row.id, row])), expires: Date.now() + 3000 };
+            if (iptvCache.size >= 256) iptvCache.delete(iptvCache.keys().next().value);
+            iptvCache.set(key, current);
+            return current;
+          })().finally(() => iptvPending.delete(key));
+          iptvPending.set(key, request);
+        }
+        entry = await request;
+      }
+      return entry.channels.get(id);
     },
     async close() { if (pool) await pool.end(); },
   };

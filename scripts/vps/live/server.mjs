@@ -102,6 +102,7 @@ export function createLiveServer(options = {}) {
     directory: process.env.LIVE_DIRECTORY || '/var/cache/supertv-live',
     allowed: new Set((process.env.LIVE_CHANNEL_IDS || '').split(',').map(Number).filter(id => Number.isSafeInteger(id) && id > 0)),
     originalOnly: process.env.LIVE_ORIGINAL_ONLY === '1',
+    keepWarm: process.env.LIVE_KEEP_WARM === '1',
     maxChannels: Math.max(1, Number(process.env.LIVE_MAX_CHANNELS) || 1),
     stateFile: process.env.LIVE_CONFIG_FILE || null,
     publicBase: process.env.LIVE_PUBLIC_BASE || 'https://167-233-103-143.sslip.io',
@@ -109,7 +110,8 @@ export function createLiveServer(options = {}) {
     warmupMs: Number(process.env.LIVE_WARMUP_MS) || 45000,
     ...options,
   };
-  const maxSelectedChannels = config.originalOnly ? 6 : 5;
+  const storedSelectionLimit = config.originalOnly ? 6 : 5;
+  const maxSelectedChannels = config.keepWarm ? Math.min(5, config.maxChannels) : storedSelectionLimit;
   config.maxChannels = Math.min(maxSelectedChannels, config.maxChannels);
   const jobs = new Map();
   const authorizations = new Map();
@@ -119,12 +121,13 @@ export function createLiveServer(options = {}) {
   let emissionKeys = {}; let relaySecret = randomBytes(32).toString('base64url');
   const database = createChannelLookup();
   const lookupChannel = config.lookupChannel || (id => database.get(id));
+  const lookupIptvChannel = config.lookupIptvChannel || ((key, id) => database.getForIptv(key, id));
   const relay = createOriginRelay({ getSecret: () => relaySecret, allowPrivate: !!config.allowPrivateOrigins });
   const ready = (async () => {
     if (!config.stateFile) return;
     try {
       const data = JSON.parse(await readFile(config.stateFile, 'utf8'));
-      if (!Array.isArray(data.enabledChannelIds) || data.enabledChannelIds.length > maxSelectedChannels || !data.enabledChannelIds.every(id => Number.isSafeInteger(id) && id > 0)) throw new Error('Invalid live configuration');
+      if (!Array.isArray(data.enabledChannelIds) || data.enabledChannelIds.length > storedSelectionLimit || !data.enabledChannelIds.every(id => Number.isSafeInteger(id) && id > 0)) throw new Error('Invalid live configuration');
       config.allowed = new Set(data.enabledChannelIds);
       emissionKeys = data.emissionKeys || {};
       if (typeof emissionKeys !== 'object' || Array.isArray(emissionKeys) || !Object.entries(emissionKeys).every(([id,key]) => /^[1-9]\d*$/.test(id) && typeof key === 'string' && key.length >= 32 && key.length <= 128)) throw new Error('Invalid emission key configuration');
@@ -166,11 +169,14 @@ export function createLiveServer(options = {}) {
     const update = updates.then(async () => {
       const next = new Set([...config.allowed].filter(value => channels.has(value)));
       if (enabled) next.add(id); else next.delete(id);
-      if (next.size > maxSelectedChannels) throw Object.assign(new Error(`Puedes activar hasta ${maxSelectedChannels} canales. Desactiva uno antes de añadir otro.`), { status: 409 });
+      if (enabled && next.size > maxSelectedChannels) throw Object.assign(new Error(`Puedes activar hasta ${maxSelectedChannels} canales. Desactiva uno antes de añadir otro.`), { status: 409 });
       await persist(next, emissionKeys);
       config.allowed = next;
       for (const job of [...jobs.values()]) if (!next.has(job.id)) stop(job, 'disabled');
-      if (enabled) start(channels.get(id));
+      if (enabled) {
+        cooldown.delete(id);
+        start(channels.get(id));
+      }
       return summary();
     });
     updates = update.catch(() => {});
@@ -230,7 +236,7 @@ export function createLiveServer(options = {}) {
     if (job.stopping) return;
     job.stopping = true;
     jobs.delete(job.id);
-    if (reason !== 'idle' && reason !== 'shutdown' && reason !== 'disabled') cooldown.set(job.id, Date.now() + 180000);
+    if (reason !== 'idle' && reason !== 'shutdown' && reason !== 'disabled') cooldown.set(job.id, Date.now() + (config.keepWarm ? 5000 : 180000));
     job.input?.close();
     job.child?.kill('SIGTERM');
     const force = setTimeout(() => job.child?.kill('SIGKILL'), 5000); force.unref();
@@ -344,6 +350,30 @@ export function createLiveServer(options = {}) {
     finally { pruning = false; }
   }, 30000); cacheCleaner.unref();
 
+  let warming = false;
+  let closing = false;
+  async function warmSelectedChannels() {
+    if (!config.keepWarm || warming || closing) return;
+    warming = true;
+    try {
+      await ready;
+      await Promise.all([...config.allowed].map(async id => {
+        if (jobs.has(id) || (cooldown.get(id) || 0) > Date.now()) return;
+        try {
+          const channel = await lookupChannel(id);
+          if (channel && !closing && config.allowed.has(id)) start(channel);
+        } catch (error) {
+          console.error(JSON.stringify({ event: 'live-channel-lookup-failed', channel: id, detail: cleanError(error.message) }));
+        }
+      }));
+    } catch {
+      // Startup reports an invalid persisted configuration through ready.
+    } finally {
+      warming = false;
+    }
+  }
+  void warmSelectedChannels();
+
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const [token, entry] of authorizations) if (entry.expires < now) authorizations.delete(token);
@@ -353,10 +383,11 @@ export function createLiveServer(options = {}) {
         job.observing = true;
         readFile(path.join(job.directory, 'original', 'index.m3u8'), 'utf8').then(text => observePublishedMedia(job, text)).catch(() => {}).finally(() => { job.observing = false; });
       }
-      if (job.ready && now - job.lastSeen > config.idleMs) stop(job, 'idle');
+      if (!config.keepWarm && job.ready && now - job.lastSeen > config.idleMs) stop(job, 'idle');
       else if (now - job.lastProgress > 35000) stop(job, 'source-stalled');
       // A temporary origin slowdown must not destroy the URLs existing viewers are using.
     }
+    void warmSelectedChannels();
   }, 2000); sweep.unref();
 
   const server = http.createServer(async (req, res) => {
@@ -413,8 +444,13 @@ export function createLiveServer(options = {}) {
     } };
     try {
       if (externalKey) {
-        if (!sameSecret(externalKey, emissionKeys[id])) throw Object.assign(new Error('Unauthorized'), { status: 401 });
-        channel = await lookupChannel(id);
+        if (/^iptv_[A-Za-z0-9_-]{43}$/.test(externalKey)) {
+          channel = await lookupIptvChannel(externalKey, id);
+          if (!channel) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+        } else {
+          if (!sameSecret(externalKey, emissionKeys[id])) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+          channel = await lookupChannel(id);
+        }
       } else channel = (await authorize(token)).get(id);
       if (!channel) { res.writeHead(404); res.end(); return; }
       if (match[2] === 'relay') {
@@ -467,6 +503,7 @@ export function createLiveServer(options = {}) {
   server.requestTimeout = 60000;
   server.headersTimeout = 65000;
   return { server, jobs, ready, async close() {
+    closing = true;
     clearInterval(sweep); clearInterval(cacheCleaner);
     for (const job of [...jobs.values()]) stop(job, 'shutdown');
     await database.close();

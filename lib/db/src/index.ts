@@ -33,6 +33,14 @@ export async function runMigrations(): Promise<void> {
   } catch (_err: unknown) {
     // Schema may already be applied via drizzle-kit push — ignore duplicate errors
   }
+  await pool.query(`CREATE TABLE IF NOT EXISTS iptv_users (
+    id serial PRIMARY KEY,
+    username text NOT NULL UNIQUE,
+    password_hash text NOT NULL,
+    playlist_key text NOT NULL UNIQUE,
+    channel_ids integer[] NOT NULL,
+    enabled boolean NOT NULL DEFAULT true
+  )`);
 }
 
 export * from "./schema";

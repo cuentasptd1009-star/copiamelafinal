@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { apiBase } from '@/lib/api';
+import { IptvAdmin } from './iptv-admin';
 import {
   useGetMe, getGetMeQueryKey, useAdminLogin,
   useGetAdminStats, getGetAdminStatsQueryKey,
@@ -159,15 +160,16 @@ function AdminDashboard() {
       </div>
       <Tabs defaultValue="codes" className="w-full">
         <TabsList className="bg-card border border-border w-full justify-start overflow-x-auto flex-nowrap">
-          {['activity', 'codes', 'channels', 'movies', 'series', 'subadmins', 'packages', 'avatars', 'settings'].map((v, i) => (
+          {['activity', 'codes', 'iptv', 'channels', 'movies', 'series', 'subadmins', 'packages', 'avatars', 'settings'].map((v, i) => (
             <TabsTrigger key={v} value={v} className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs sm:text-sm whitespace-nowrap">
-              {['Actividad', 'Códigos', 'Canales', 'Películas', 'Series', 'Subadmins', 'Paquetes', 'Avatares', 'Configuración'][i]}
+              {['Actividad', 'Códigos', 'IPTV', 'Canales', 'Películas', 'Series', 'Subadmins', 'Paquetes', 'Avatares', 'Configuración'][i]}
             </TabsTrigger>
           ))}
         </TabsList>
         <div className="mt-4 sm:mt-6 bg-card border border-border rounded-lg p-3 sm:p-6">
           <TabsContent value="activity"><ActivityPanel stats={stats} lastRefreshed={lastRefreshed} onRefresh={handleRefresh} /></TabsContent>
           <TabsContent value="codes"><CodesManager /></TabsContent>
+          <TabsContent value="iptv"><IptvAdmin /></TabsContent>
           <TabsContent value="channels"><ChannelsManager /></TabsContent>
           <TabsContent value="movies"><MoviesManager /></TabsContent>
           <TabsContent value="series"><SeriesManager /></TabsContent>
