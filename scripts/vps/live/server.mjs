@@ -17,7 +17,7 @@ const ENCODED_PROFILES = [
   { name: '720p', width: 1280, height: 720, bitrate: '1600k', maxrate: '1900k', bandwidth: 2500000 },
 ];
 
-export async function probeSource(source) {
+export async function probeSource(source, { originalOnly = false } = {}) {
   const buffered = Buffer.isBuffer(source);
   const args = ['-v', 'error'];
   if (buffered) args.push('-f', 'mpegts');
@@ -31,10 +31,10 @@ export async function probeSource(source) {
   const streams = JSON.parse(data).streams || [];
   const video = streams.find(s => s.codec_type === 'video');
   const audio = streams.find(s => s.codec_type === 'audio');
-  if (!video || video.codec_name !== 'h264' || (audio && audio.codec_name !== 'aac')) throw new Error('The source codec cannot be copied into the adaptive HLS ladder.');
+  if (!video || video.codec_name !== 'h264' || (!originalOnly && audio && audio.codec_name !== 'aac')) throw new Error('The source codec cannot be copied into HLS.');
   const rate = video.r_frame_rate.split('/').map(Number);
   const fps = rate[0] / (rate[1] || 1);
-  if (video.height > 1080 || fps > 31 || !Number.isFinite(fps)) throw new Error('The source exceeds the processing profile of this VPS.');
+  if (video.height > 1080 || fps > (originalOnly ? 61 : 31) || !Number.isFinite(fps)) throw new Error('The source exceeds the processing profile of this VPS.');
   let codecs;
   if (video.extradata) {
     const hex = video.extradata.split('\n').filter(l => l.includes(':')).map(l => l.split(':')[1].trim().split('  ')[0].replace(/ /g, '')).join('');
@@ -253,7 +253,7 @@ export function createLiveServer(options = {}) {
       let sample;
       try { job.input = await createHlsInput(channel.streamUrl, { userAgent: ORIGIN_USER_AGENT }); sample = await job.input.peek(); }
       catch (error) { job.input?.close(); job.input = null; job.ingestFallback = cleanError(error.message); }
-      job.profile = await probeSource(sample || channel.streamUrl); sample = null;
+      job.profile = await probeSource(sample || channel.streamUrl, { originalOnly: config.originalOnly }); sample = null;
       job.renditions = renditionsFor(job.profile).filter(r => !config.originalOnly || r.name === 'original');
       await Promise.all(job.renditions.map(r => mkdir(path.join(job.directory, r.name), { recursive: true, mode: 0o700 })));
       if (job.stopping) throw new Error('Stopped');
