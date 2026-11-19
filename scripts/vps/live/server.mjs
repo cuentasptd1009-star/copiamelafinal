@@ -17,7 +17,7 @@ const ENCODED_PROFILES = [
   { name: '720p', width: 1280, height: 720, bitrate: '1600k', maxrate: '1900k', bandwidth: 2500000 },
 ];
 
-export async function probeSource(source) {
+export async function probeSource(source, { originalOnly = false } = {}) {
   const buffered = Buffer.isBuffer(source);
   const args = ['-v', 'error'];
   if (buffered) args.push('-f', 'mpegts');
@@ -31,10 +31,10 @@ export async function probeSource(source) {
   const streams = JSON.parse(data).streams || [];
   const video = streams.find(s => s.codec_type === 'video');
   const audio = streams.find(s => s.codec_type === 'audio');
-  if (!video || video.codec_name !== 'h264' || (audio && audio.codec_name !== 'aac')) throw new Error('The source codec cannot be copied into the adaptive HLS ladder.');
+  if (!video || video.codec_name !== 'h264' || (!originalOnly && audio && audio.codec_name !== 'aac')) throw new Error('The source codec cannot be copied into HLS.');
   const rate = video.r_frame_rate.split('/').map(Number);
   const fps = rate[0] / (rate[1] || 1);
-  if (video.height > 1080 || fps > 31 || !Number.isFinite(fps)) throw new Error('The source exceeds the processing profile of this VPS.');
+  if (video.height > 1080 || fps > (originalOnly ? 61 : 31) || !Number.isFinite(fps)) throw new Error('The source exceeds the processing profile of this VPS.');
   let codecs;
   if (video.extradata) {
     const hex = video.extradata.split('\n').filter(l => l.includes(':')).map(l => l.split(':')[1].trim().split('  ')[0].replace(/ /g, '')).join('');
@@ -101,13 +101,16 @@ export function createLiveServer(options = {}) {
     apiBase: process.env.LIVE_API_BASE || 'http://127.0.0.1:4000',
     directory: process.env.LIVE_DIRECTORY || '/var/cache/supertv-live',
     allowed: new Set((process.env.LIVE_CHANNEL_IDS || '').split(',').map(Number).filter(id => Number.isSafeInteger(id) && id > 0)),
-    maxChannels: Math.max(1, Math.min(5, Number(process.env.LIVE_MAX_CHANNELS) || 1)),
+    originalOnly: process.env.LIVE_ORIGINAL_ONLY === '1',
+    maxChannels: Math.max(1, Number(process.env.LIVE_MAX_CHANNELS) || 1),
     stateFile: process.env.LIVE_CONFIG_FILE || null,
     publicBase: process.env.LIVE_PUBLIC_BASE || 'https://167-233-103-143.sslip.io',
     idleMs: Number(process.env.LIVE_IDLE_MS) || 120000,
     warmupMs: Number(process.env.LIVE_WARMUP_MS) || 45000,
     ...options,
   };
+  const maxSelectedChannels = config.originalOnly ? 6 : 5;
+  config.maxChannels = Math.min(maxSelectedChannels, config.maxChannels);
   const jobs = new Map();
   const authorizations = new Map();
   const authorizationRequests = new Map();
@@ -121,7 +124,7 @@ export function createLiveServer(options = {}) {
     if (!config.stateFile) return;
     try {
       const data = JSON.parse(await readFile(config.stateFile, 'utf8'));
-      if (!Array.isArray(data.enabledChannelIds) || data.enabledChannelIds.length > 5 || !data.enabledChannelIds.every(id => Number.isSafeInteger(id) && id > 0)) throw new Error('Invalid live configuration');
+      if (!Array.isArray(data.enabledChannelIds) || data.enabledChannelIds.length > maxSelectedChannels || !data.enabledChannelIds.every(id => Number.isSafeInteger(id) && id > 0)) throw new Error('Invalid live configuration');
       config.allowed = new Set(data.enabledChannelIds);
       emissionKeys = data.emissionKeys || {};
       if (typeof emissionKeys !== 'object' || Array.isArray(emissionKeys) || !Object.entries(emissionKeys).every(([id,key]) => /^[1-9]\d*$/.test(id) && typeof key === 'string' && key.length >= 32 && key.length <= 128)) throw new Error('Invalid emission key configuration');
@@ -129,7 +132,7 @@ export function createLiveServer(options = {}) {
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
   })();
   let updates = Promise.resolve();
-  const summary = () => ({ enabledChannelIds: [...config.allowed], maxSelectedChannels: 5,
+  const summary = () => ({ enabledChannelIds: [...config.allowed], maxSelectedChannels, originalOnly: config.originalOnly,
     maxConcurrentChannels: config.maxChannels, delaySeconds: DELAY_SECONDS, serverBufferSeconds: SERVER_RESERVE_SECONDS, clientBufferSeconds: CLIENT_RESERVE_SECONDS,
     externalChannelIds: Object.keys(emissionKeys).map(Number),
     authorizationTiming: { ...authorizationTiming },
@@ -163,7 +166,7 @@ export function createLiveServer(options = {}) {
     const update = updates.then(async () => {
       const next = new Set([...config.allowed].filter(value => channels.has(value)));
       if (enabled) next.add(id); else next.delete(id);
-      if (next.size > 5) throw Object.assign(new Error('Puedes activar hasta 5 canales. Desactiva uno antes de añadir otro.'), { status: 409 });
+      if (next.size > maxSelectedChannels) throw Object.assign(new Error(`Puedes activar hasta ${maxSelectedChannels} canales. Desactiva uno antes de añadir otro.`), { status: 409 });
       await persist(next, emissionKeys);
       config.allowed = next;
       for (const job of [...jobs.values()]) if (!next.has(job.id)) stop(job, 'disabled');
@@ -250,8 +253,8 @@ export function createLiveServer(options = {}) {
       let sample;
       try { job.input = await createHlsInput(channel.streamUrl, { userAgent: ORIGIN_USER_AGENT }); sample = await job.input.peek(); }
       catch (error) { job.input?.close(); job.input = null; job.ingestFallback = cleanError(error.message); }
-      job.profile = await probeSource(sample || channel.streamUrl); sample = null;
-      job.renditions = renditionsFor(job.profile);
+      job.profile = await probeSource(sample || channel.streamUrl, { originalOnly: config.originalOnly }); sample = null;
+      job.renditions = renditionsFor(job.profile).filter(r => !config.originalOnly || r.name === 'original');
       await Promise.all(job.renditions.map(r => mkdir(path.join(job.directory, r.name), { recursive: true, mode: 0o700 })));
       if (job.stopping) throw new Error('Stopped');
       const child = spawn('python3', [fileURLToPath(new URL('./ffmpeg-child.py', import.meta.url)), String(process.pid), process.env.FFMPEG_PATH || 'ffmpeg', ...ffmpegArguments(job.input ? 'pipe:0' : channel.streamUrl, job.directory, job.profile, job.renditions)],

@@ -1386,6 +1386,7 @@ const ADMIN_LIVE_KEY = ['admin', 'live-config'] as const;
 interface LiveAdminConfig {
   enabledChannelIds: number[];
   maxSelectedChannels: number;
+  originalOnly?: boolean;
   maxConcurrentChannels: number;
   externalChannelIds?: number[];
   activeChannels: { id: number; ready: boolean }[];
@@ -1420,7 +1421,7 @@ function ChannelsManager() {
     onSuccess: (data, input) => {
       qc.setQueryData(ADMIN_LIVE_KEY, data);
       forgetLiveCapability(input.id, getToken('admin') || '');
-      toast({ title: input.enabled ? 'Calidades y búfer activados' : 'Retransmisión original restaurada', description: 'La elección quedó guardada para este canal.' });
+      toast({ title: input.enabled ? (data.originalOnly ? 'Protección contra pausas activada' : 'Calidades y búfer activados') : 'Retransmisión original restaurada', description: 'La elección quedó guardada para este canal.' });
     },
     onError: (error: Error) => toast({ title: 'No se pudo cambiar la señal', description: error.message, variant: 'destructive' }),
   });
@@ -1455,13 +1456,13 @@ function ChannelsManager() {
     return (
       <div className="min-w-[240px] space-y-2">
         <div className="flex items-center gap-2"><Switch
-          aria-label={`Mejorar transmisión de ${ch.name.trim()}`}
+          aria-label={`${liveConfig.data?.originalOnly ? 'Protección contra pausas' : 'Mejorar transmisión'} de ${ch.name.trim()}`}
           checked={enabled}
           disabled={!liveConfig.data || liveMutation.isPending || sortMode || (!enabled && (!supported || atLimit))}
           onCheckedChange={value => liveMutation.mutate({ id: ch.id, enabled: value })}
         />
         <span className="text-[11px] text-muted-foreground">
-          {liveMutation.isPending && liveMutation.variables.id === ch.id ? 'Guardando…' : !liveConfig.data ? 'Sin conexión' : !enabled ? 'Original' : active?.ready ? 'Calidad Auto · 10 s' : active ? 'Preparando…' : capacityBusy ? 'En espera de capacidad' : 'Activado · 10 s'}
+          {liveMutation.isPending && liveMutation.variables.id === ch.id ? 'Guardando…' : !liveConfig.data ? 'Sin conexión' : !enabled ? 'Original' : active?.ready ? (liveConfig.data.originalOnly ? 'Original protegida · 10 s' : 'Calidad Auto · 10 s') : active ? 'Preparando…' : capacityBusy ? 'En espera de capacidad' : 'Activado · 10 s'}
         </span></div>
         {!sortMode && <div className="flex gap-1 flex-wrap">
           <Button size="sm" variant="outline" className="h-7 text-[11px]" aria-label={`Copiar enlace externo de ${ch.name.trim()}`} disabled={!liveConfig.data || !supported || linkBusy !== null} onClick={() => handleExternalLink(ch, 'copy')}>Copiar enlace</Button>
@@ -1879,7 +1880,7 @@ function ChannelsManager() {
       </div>
 
       <div className="rounded-lg border border-border bg-card px-4 py-3 space-y-1">
-        <p className="text-sm font-medium">Calidades y búfer de 10 segundos · {liveConfig.data?.enabledChannelIds.length || 0}/5 canales</p>
+        <p className="text-sm font-medium">{liveConfig.data?.originalOnly ? 'Protección contra pausas · 10 s' : 'Calidades y búfer de 10 segundos'} · {liveConfig.data?.enabledChannelIds.length || 0}/{liveConfig.data?.maxSelectedChannels || 5} canales</p>
         <p className="text-xs text-muted-foreground">Activa el interruptor en los canales que quieras procesar. Los demás mantienen su retransmisión original. Se aplica al abrir el canal.</p>
         {liveConfig.data && <p className="text-xs text-muted-foreground">Procesamiento disponible: {liveConfig.data.maxConcurrentChannels} canal{liveConfig.data.maxConcurrentChannels !== 1 ? 'es' : ''} a la vez. Activos: {liveConfig.data.activeChannels.length}.</p>}
         {liveConfig.isError && <Button size="sm" variant="outline" onClick={() => liveConfig.refetch()}>Reintentar conexión al servicio</Button>}
