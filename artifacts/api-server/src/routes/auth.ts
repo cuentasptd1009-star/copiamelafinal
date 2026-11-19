@@ -57,46 +57,32 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   }
   const { code, deviceId } = parsed.data;
 
-  const codes = await db
-    .select()
-    .from(accessCodesTable)
-    .where(eq(accessCodesTable.code, code))
-    .limit(1);
+  const result = await db.transaction(async tx => {
+    const [accessCode] = await tx.select().from(accessCodesTable)
+      .where(eq(accessCodesTable.code, code)).limit(1).for("update");
 
-  if (!codes[0]) {
-    res.status(401).json({ error: "El código no existe", code: "NOT_FOUND" });
-    return;
-  }
+    if (!accessCode) return { failure: "NOT_FOUND", message: "El código no existe" } as const;
+    if (!accessCode.isActive) return { failure: "INACTIVE", message: "El código está inactivo" } as const;
+    if (accessCode.expiresAt && accessCode.expiresAt <= new Date()) {
+      return { failure: "EXPIRED", message: "El código ha expirado" } as const;
+    }
 
-  const accessCode = codes[0];
-  if (!accessCode.isActive) {
-    res.status(401).json({ error: "El código está inactivo", code: "INACTIVE" });
-    return;
-  }
-
-  if (accessCode.expiresAt && accessCode.expiresAt <= new Date()) {
-    res.status(401).json({ error: "El código ha expirado", code: "EXPIRED" });
-    return;
-  }
-
-  const existingSessions = await db
-    .select()
-    .from(sessionsTable)
-    .where(eq(sessionsTable.codeId, accessCode.id));
-
-  let sessionConflict = false;
-  if (existingSessions.length > 0) {
-    sessionConflict = true;
-    await db.delete(sessionsTable).where(eq(sessionsTable.codeId, accessCode.id));
-  }
-
-  const token = generateToken();
-  await db.insert(sessionsTable).values({
-    codeId: accessCode.id,
-    deviceId,
-    token,
-    lastActiveAt: new Date(),
+    const existingSessions = await tx.delete(sessionsTable)
+      .where(eq(sessionsTable.codeId, accessCode.id))
+      .returning({ token: sessionsTable.token });
+    const token = generateToken();
+    await tx.insert(sessionsTable).values({
+      codeId: accessCode.id, deviceId, token, lastActiveAt: new Date(),
+    });
+    return { accessCode, existingSessions, token };
   });
+  if ("failure" in result) {
+    res.status(401).json({ error: result.message, code: result.failure });
+    return;
+  }
+  const { accessCode, existingSessions, token } = result;
+  for (const previous of existingSessions) invalidateSessionCache(previous.token);
+  const sessionConflict = existingSessions.length > 0;
 
   res.json({
     token,
@@ -173,6 +159,7 @@ router.post("/auth/logout", async (req: Request, res: Response) => {
 });
 
 router.get("/auth/me", async (req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "private, no-store");
   const token = extractToken(req);
   if (!token) {
     res.status(401).json({ error: "Unauthorized" });

@@ -318,12 +318,7 @@ export default function MovieDetail() {
       .finally(() => setArchiveLoading(null));
   }, []);
 
-  const daysLeft = (() => {
-    if (!session?.expiresAt) return null;
-    const diff = new Date(session.expiresAt).getTime() - Date.now();
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
-  })();
-  const isExpired = session?.type === 'user' && daysLeft !== null && daysLeft <= 0;
+  const isExpired = session?.type === 'user' && session.isExpired === true;
   const [showExpiredOverlay, setShowExpiredOverlay] = useState(true);
   const [isFav, setIsFav] = useState(() => getFavorites().includes(id));
   const savedProgress = movie ? getProgress(id) : null;

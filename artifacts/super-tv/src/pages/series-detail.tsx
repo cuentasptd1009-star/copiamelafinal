@@ -97,11 +97,7 @@ export default function SeriesDetail() {
     }
   }, [sdZone, epIdx]);
 
-  const daysLeft = (() => {
-    if (!session?.expiresAt) return null;
-    return Math.ceil((new Date(session.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  })();
-  const isExpired = session?.type === 'user' && daysLeft !== null && daysLeft <= 0;
+  const isExpired = session?.type === 'user' && session.isExpired === true;
 
   const seriesProgress = useMemo(() => series ? getSeriesProgress(id) : null, [series, id]);
   const currentSeason = series?.seasons?.[activeSeason];

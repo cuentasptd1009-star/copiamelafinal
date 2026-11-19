@@ -879,6 +879,8 @@ components:
         expiresAt:
           type: string
           nullable: true
+        isExpired:
+          type: boolean
         balance:
           type: number
           nullable: true

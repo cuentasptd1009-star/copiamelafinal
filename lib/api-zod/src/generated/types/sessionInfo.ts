@@ -18,6 +18,7 @@ export interface SessionInfo {
   subadminId?: number | null;
   username?: string | null;
   expiresAt?: string | null;
+  isExpired?: boolean;
   balance?: number | null;
   providerWhatsapp?: string | null;
 }

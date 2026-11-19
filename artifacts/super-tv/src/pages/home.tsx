@@ -545,14 +545,19 @@ export default function Home() {
   const [externalHistory, setExternalHistory] = useState<ExternalItem[]>(() => getExternalHistory());
   const [searchHistory, setSearchHistory] = useState<string[]>(() => getSearchHistory());
 
-  const { data: session, isError: sessionError, isLoading: sessionLoading } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: 2, retryDelay: 1000, refetchInterval: 30000 } });
+  const { data: session, error: sessionError, isLoading: sessionLoading } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: 2, retryDelay: 1000, refetchInterval: 30000 } });
   const { data: avatars = [] } = useListAvatars({ query: { queryKey: getListAvatarsQueryKey() } });
   const updateProfileMutation = useUpdateProfile();
   const { data: allChannels = [], isLoading: channelsLoading } = useListChannels(undefined, { query: { queryKey: getListChannelsQueryKey() } });
   const { data: movies = [], isLoading: moviesLoading } = useListMovies(undefined, { query: { queryKey: getListMoviesQueryKey() } });
   const { data: categoriesFromApi = [] } = useListChannelCategories({ query: { queryKey: getListChannelCategoriesQueryKey() } });
 
-  useEffect(() => { if (sessionError) { clearTokens(); setLocation('/'); } }, [sessionError, setLocation]);
+  const sessionToken = getToken('user');
+  useEffect(() => {
+    if ((sessionError as { status?: number } | null)?.status !== 401 || getToken('user') !== sessionToken) return;
+    localStorage.removeItem('supertv_token');
+    setLocation('/');
+  }, [sessionError, sessionToken, setLocation]);
 
   useEffect(() => {
     try { window.focus(); } catch {}
@@ -652,9 +657,9 @@ export default function Home() {
 
   const daysLeft = (() => {
     if (!session?.expiresAt) return null;
-    return Math.ceil((new Date(session.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return Math.max(1, Math.ceil((new Date(session.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
   })();
-  const isExpired = !sessionLoading && session?.type === 'user' && daysLeft !== null && daysLeft <= 0;
+  const isExpired = !sessionLoading && session?.type === 'user' && session.isExpired === true;
   const [showExpiredOverlay, setShowExpiredOverlay] = useState(true);
   useEffect(() => { if (isExpired) setShowExpiredOverlay(true); }, [isExpired]);
 
@@ -1014,7 +1019,7 @@ export default function Home() {
     setShowProfile(false);
   };
 
-  const showExpiryBanner = session?.type === 'user' && daysLeft !== null && daysLeft > 0 && daysLeft <= 3 && !expiryBannerDismissed;
+  const showExpiryBanner = session?.type === 'user' && daysLeft !== null && !isExpired && daysLeft <= 3 && !expiryBannerDismissed;
   const dismissExpiryBanner = () => { try { localStorage.setItem('supertv_expiry_dismissed', new Date().toDateString()); } catch {} setExpiryBannerDismissed(true); };
 
   const refreshUserData = useCallback(() => { setFavorites(getFavorites()); setAllProgress(getAllProgress()); setWatchHistory(getHistory()); setExternalFavs(getExternalFavorites()); setExternalHistory(getExternalHistory()); }, []);
@@ -1632,9 +1637,9 @@ export default function Home() {
 
         {/* Expiry warning */}
         {showExpiryBanner && (
-          <div className={`flex items-center gap-3 px-5 py-2.5 text-sm font-medium ${daysLeft !== null && daysLeft <= 0 ? 'bg-red-600/20 text-red-300' : daysLeft === 1 ? 'bg-primary/15 text-primary/80' : 'bg-primary/10 text-primary/70'}`}>
+          <div className={`flex items-center gap-3 px-5 py-2.5 text-sm font-medium ${isExpired ? 'bg-red-600/20 text-red-300' : daysLeft === 1 ? 'bg-primary/15 text-primary/80' : 'bg-primary/10 text-primary/70'}`}>
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span className="flex-1 text-xs">{daysLeft !== null && daysLeft <= 0 ? 'Tu código venció. Contacta a tu proveedor para activarlo.' : daysLeft === 1 ? 'Tu acceso vence hoy. Renueva con tu proveedor.' : `Tu acceso vence en ${daysLeft} días.`}</span>
+            <span className="flex-1 text-xs">{isExpired ? 'Tu código venció. Contacta a tu proveedor para activarlo.' : daysLeft === 1 ? 'Tu acceso vence hoy. Renueva con tu proveedor.' : `Tu acceso vence en ${daysLeft} días.`}</span>
             <button onClick={dismissExpiryBanner} className="flex-shrink-0 opacity-60 hover:opacity-100"><X className="w-4 h-4" /></button>
           </div>
         )}

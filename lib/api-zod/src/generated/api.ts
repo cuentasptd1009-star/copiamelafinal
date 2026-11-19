@@ -83,6 +83,7 @@ export const GetMeResponse = zod.object({
   "username": zod.string().nullish(),
   "expiresAt": zod.string().nullish(),
   "balance": zod.number().nullish(),
+  "isExpired": zod.boolean().optional(),
   "providerWhatsapp": zod.string().nullish()
 })
 

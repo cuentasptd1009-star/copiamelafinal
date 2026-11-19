@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { normalizeKey } from '@/lib/tv-remote';
-import { useLoginWithCode } from '@workspace/api-client-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { getGetMeQueryKey, useLoginWithCode } from '@workspace/api-client-react';
 import { apiBase } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { setToken, getToken } from '@/lib/auth';
+import { useToast } from '@/hooks/use-toast';
 import { usePwaInstall } from '@/hooks/use-pwa-install';
 import { useTvKeyboard } from '@/hooks/use-tv-keyboard';
 import { isLegacyBrowser } from '@/lib/browser-compat';
@@ -44,6 +46,9 @@ function isTvDevice(): boolean {
 }
 
 export default function Login() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const submitting = useRef(false);
   const legacy = isLegacyBrowser();
   const [code, setCode] = useState(() => {
     try { return localStorage.getItem('supertv_remembered_code') || ''; } catch { return ''; }
@@ -53,7 +58,6 @@ export default function Login() {
   });
   const [showCode, setShowCode] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [conflictMessage, setConflictMessage] = useState('');
   const [showHint, setShowHint] = useState(false);
   const [showShortcutHint, setShowShortcutHint] = useState(false);
   const [showApkMsg, setShowApkMsg] = useState('');
@@ -75,6 +79,14 @@ export default function Login() {
   const shortcutRef = useRef<HTMLButtonElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedAtRef = useRef(Date.now());
+
+  const finishLogin = useCallback(async (token: string) => {
+    const key = { queryKey: getGetMeQueryKey() };
+    await queryClient.cancelQueries(key);
+    queryClient.removeQueries(key);
+    setToken(token, 'user');
+    setLocation('/home', { replace: true });
+  }, [queryClient, setLocation]);
 
   const openQrModal = useCallback(async () => {
     setQrActivated(false);
@@ -103,8 +115,7 @@ export default function Login() {
           clearInterval(pollRef.current!); pollRef.current = null;
           setQrActivated(true);
           setTimeout(() => {
-            setToken(data.token, 'user');
-            setLocation('/home');
+            void finishLogin(data.token).catch(() => setErrorMsg('No se pudo guardar la sesión en este dispositivo.'));
           }, 1500);
         } else if (data.status === 'expired') {
           clearInterval(pollRef.current!); pollRef.current = null;
@@ -113,7 +124,7 @@ export default function Login() {
       } catch {}
     }, 2000);
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
-  }, [showQrModal, qrActivated, deviceId, openQrModal, setLocation]);
+  }, [showQrModal, qrActivated, deviceId, openQrModal, finishLogin]);
 
   const loginMutation = useLoginWithCode();
 
@@ -154,41 +165,35 @@ export default function Login() {
     }
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    // codeRef.current is always up-to-date even when called from a stale onConfirm closure
-    const codeToSubmit = (codeRef.current || code).trim();
-    if (!codeToSubmit) return;
+    const codeToSubmit = codeRef.current.trim();
+    if (!codeToSubmit || submitting.current) return;
+
+    submitting.current = true;
     setErrorMsg('');
-    loginMutation.mutate(
-      { data: { code: codeToSubmit, deviceId: navigator.userAgent } },
-      {
-        onSuccess: (data) => {
-          try { localStorage.setItem('supertv_remembered_code', codeToSubmit); } catch {}
-          setIsRemembered(true);
-          if (data.sessionConflict) {
-            setConflictMessage('Tu código solamente se puede usar en un solo dispositivo.');
-            setTimeout(() => { setToken(data.token, 'user'); setLocation('/home'); }, 1500);
-          } else {
-            setToken(data.token, 'user');
-            setLocation('/home');
-          }
-        },
-        onError: (err: unknown) => {
-          const e = err as Record<string, string> | undefined;
-          const serverMsg: string = e?.error || e?.message || '';
-          if (serverMsg.toLowerCase().includes('no existe') || serverMsg.toLowerCase().includes('not found')) {
-            setErrorMsg('Este código no existe');
-          } else if (serverMsg.toLowerCase().includes('inactivo') || serverMsg.toLowerCase().includes('inactive')) {
-            setErrorMsg('Este código está desactivado');
-          } else if (serverMsg.toLowerCase().includes('expirado') || serverMsg.toLowerCase().includes('expired')) {
-            setErrorMsg('Este código ha expirado');
-          } else {
-            setErrorMsg('Código inválido. Verifica e intenta de nuevo.');
-          }
-        },
+    try {
+      const data = await loginMutation.mutateAsync({ data: { code: codeToSubmit, deviceId } });
+      try { localStorage.setItem('supertv_remembered_code', codeToSubmit); } catch {}
+      setIsRemembered(true);
+      try {
+        await finishLogin(data.token);
+        if (data.sessionConflict) toast({ title: "La sesión anterior se cerró", description: "El código admite un dispositivo a la vez." });
+      } catch {
+        setErrorMsg('No se pudo guardar la sesión en este dispositivo.');
       }
-    );
+    } catch (error) {
+      const failure = error as { status?: number; data?: { code?: string } };
+      const messages: Record<string, string> = {
+        NOT_FOUND: 'Este código no existe',
+        INACTIVE: 'Este código está desactivado',
+        EXPIRED: 'Este código ha expirado',
+      };
+      setErrorMsg(messages[failure.data?.code ?? ''] ??
+        (failure.status === 400 ? 'Verifica el código e intenta de nuevo.' : 'No se pudo iniciar sesión. Intenta de nuevo.'));
+    } finally {
+      submitting.current = false;
+    }
   };
 
   const handleInstall = async () => {
@@ -297,7 +302,7 @@ export default function Login() {
                 placeholder="PON TU CODIGO DE ACCESO"
                 className={`w-full text-center text-2xl py-6 pr-14 tracking-[0.4em] font-bold bg-card border-border focus-visible:ring-primary focus-visible:border-primary text-foreground placeholder:text-muted-foreground placeholder:text-base placeholder:tracking-normal rounded-lg uppercase ${focusZone === 'input' ? focusRing : ''}`}
                 autoFocus
-                disabled={loginMutation.isPending || !!conflictMessage}
+                disabled={loginMutation.isPending}
                 maxLength={5}
                 autoComplete="off"
                 autoCorrect="off"
@@ -344,7 +349,7 @@ export default function Login() {
             type="submit"
             onFocus={() => setFocusZone('submit')}
             className={`w-full py-6 text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-all ${focusZone === 'submit' ? focusRing : ''}`}
-            disabled={loginMutation.isPending || !!conflictMessage || code.length === 0}
+            disabled={loginMutation.isPending || code.length === 0}
           >
             {loginMutation.isPending ? 'Conectando...' : 'Entrar'}
           </Button>
@@ -363,11 +368,7 @@ export default function Login() {
             </Button>
           )}
 
-          {conflictMessage && (
-            <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-center animate-in fade-in slide-in-from-bottom-2">
-              <p className="text-yellow-400 font-medium text-sm">{conflictMessage}</p>
-            </div>
-          )}
+
         </form>
 
         <div className="flex flex-col items-center gap-3 w-full">
