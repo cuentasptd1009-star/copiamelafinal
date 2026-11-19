@@ -197,3 +197,42 @@ test('only admins can persist up to five selected channels; disabling preserves 
   const disabledStatus = await (await fetch(`${base}/api/live/channels/1/status?token=viewer-one`)).json();
   assert.equal(disabledStatus.enabled, false);
 });
+
+test('protection has independent admin state, five slots, and excludes WIN', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'supertv-protection-test-'));
+  const stateFile = path.join(root, 'channels.json');
+  await writeFile(stateFile, JSON.stringify({ enabledChannelIds: [1, 2, 3, 4, 5] }));
+  const backend = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/channels') {
+      res.end(JSON.stringify([1, 2, 3, 4, 5, 6, 412].map(id => ({ id, streamUrl: 'https://example.invalid/live.m3u8' }))));
+    } else if (req.url === '/api/auth/me') {
+      res.end(JSON.stringify(req.headers.authorization === 'Bearer admin-test' ? { type: 'admin', role: 'admin' } : { type: 'user' }));
+    } else res.writeHead(404).end();
+  });
+  const apiBase = await listen(backend);
+  const protection = createLiveServer({ apiBase, protectionOnly: true, stateFile, directory: root, maxChannels: 5 });
+  const base = await listen(protection.server);
+  t.after(async () => {
+    await protection.close();
+    await new Promise(resolve => { backend.closeAllConnections(); backend.close(resolve); });
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const headers = { Authorization: 'Bearer admin-test', 'Content-Type': 'application/json' };
+  const request = (id, enabled) => fetch(base + '/api/protection/admin/channels/' + id, {
+    method: 'PUT', headers, body: JSON.stringify({ enabled }),
+  });
+  const configUrl = base + '/api/protection/admin/config';
+  assert.equal((await fetch(configUrl, { headers: { Authorization: 'Bearer viewer-test' } })).status, 403);
+  assert.equal((await fetch(base + '/api/live/admin/config', { headers })).status, 404);
+  const config = await (await fetch(configUrl, { headers })).json();
+  assert.equal(config.protectionOnly, true);
+  assert.equal(config.delaySeconds, 10);
+  assert.deepEqual(config.enabledChannelIds, [1, 2, 3, 4, 5]);
+  assert.equal((await request(6, true)).status, 409);
+  assert.equal((await request(412, true)).status, 409);
+  assert.equal((await fetch(base + '/api/protection/channels/412/status', { headers })).status, 404);
+  assert.equal((await request(5, false)).status, 200);
+  assert.deepEqual(JSON.parse(await readFile(stateFile, 'utf8')).enabledChannelIds, [1, 2, 3, 4]);
+});

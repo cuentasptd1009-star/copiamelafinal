@@ -1383,6 +1383,7 @@ function parseTextWithLogos(content: string, prefix: string): string {
 
 const ADMIN_CHANNELS_KEY = ['admin', 'channels'] as const;
 const ADMIN_LIVE_KEY = ['admin', 'live-config'] as const;
+const ADMIN_PROTECTION_KEY = ['admin', 'protection-config'] as const;
 interface LiveAdminConfig {
   enabledChannelIds: number[];
   maxSelectedChannels: number;
@@ -1390,8 +1391,8 @@ interface LiveAdminConfig {
   externalChannelIds?: number[];
   activeChannels: { id: number; ready: boolean }[];
 }
-async function liveAdminRequest(path: string, enabled?: boolean): Promise<LiveAdminConfig> {
-  const response = await fetch(`${apiBase}/api/live/admin/${path}`, {
+async function liveAdminRequest(path: string, enabled?: boolean, service = 'live'): Promise<LiveAdminConfig> {
+  const response = await fetch(`${apiBase}/api/${service}/admin/${path}`, {
     method: enabled === undefined ? 'GET' : 'PUT',
     headers: { Authorization: `Bearer ${getToken('admin') || ''}`, ...(enabled === undefined ? {} : { 'Content-Type': 'application/json' }) },
     ...(enabled === undefined ? {} : { body: JSON.stringify({ enabled }) }),
@@ -1424,6 +1425,22 @@ function ChannelsManager() {
     },
     onError: (error: Error) => toast({ title: 'No se pudo cambiar la señal', description: error.message, variant: 'destructive' }),
   });
+  const protection = useQuery({
+    queryKey: ADMIN_PROTECTION_KEY,
+    queryFn: () => liveAdminRequest('config', undefined, 'protection'),
+    retry: 1,
+    refetchInterval: 8000,
+  });
+  const protectionMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      liveAdminRequest(`channels/${id}`, enabled, 'protection'),
+    onMutate: () => qc.cancelQueries({ queryKey: ADMIN_PROTECTION_KEY }),
+    onSuccess: (data, { id }) => {
+      qc.setQueryData(ADMIN_PROTECTION_KEY, data);
+      forgetLiveCapability(id, getToken('admin') || '');
+    },
+    onError: (error: Error) => toast({ title: 'No se pudo cambiar la protección', description: error.message, variant: 'destructive' }),
+  });
   const [linkBusy, setLinkBusy] = useState<number | null>(null);
   const [externalLink, setExternalLink] = useState<{ name: string; url: string } | null>(null);
   const handleExternalLink = async (ch: { id: number; name: string }, action: 'copy' | 'renew' | 'revoke') => {
@@ -1451,6 +1468,9 @@ function ChannelsManager() {
     const active = liveConfig.data?.activeChannels.find(item => item.id === ch.id);
     const atLimit = (liveConfig.data?.enabledChannelIds.length || 0) >= (liveConfig.data?.maxSelectedChannels || 5);
     const supported = ch.streamFormat === 'hls' || /\.m3u8(?:[?#]|$)|\/hls\//i.test(ch.streamUrl);
+    const protectedChannel = !!protection.data?.enabledChannelIds.includes(ch.id);
+    const protectedJob = protection.data?.activeChannels.find(item => item.id === ch.id);
+    const protectionFull = !!protection.data && protection.data.enabledChannelIds.length >= protection.data.maxSelectedChannels;
     const capacityBusy = !!liveConfig.data && liveConfig.data.activeChannels.length >= liveConfig.data.maxConcurrentChannels;
     return (
       <div className="min-w-[240px] space-y-2">
@@ -1463,6 +1483,15 @@ function ChannelsManager() {
         <span className="text-[11px] text-muted-foreground">
           {liveMutation.isPending && liveMutation.variables.id === ch.id ? 'Guardando…' : !liveConfig.data ? 'Sin conexión' : !enabled ? 'Original' : active?.ready ? 'Calidad Auto · 10 s' : active ? 'Preparando…' : capacityBusy ? 'En espera de capacidad' : 'Activado · 10 s'}
         </span></div>
+        {ch.id !== 412 && <label className="flex items-center gap-2 text-[11px]">
+          <Switch
+            checked={protectedChannel}
+            disabled={!protection.data || protectionMutation.isPending || sortMode || (!protectedChannel && (!supported || protectionFull))}
+            onCheckedChange={value => protectionMutation.mutate({ id: ch.id, enabled: value })}
+          />
+          Protección contra pausas
+          {protectedChannel && <span className="text-muted-foreground">{protectedJob?.ready ? 'Lista · 10 s' : 'Activada · preparando señal'}</span>}
+        </label>}
         {!sortMode && <div className="flex gap-1 flex-wrap">
           <Button size="sm" variant="outline" className="h-7 text-[11px]" aria-label={`Copiar enlace externo de ${ch.name.trim()}`} disabled={!liveConfig.data || !supported || linkBusy !== null} onClick={() => handleExternalLink(ch, 'copy')}>Copiar enlace</Button>
           {liveConfig.data?.externalChannelIds?.includes(ch.id) && <>
@@ -1882,6 +1911,8 @@ function ChannelsManager() {
         <p className="text-sm font-medium">Calidades y búfer de 10 segundos · {liveConfig.data?.enabledChannelIds.length || 0}/5 canales</p>
         <p className="text-xs text-muted-foreground">Activa el interruptor en los canales que quieras procesar. Los demás mantienen su retransmisión original. Se aplica al abrir el canal.</p>
         {liveConfig.data && <p className="text-xs text-muted-foreground">Procesamiento disponible: {liveConfig.data.maxConcurrentChannels} canal{liveConfig.data.maxConcurrentChannels !== 1 ? 'es' : ''} a la vez. Activos: {liveConfig.data.activeChannels.length}.</p>}
+        {protection.data && <p className="text-xs text-muted-foreground">Protección contra pausas · {protection.data.enabledChannelIds.length}/{protection.data.maxSelectedChannels} canales</p>}
+        {protection.isError && <p className="text-xs text-muted-foreground">Servicio de protección sin conexión.</p>}
         {liveConfig.isError && <Button size="sm" variant="outline" onClick={() => liveConfig.refetch()}>Reintentar conexión al servicio</Button>}
       </div>
 

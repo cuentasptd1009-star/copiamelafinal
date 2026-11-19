@@ -83,10 +83,11 @@ export function attachLiveQualityRecovery(hls: AdaptiveHls, video: HTMLVideoElem
 }
 
 export function liveMasterUrl(channelId: string | number, token: string): string {
-  return `${apiBase}/api/live/channels/${channelId}/master.m3u8?token=${encodeURIComponent(token)}`;
+  const service = capabilities.get(`${channelId}:${token}`)?.protection ? 'protection' : 'live';
+  return `${apiBase}/api/${service}/channels/${channelId}/master.m3u8?token=${encodeURIComponent(token)}`;
 }
 
-const capabilities = new Map<string, { expires: number; enabled?: boolean; request?: Promise<boolean> }>();
+const capabilities = new Map<string, { expires: number; enabled?: boolean; protection?: boolean; request?: Promise<boolean> }>();
 export function forgetLiveCapability(channelId: string | number, token: string) {
   capabilities.delete(`${channelId}:${token}`);
 }
@@ -95,13 +96,22 @@ export async function isLiveChannelEnabled(channelId: string | number, token: st
   const cached = capabilities.get(key);
   if (cached?.request) return cached.request;
   if (cached && cached.expires > Date.now()) return !!cached.enabled;
-  const entry: { expires: number; enabled?: boolean; request?: Promise<boolean> } = { expires: Date.now() + 10000 };
+  const entry: { expires: number; enabled?: boolean; protection?: boolean; request?: Promise<boolean> } = { expires: Date.now() + 10000 };
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeout = setTimeout(() => controller?.abort(), 5000);
-  entry.request = fetch(`${apiBase}/api/live/channels/${channelId}/status?token=${encodeURIComponent(token)}`, {
+  const enabledBy = (service: string) => fetch(`${apiBase}/api/${service}/channels/${channelId}/status?token=${encodeURIComponent(token)}`, {
     signal: controller?.signal,
-  }).then(async response => response.ok && !!(await response.json()).enabled).catch(() => false)
-    .then(enabled => { entry.enabled = enabled; entry.request = undefined; clearTimeout(timeout); return enabled; });
+  }).then(async response => response.ok && !!(await response.json()).enabled).catch(() => false);
+  entry.request = Promise.all([
+    enabledBy('live'),
+    String(channelId) === '412' ? Promise.resolve(false) : enabledBy('protection'),
+  ]).then(([live, protection]) => {
+    entry.protection = protection && !live;
+    entry.enabled = live || protection;
+    entry.request = undefined;
+    clearTimeout(timeout);
+    return entry.enabled;
+  });
   if (capabilities.size >= 256) capabilities.delete(capabilities.keys().next().value!);
   capabilities.set(key, entry);
   return entry.request;
