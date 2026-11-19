@@ -789,16 +789,22 @@ function CodesManager() {
     setBulkDeletingExpired(true);
     try {
       const token = getToken('admin');
-      await fetch(`${BASE_URL}/api/codes/bulk`, {
+      const response = await fetch(`${BASE_URL}/api/codes/bulk`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ ids: Array.from(selectedExpiredIds) }),
       });
-      qc.invalidateQueries({ queryKey: getListCodesQueryKey() });
-      toast({ title: `🗑️ ${selectedExpiredIds.size} código${selectedExpiredIds.size !== 1 ? 's eliminados' : ' eliminado'}` });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.success !== true || !Number.isSafeInteger(result.deleted)) {
+        throw new Error(result?.error || `El servidor rechazó el borrado (HTTP ${response.status}).`);
+      }
+      await qc.invalidateQueries({ queryKey: getListCodesQueryKey() });
+      toast({ title: result.deleted === 0 ? 'No había códigos expirados para eliminar' :
+        `${result.deleted} código${result.deleted === 1 ? ' eliminado' : 's eliminados'}` });
       setSelectedExpiredIds(new Set());
-    } catch {
-      toast({ variant: 'destructive', title: 'Error al eliminar códigos' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error al eliminar códigos',
+        description: error instanceof Error ? error.message : undefined });
     } finally {
       setBulkDeletingExpired(false);
     }

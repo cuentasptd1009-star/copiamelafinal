@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { accessCodesTable, sessionsTable, packagesTable } from "@workspace/db";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray, lt } from "drizzle-orm";
 import {
   CreateCodeBody,
   UpdateCodeBody,
@@ -11,6 +11,7 @@ import {
   AdjustCodeTimeParams,
 } from "@workspace/api-zod";
 import { requireAdminAuth, generateCode } from "../lib/auth.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -147,18 +148,22 @@ router.delete("/codes/bulk", requireAdminAuth, async (req: Request, res: Respons
     res.status(403).json({ error: "Subadmins cannot bulk delete codes" });
     return;
   }
-  const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) {
-    res.status(400).json({ error: "ids must be a non-empty array" });
+  const ids: unknown = req.body?.ids;
+  if (!Array.isArray(ids) || ids.length === 0 ||
+      ids.some(id => !Number.isSafeInteger(id) || id < 1 || id > 2147483647)) {
+    res.status(400).json({ error: "Selecciona códigos expirados válidos." });
     return;
   }
-  const numIds = ids.map(Number).filter((n) => !isNaN(n));
-  if (numIds.length === 0) {
-    res.status(400).json({ error: "No valid ids provided" });
-    return;
+
+  try {
+    const deleted = await db.delete(accessCodesTable)
+      .where(and(inArray(accessCodesTable.id, [...new Set<number>(ids)]), lt(accessCodesTable.expiresAt, new Date())))
+      .returning({ id: accessCodesTable.id });
+    res.json({ success: true, deleted: deleted.length });
+  } catch (error) {
+    logger.error({ err: error }, "Failed to bulk delete expired access codes");
+    res.status(500).json({ error: "No se pudieron eliminar los códigos expirados." });
   }
-  await db.delete(accessCodesTable).where(inArray(accessCodesTable.id, numIds));
-  res.json({ success: true, deleted: numIds.length });
 });
 
 router.delete("/codes/:id", requireAdminAuth, async (req: Request, res: Response) => {
