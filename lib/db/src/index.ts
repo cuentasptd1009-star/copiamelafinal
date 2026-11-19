@@ -41,6 +41,9 @@ export async function runMigrations(): Promise<void> {
     channel_ids integer[] NOT NULL,
     enabled boolean NOT NULL DEFAULT true
   )`);
+  await pool.query(`ALTER TABLE iptv_users
+    ADD COLUMN IF NOT EXISTS expires_at timestamptz,
+    ADD COLUMN IF NOT EXISTS device_leases jsonb NOT NULL DEFAULT '{}'::jsonb`);
 }
 
 export * from "./schema";

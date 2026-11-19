@@ -3,7 +3,8 @@ import { spawn, execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile, rename, rm, stat, readdir } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { isIP } from 'node:net';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { playoutPlaylist, TOTAL_RESERVE_SECONDS, SERVER_RESERVE_SECONDS, CLIENT_RESERVE_SECONDS } from './playout.mjs';
 import { createHlsInput } from './ingest.mjs';
@@ -121,7 +122,7 @@ export function createLiveServer(options = {}) {
   let emissionKeys = {}; let relaySecret = randomBytes(32).toString('base64url');
   const database = createChannelLookup();
   const lookupChannel = config.lookupChannel || (id => database.get(id));
-  const lookupIptvChannel = config.lookupIptvChannel || ((key, id) => database.getForIptv(key, id));
+  const lookupIptvChannel = config.lookupIptvChannel || ((key, id, device) => database.getForIptv(key, id, device));
   const relay = createOriginRelay({ getSecret: () => relaySecret, allowPrivate: !!config.allowPrivateOrigins });
   const ready = (async () => {
     if (!config.stateFile) return;
@@ -445,7 +446,12 @@ export function createLiveServer(options = {}) {
     try {
       if (externalKey) {
         if (/^iptv_[A-Za-z0-9_-]{43}$/.test(externalKey)) {
-          channel = await lookupIptvChannel(externalKey, id);
+          const remote = req.socket.remoteAddress || '';
+          const realIp = req.headers['x-real-ip'];
+          const localProxy = ['::1', '127.0.0.1', '::ffff:127.0.0.1'].includes(remote);
+          const address = localProxy && typeof realIp === 'string' && isIP(realIp) ? realIp : remote;
+          const device = createHash('sha256').update(address).update('\0').update(req.headers['user-agent'] || '').digest('hex');
+          channel = await lookupIptvChannel(externalKey, id, device);
           if (!channel) throw Object.assign(new Error('Unauthorized'), { status: 401 });
         } else {
           if (!sameSecret(externalKey, emissionKeys[id])) throw Object.assign(new Error('Unauthorized'), { status: 401 });

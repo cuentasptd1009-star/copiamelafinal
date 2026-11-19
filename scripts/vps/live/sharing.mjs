@@ -43,23 +43,44 @@ export function createChannelLookup() {
       pending.set(id, request);
       try { return await request; } finally { pending.delete(id); }
     },
-    async getForIptv(key, id) {
-      let entry = iptvCache.get(key);
+    async getForIptv(key, id, device) {
+      const cacheKey = key + ':' + device;
+      let entry = iptvCache.get(cacheKey);
       if (!entry || entry.expires < Date.now()) {
-        let request = iptvPending.get(key);
+        let request = iptvPending.get(cacheKey);
         if (!request) {
           request = (async () => {
             const db = await openPool();
             const result = await db.query(
-              'SELECT c.id, c.stream_url AS "streamUrl" FROM iptv_users u JOIN channels c ON c.id = ANY(u.channel_ids) WHERE u.playlist_key = $1 AND u.enabled',
-              [key],
+              `WITH admitted AS (
+                UPDATE iptv_users AS u
+                SET device_leases = COALESCE((
+                  SELECT jsonb_object_agg(d.key, d.value)
+                  FROM jsonb_each_text(u.device_leases) d
+                  WHERE d.value::bigint > EXTRACT(EPOCH FROM now())
+                ), '{}'::jsonb) || jsonb_build_object($2::text, (EXTRACT(EPOCH FROM now()) + 30)::bigint)
+                WHERE u.playlist_key = $1 AND u.enabled
+                  AND (u.expires_at IS NULL OR u.expires_at > now())
+                  AND $3::integer = ANY(u.channel_ids)
+                  AND (COALESCE((u.device_leases ->> $2::text)::bigint, 0) > EXTRACT(EPOCH FROM now())
+                    OR (SELECT count(*) FROM jsonb_each_text(u.device_leases) d
+                        WHERE d.value::bigint > EXTRACT(EPOCH FROM now())) < 5)
+                RETURNING u.channel_ids, u.expires_at
+              )
+              SELECT c.id, c.stream_url AS "streamUrl", a.expires_at AS "expiresAt"
+              FROM admitted a JOIN channels c ON c.id = ANY(a.channel_ids)`,
+              [key, device, id],
             );
-            const current = { channels: new Map(result.rows.map(row => [row.id, row])), expires: Date.now() + 3000 };
-            if (iptvCache.size >= 256) iptvCache.delete(iptvCache.keys().next().value);
-            iptvCache.set(key, current);
+            const expiresAt = result.rows[0]?.expiresAt?.getTime() ?? Infinity;
+            const current = { channels: new Map(result.rows.map(row => [row.id, row])),
+              expires: Math.min(Date.now() + 3000, expiresAt) };
+            if (current.channels.size) {
+              if (iptvCache.size >= 256) iptvCache.delete(iptvCache.keys().next().value);
+              iptvCache.set(cacheKey, current);
+            }
             return current;
-          })().finally(() => iptvPending.delete(key));
-          iptvPending.set(key, request);
+          })().finally(() => iptvPending.delete(cacheKey));
+          iptvPending.set(cacheKey, request);
         }
         entry = await request;
       }
