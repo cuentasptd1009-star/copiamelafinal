@@ -478,7 +478,7 @@ router.get("/channels/:id/hls-proxy", async (req: Request, res: Response) => {
 
   channelTracker.record(channel.id, channel.name);
 
-  if (channel.streamUrl.startsWith("http://")) {
+  if (/^https?:\/\//i.test(channel.streamUrl)) {
     // Cache source text and add credentials separately for each viewer.
     const manifestCacheKey = `hls:source:${channel.id}:${channel.streamUrl}`;
     const cachedManifest = cache.get<{ text: string; base: string }>(manifestCacheKey);
@@ -560,8 +560,8 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
       const isManifest = contentType.includes("mpegurl") || looksLikeManifest;
       if (isManifest) {
         const text = await upstream.text();
-        const baseUrl = new URL(segUrl);
-        const token = (req.query.token as string) || "";
+        const baseUrl = new URL(upstream.url || segUrl);
+        const token = auth.token!;
         const rewritten = rewriteM3u8(text, baseUrl, String(parsed.data.id), token);
         res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
         res.setHeader("Cache-Control", "no-cache");
@@ -587,8 +587,8 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
       });
       if (!upstream.ok) { res.status(502).send("Segment unavailable"); return; }
       const text = await upstream.text();
-      const baseUrl = new URL(segUrl);
-      const token = (req.query.token as string) || "";
+      const baseUrl = new URL(upstream.url || segUrl);
+      const token = auth.token!;
       const rewritten = rewriteM3u8(text, baseUrl, String(parsed.data.id), token);
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       res.setHeader("Cache-Control", "no-cache");
