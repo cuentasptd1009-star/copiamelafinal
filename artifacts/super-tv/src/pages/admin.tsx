@@ -1538,7 +1538,7 @@ function ChannelsManager() {
 
   const handleCatOrderDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (saving || !over || active.id === over.id) return;
     const oldIndex = catOrder.indexOf(active.id as string);
     const newIndex = catOrder.indexOf(over.id as string);
     setCatOrder(prev => arrayMove(prev, oldIndex, newIndex));
@@ -1548,7 +1548,7 @@ function ChannelsManager() {
     setCatOrderSaving(true);
     try {
       const token = getToken('admin');
-      await fetch(`${BASE_URL}/api/channels/category-order`, {
+      const response = await fetch(`${BASE_URL}/api/channels/category-order`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ order: catOrder }),
@@ -1557,6 +1557,7 @@ function ChannelsManager() {
       toast({ title: 'Orden de categorías guardado' });
       setCatOrderMode(false);
     } catch {
+      setSortedIds(sortedIds);
       toast({ variant: 'destructive', title: 'Error al guardar el orden' });
     } finally {
       setCatOrderSaving(false);
@@ -1575,9 +1576,10 @@ function ChannelsManager() {
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (saving || !over || active.id === over.id) return;
     const oldIndex = sortedIds.indexOf(active.id as number);
     const newIndex = sortedIds.indexOf(over.id as number);
+    if (oldIndex < 0 || newIndex < 0) return;
     const newOrder = arrayMove(sortedIds, oldIndex, newIndex);
     setSortedIds(newOrder);
     setSaving(true);
@@ -1588,7 +1590,8 @@ function ChannelsManager() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: newOrder }),
       });
-      qc.invalidateQueries({ queryKey: ADMIN_CHANNELS_KEY });
+      if (!response.ok) throw new Error("No se pudo guardar el orden");
+      await qc.invalidateQueries({ queryKey: ADMIN_CHANNELS_KEY });
     } catch {
       toast({ variant: 'destructive', title: 'Error al guardar orden' });
     } finally {

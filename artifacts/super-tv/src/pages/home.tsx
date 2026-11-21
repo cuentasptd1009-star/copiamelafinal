@@ -548,7 +548,7 @@ export default function Home() {
   const { data: session, isError: sessionError, isLoading: sessionLoading } = useGetMe({ query: { queryKey: getGetMeQueryKey(), retry: 2, retryDelay: 1000, refetchInterval: 30000 } });
   const { data: avatars = [] } = useListAvatars({ query: { queryKey: getListAvatarsQueryKey() } });
   const updateProfileMutation = useUpdateProfile();
-  const { data: allChannels = [], isLoading: channelsLoading } = useListChannels(undefined, { query: { queryKey: getListChannelsQueryKey() } });
+  const { data: allChannels = [], isLoading: channelsLoading } = useListChannels(undefined, { query: { queryKey: getListChannelsQueryKey(), staleTime: 0, refetchOnWindowFocus: true } });
   const { data: movies = [], isLoading: moviesLoading } = useListMovies(undefined, { query: { queryKey: getListMoviesQueryKey() } });
   const { data: categoriesFromApi = [] } = useListChannelCategories({ query: { queryKey: getListChannelCategoriesQueryKey() } });
 
@@ -634,7 +634,7 @@ export default function Home() {
 
   const channelsByCategory = useMemo(() => {
     const map = new Map<string, typeof allChannels>();
-    allChannels.forEach(ch => { const cat = ch.category || 'Sin categoría'; if (!map.has(cat)) map.set(cat, []); map.get(cat)!.push(ch); });
+    allChannels.forEach(ch => { const cat = ch.category?.trim() || 'Sin categoría'; if (!map.has(cat)) map.set(cat, []); map.get(cat)!.push(ch); });
     return map;
   }, [allChannels]);
 
@@ -834,7 +834,8 @@ export default function Home() {
       return [{ id: 'search', title: `Resultados: "${searchQuery}"`, items: results }];
     }
     const rows: Array<{ id: string; title: string; items: typeof allChannels }> = [];
-    const catOrder = categoriesFromApi.length > 0 ? categoriesFromApi : [...channelsByCategory.keys()].filter(c => c !== 'Sin categoría');
+    const catOrder = new Set([...categoriesFromApi.map(category => category.trim()), ...channelsByCategory.keys()]);
+    catOrder.delete('Sin categoría');
     for (const cat of catOrder) {
       const items = channelsByCategory.get(cat);
       if (items && items.length > 0) rows.push({ id: `ch-${cat}`, title: cat, items });
@@ -845,9 +846,15 @@ export default function Home() {
     return rows;
   }, [activeTab, allChannels, categoriesFromApi, channelsByCategory, searchQuery]);
 
-  const visibleChannels = useMemo(() => selectedChannelCategory
-    ? (channelRows.find(r => r.title === selectedChannelCategory)?.items ?? [])
-    : channelRows.flatMap(r => r.items), [channelRows, selectedChannelCategory]);
+  const visibleChannels = useMemo(() => {
+    if (activeTab !== 'channels') return [];
+    const query = searchQuery.trim().toLowerCase();
+    if (query) return allChannels.filter(channel => channel.name.toLowerCase().includes(query));
+    if (selectedChannelCategory && channelsByCategory.has(selectedChannelCategory)) {
+      return channelsByCategory.get(selectedChannelCategory) ?? [];
+    }
+    return allChannels;
+  }, [activeTab, allChannels, channelsByCategory, searchQuery, selectedChannelCategory]);
 
   const activeRows = useMemo(() => {
     if (activeTab === 'channels') {
