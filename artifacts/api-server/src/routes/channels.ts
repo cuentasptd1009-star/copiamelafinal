@@ -91,6 +91,41 @@ function segCacheSet(key: string, data: Buffer, contentType: string): void {
   segmentCache.set(key, { data, contentType, expiresAt: Date.now() + SEG_CACHE_TTL_MS });
 }
 
+const segmentDownloads = new Map<string, Promise<SegmentEntry>>();
+
+async function loadHttpSegment(url: string): Promise<SegmentEntry> {
+  const key = `seg:${url}`;
+  const cached = segCacheGet(key);
+  if (cached) return cached;
+  const pending = segmentDownloads.get(key);
+  if (pending) return pending;
+  const download = (async () => {
+    const upstream = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!upstream.ok) throw new Error("Segment unavailable");
+    const contentType = upstream.headers.get("content-type") || "video/MP2T";
+    const data = Buffer.from(await upstream.arrayBuffer());
+    segCacheSet(key, data, contentType);
+    return { data, contentType, expiresAt: Date.now() + SEG_CACHE_TTL_MS };
+  })().finally(() => segmentDownloads.delete(key));
+  segmentDownloads.set(key, download);
+  return download;
+}
+
+function prefetchEspnSegments(text: string, source: URL) {
+  const segments = text.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith("#"));
+  for (const line of segments.slice(-3)) {
+    if (segmentDownloads.size >= 4) break;
+    let url: URL;
+    try { url = new URL(line, source); } catch { continue; }
+    if (url.origin === source.origin && url.protocol === "http:" && /\.ts$/i.test(url.pathname) && isSafeRelayUrl(url.href)) {
+      void loadHttpSegment(url.href).catch(() => {});
+    }
+  }
+}
+
 // Cleanup stale entries every 60 s to avoid memory creep
 setInterval(() => {
   const now = Date.now();
@@ -444,15 +479,14 @@ router.get("/channels/:id/hls-proxy", async (req: Request, res: Response) => {
   channelTracker.record(channel.id, channel.name);
 
   if (channel.streamUrl.startsWith("http://")) {
-    // Cache the rewritten manifest for 3 s — all clients watching the same channel
-    // share a single origin fetch instead of hammering the source server.
-    const manifestCacheKey = `hls:manifest:${channel.id}`;
-    const cachedManifest = cache.get<string>(manifestCacheKey);
+    // Cache source text and add credentials separately for each viewer.
+    const manifestCacheKey = `hls:source:${channel.id}:${channel.streamUrl}`;
+    const cachedManifest = cache.get<{ text: string; base: string }>(manifestCacheKey);
     if (cachedManifest) {
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.send(cachedManifest);
+      res.send(rewriteM3u8(cachedManifest.text, new URL(cachedManifest.base), String(channel.id), auth.token!));
       return;
     }
 
@@ -464,10 +498,11 @@ router.get("/channels/:id/hls-proxy", async (req: Request, res: Response) => {
       });
       if (!streamUpstream.ok) { res.status(502).send("Upstream error"); return; }
       const manifestText = await streamUpstream.text();
-      const manifestBaseUrl = new URL(channel.streamUrl);
+      const manifestBaseUrl = new URL(streamUpstream.url || channel.streamUrl);
+      if (channel.id === 430) prefetchEspnSegments(manifestText, manifestBaseUrl);
       const rewritten = rewriteM3u8(manifestText, manifestBaseUrl, String(channel.id), auth.token!);
       // Store for 3 s — short enough to pick up playlist updates, long enough to deduplicate bursts
-      cache.set(manifestCacheKey, rewritten, 3_000);
+      cache.set(manifestCacheKey, { text: manifestText, base: manifestBaseUrl.href }, 3_000);
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Access-Control-Allow-Origin", "*");
@@ -562,7 +597,7 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
     } else {
       // HTTP segment: probe once per host whether HTTPS is available.
       const hostKey = `https_ok:${new URL(segUrl).hostname}`;
-      let httpsOk = cache.get<boolean>(hostKey);
+      let httpsOk = parsed.data.id === 430 ? false : cache.get<boolean>(hostKey);
       if (httpsOk === undefined) {
         const httpsUrl = segUrl.replace("http://", "https://");
         try {
@@ -585,30 +620,12 @@ router.get("/channels/:id/hls-relay", async (req: Request, res: Response) => {
       } else {
         // HTTP-only origin — must proxy. Use segment cache so N simultaneous clients
         // share a single origin fetch instead of triggering N independent downloads.
-        const segCacheKey = `seg:${segUrl}`;
-        const cached = segCacheGet(segCacheKey);
-        if (cached) {
-          res.setHeader("Content-Type", cached.contentType);
-          res.setHeader("Cache-Control", "no-cache");
-          res.setHeader("Access-Control-Allow-Origin", "*");
-          res.send(cached.data);
-          return;
-        }
-
         try {
-          const upstream = await fetch(segUrl, {
-            headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
-            signal: AbortSignal.timeout(15000),
-          });
-          if (!upstream.ok) { res.status(502).send("Segment unavailable"); return; }
-          const segBuf = await upstream.arrayBuffer();
-          const segCt = upstream.headers.get("content-type") || "video/MP2T";
-          const buf = Buffer.from(segBuf);
-          segCacheSet(segCacheKey, buf, segCt);
-          res.setHeader("Content-Type", segCt);
+          const segment = await loadHttpSegment(segUrl);
+          res.setHeader("Content-Type", segment.contentType);
           res.setHeader("Cache-Control", "no-cache");
           res.setHeader("Access-Control-Allow-Origin", "*");
-          res.send(buf);
+          res.send(segment.data);
         } catch {
           res.status(502).send("Failed to fetch segment");
         }
