@@ -11,7 +11,7 @@ export const apiBase = BASE;
 
 function getAuthHeader(): Record<string, string> {
   try {
-    const path = window.location.pathname;
+    const path = window.location.pathname.toLowerCase();
     const isAdmin = path.includes('/admin') || path.includes('/subadmin');
     if (isAdmin) {
       const adminToken = localStorage.getItem('supertv_admin_token');

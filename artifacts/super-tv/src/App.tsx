@@ -21,8 +21,17 @@ import { TvKeyboard } from "@/components/TvKeyboard";
 const AdminPanel = lazy(() => import("@/pages/admin"));
 const SubadminPanel = lazy(() => import("@/pages/subadmin"));
 
+const adminPath = window.location.pathname;
+if (/^\/admin\/?$/i.test(adminPath) && adminPath !== adminPath.toLowerCase()) {
+  window.history.replaceState(
+    window.history.state,
+    "",
+    adminPath.toLowerCase() + window.location.search + window.location.hash,
+  );
+}
+
 setAuthTokenGetter(() => {
-  const path = window.location.pathname;
+  const path = window.location.pathname.toLowerCase();
   if (path.includes('/admin') || path.includes('/subadmin')) {
     return getToken("admin") ?? getToken("subadmin") ?? null;
   }
