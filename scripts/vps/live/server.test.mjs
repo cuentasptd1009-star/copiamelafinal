@@ -18,7 +18,7 @@ test('bitrate metadata separates weighted average consumption from peak headroom
   assert.throws(() => segmentBandwidth([2], [100, 200]));
 });
 
-test('authenticated viewers share a bounded adaptive encoder with repaired timestamps, original video and private playlists', { timeout: 90000 }, async t => {
+test('authenticated viewers share a bounded adaptive encoder with repaired timestamps, original video and private playlists', { timeout: 120000 }, async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'supertv-live-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const fixture = path.join(root, 'input.m3u8');
@@ -140,9 +140,17 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
   assert.equal(live.jobs.size, 1);
   await new Promise(resolve => setTimeout(resolve, 6500));
   assert.equal(live.jobs.size, 0, 'encoder stops when viewers leave');
+  playbackManifestStarted = null;
   const retired = await fetch(base + variants[0], { redirect: 'manual' });
-  assert.equal(retired.status,302,'existing viewers can recover through the original playlist after retirement');
-  assert.match(retired.headers.get('location'), /hls-proxy/);
+  assert.equal(retired.status, 200, 'existing viewers retain their protected playlist during restart');
+  assert.equal(retired.headers.get('location'), null);
+  const retiredBody = await retired.text();
+  assert.doesNotMatch(retiredBody, /#EXT-X-ENDLIST/);
+  const newMaster = await fetch(base + '/api/live/channels/1/master.m3u8?token=viewer-one');
+  assert.equal(newMaster.headers.get('x-supertv-live'), 'transcoded');
+  const recovered = await (await fetch(base + variants[0])).text();
+  const sequence = body => Number(/#EXT-X-MEDIA-SEQUENCE:(\d+)/.exec(body)?.[1]);
+  assert.ok(sequence(recovered) > sequence(retiredBody), 'old playlist URL advances to the new generation');
   assert.equal((await fetch(firstSegmentUrl)).status,200,'already published segments survive the retirement grace period');
 
   // A populated HLS window is insufficient when the encoder cannot replenish it in real time.
@@ -155,8 +163,9 @@ test('authenticated viewers share a bounded adaptive encoder with repaired times
   }, 1);
   try {
     const response = await fetch(`${slowBase}/api/live/channels/1/master.m3u8?token=viewer-one`, { redirect: 'manual' });
-    assert.equal(response.status, 302, 'a half-speed encoder must use the original stream');
-    assert.match(response.headers.get('location'), /hls-proxy/);
+    assert.equal(response.status, 503, 'an unready protected stream does not fall back');
+    assert.equal(response.headers.get('location'), null);
+    assert.equal(response.headers.get('retry-after'), '3');
   } finally { clearInterval(guarded); }
 });
 

@@ -23,7 +23,7 @@ export async function probeSource(source, { originalOnly = false } = {}) {
   const args = ['-v', 'error'];
   if (buffered) args.push('-f', 'mpegts');
   else args.push('-rw_timeout', '12000000', '-user_agent', ORIGIN_USER_AGENT, '-live_start_index', '-1');
-  args.push('-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate,profile,level,bit_rate,extradata', '-show_data', '-of', 'json', buffered ? 'pipe:0' : source);
+  args.push('-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate,profile,level,bit_rate,extradata,sample_rate,channels', '-show_data', '-of', 'json', buffered ? 'pipe:0' : source);
   const data = await new Promise((resolve, reject) => {
     const child = execFile(process.env.FFPROBE_PATH || 'ffprobe', args, { timeout: 18000, maxBuffer: 512000 },
       (error, stdout) => error ? reject(error) : resolve(stdout));
@@ -45,7 +45,8 @@ export async function probeSource(source, { originalOnly = false } = {}) {
   const profile = /High/i.test(video.profile) ? 'high' : /Main/i.test(video.profile) ? 'main' : 'baseline';
   codecs ||= `avc1.${profile === 'high' ? '6400' : profile === 'main' ? '4d40' : '42c0'}${Number(video.level || 40).toString(16).padStart(2, '0')}`;
   return { width: video.width, height: video.height, fps, profile, level: Number(video.level || 40) / 10,
-    codecs, bandwidth: Math.ceil((Number(video.bit_rate) || video.width * video.height * fps * 0.1) * 1.3 + (Number(audio?.bit_rate) || 128000)) };
+    codecs, compatibleAac: audio?.codec_name === "aac" && audio.profile === "LC" && Number(audio.sample_rate) === 48000 && audio.channels === 2,
+    bandwidth: Math.ceil((Number(video.bit_rate) || video.width * video.height * fps * 0.1) * 1.3 + (Number(audio?.bit_rate) || 128000)) };
 }
 
 export function renditionsFor(profile) {
@@ -67,7 +68,11 @@ export function ffmpegArguments(source, directory, profile, renditions = renditi
   args.push('-fflags', '+discardcorrupt', '-i', source);
   if (filters) args.push('-filter_complex', filters);
   renditions.forEach((r, i) => {
-    if (r.name === 'original') args.push('-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2', '-af', 'aresample=async=1');
+    if (r.name === 'original') {
+      args.push('-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'copy');
+      if (profile.copyAudio) args.push('-c:a', 'copy');
+      else args.push('-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2', '-af', 'aresample=async=1');
+    }
     else {
       args.push('-map', `[out${i}]`, '-map', '0:a:0?', '-c:v', 'libx264', '-threads', '1',
         '-preset', 'ultrafast', '-tune', 'zerolatency', '-profile:v', profile.profile, '-level:v', String(profile.level),
@@ -78,7 +83,7 @@ export function ffmpegArguments(source, directory, profile, renditions = renditi
     }
     // Retain enough history when prefetched input briefly runs ahead of the
     // paced playout clock. A short raw window could expire all visible segments.
-    args.push('-output_ts_offset', '1', '-f', 'hls', '-hls_time', '2', '-hls_list_size', '30', '-hls_delete_threshold', '4',
+    args.push('-output_ts_offset', '1', '-f', 'hls', '-hls_time', '2', '-hls_start_number_source', 'epoch', '-hls_list_size', '30', '-hls_delete_threshold', '4',
       '-hls_segment_options', 'mpegts_copyts=1', '-hls_flags', 'delete_segments+independent_segments+program_date_time+temp_file',
       '-hls_segment_filename', path.join(directory, r.name, 'seg_%08d.ts'), path.join(directory, r.name, 'index.m3u8'));
   });
@@ -261,6 +266,8 @@ export function createLiveServer(options = {}) {
       try { job.input = await createHlsInput(channel.streamUrl, { userAgent: ORIGIN_USER_AGENT }); sample = await job.input.peek(); }
       catch (error) { job.input?.close(); job.input = null; job.ingestFallback = cleanError(error.message); }
       job.profile = await probeSource(sample || channel.streamUrl, { originalOnly: config.originalOnly }); sample = null;
+      // WIN can retain its compatible AAC packets and bypass the failing audio decoder.
+      job.profile.copyAudio = channel.id === 546 && job.profile.compatibleAac;
       job.renditions = renditionsFor(job.profile).filter(r => !config.originalOnly || r.name === 'original');
       await Promise.all(job.renditions.map(r => mkdir(path.join(job.directory, r.name), { recursive: true, mode: 0o700 })));
       if (job.stopping) throw new Error('Stopped');
@@ -443,6 +450,11 @@ export function createLiveServer(options = {}) {
       if (externalKey) await relay.send(res, channel.streamUrl, id, externalKey, req.method === 'HEAD');
       else { res.writeHead(302, { Location: `/api/channels/${id}/hls-proxy?token=${encodeURIComponent(token)}` }); res.end(); }
     } };
+    const reconnecting = () => {
+      if (res.destroyed) return;
+      res.writeHead(503, { 'Retry-After': '3', 'Cache-Control': 'no-store' });
+      res.end('Protected signal is reconnecting');
+    };
     try {
       if (externalKey) {
         if (/^iptv_[A-Za-z0-9_-]{43}$/.test(externalKey)) {
@@ -472,9 +484,13 @@ export function createLiveServer(options = {}) {
       if (match[2] === 'master.m3u8') {
         if (!config.allowed.has(id)) { await fallback(); return; }
         const job = start(channel);
-        if (!job) { await fallback(); return; }
+        if (!job) { reconnecting(); return; }
         job.lastSeen = Date.now();
-        try { await job.readiness; } catch { await fallback(); return; }
+        try { await job.readiness; } catch {
+          if (config.allowed.has(id)) reconnecting();
+          else await fallback();
+          return;
+        }
         if (res.destroyed) return;
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('X-SuperTV-Live', 'transcoded');
@@ -482,15 +498,36 @@ export function createLiveServer(options = {}) {
           `#EXT-X-STREAM-INF:BANDWIDTH=${r.bandwidth}${r.averageBandwidth ? `,AVERAGE-BANDWIDTH=${r.averageBandwidth}` : ''},RESOLUTION=${r.width}x${r.height},FRAME-RATE=${r.fps.toFixed(3)},CODECS="${r.codecs},mp4a.40.2",NAME="SuperTV ${r.name === 'original' ? 'Original ' + r.height + 'p' : r.name}"\n/api/live/channels/${id}/${job.generation}/${r.name}/index.m3u8?${credentialQuery}\n`).join(''));
         return;
       }
-      const job = jobs.get(id);
+      const isPlaylist = match[5] === 'index.m3u8';
+      if (isPlaylist && !config.allowed.has(id)) { await fallback(); return; }
+      const job = isPlaylist ? start(channel) : jobs.get(id);
       const active = job && job.generation === match[3] && job.ready;
-      if (!active && match[5] === 'index.m3u8') { await fallback(); return; }
-      if (active) job.lastSeen = Date.now();
-      const directory = active ? job.directory : path.join(config.directory, String(id), match[3]);
+      const current = isPlaylist && job?.ready && job.renditions.some(r => r.name === match[4]) ? job : null;
+      if (job && (active || isPlaylist)) job.lastSeen = Date.now();
+      // Keep previously issued variant URLs usable across encoder restarts.
+      const generation = current?.generation ?? match[3];
+      const directory = current?.directory ?? path.join(config.directory, String(id), generation);
       const file = path.join(directory, match[4], match[5]);
-      if (match[5] === 'index.m3u8') {
-        let text = playoutPlaylist(await readFile(file, 'utf8'));
-        const prefix = `/api/live/channels/${id}/${job.generation}/${match[4]}/`;
+      if (isPlaylist) {
+        const raw = await readFile(file, 'utf8').catch(error => {
+          if (error.code !== 'ENOENT') throw error;
+          return null;
+        });
+        if (!raw) { reconnecting(); return; }
+        const now = Date.now();
+        let text = playoutPlaylist(raw, now);
+        if (!text.includes('#EXTINF:')) {
+          const latest = [...raw.matchAll(/^seg_\d+\.ts$/gm)].at(-1)?.[0];
+          const published = latest && await stat(path.join(path.dirname(file), latest)).catch(() => null);
+          if (published) text = playoutPlaylist(raw, now, published.mtimeMs);
+        }
+        const prefix = `/api/live/channels/${id}/${generation}/${match[4]}/`;
+        const discontinuity = Math.floor(parseInt(generation.split('-')[0], 36) / 1000);
+        if (Number.isSafeInteger(discontinuity)) {
+          text = text.replace('#EXTM3U', `#EXTM3U\n#EXT-X-DISCONTINUITY-SEQUENCE:${discontinuity}`);
+        }
+        text = text.replace(/^#EXT-X-ENDLIST\r?\n?/gm, '');
+        res.setHeader('Cache-Control', 'no-store');
         text = text.replace('#EXTM3U', `#EXTM3U\n#EXT-X-START:TIME-OFFSET=-${CLIENT_RESERVE_SECONDS},PRECISE=YES`)
           .split('\n').map(line => /^seg_\d+\.ts$/.test(line.trim()) ? `${prefix}${line.trim()}?${credentialQuery}` : line).join('\n');
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl'); res.end(text);

@@ -17,3 +17,13 @@ test('a burst of cached segments becomes visible on the reserved playout clock',
  assert.ok(complete.includes('#EXT-X-ENDLIST'));
  assert.ok(complete.includes('#EXT-X-MEDIA-SEQUENCE:50'));
 });
+
+test('a playlist clock hours ahead still keeps the actual server reserve', () => {
+  const source = playlist().replace(/2026-01-01T00:/g, '2026-01-01T03:');
+  assert.doesNotMatch(playoutPlaylist(source, start + 8000), /^seg_/m);
+  const corrected = playoutPlaylist(source, start + 8000, start + 8000);
+  assert.equal((corrected.match(/^seg_/gm) || []).length, 2);
+  assert.match(corrected, /2026-01-01T00:00:00\.000Z/);
+  assert.doesNotMatch(corrected, /seg_00000052/);
+  assert.equal(playoutPlaylist(playlist(), start + 8000, start + 8000), playoutPlaylist(playlist(), start + 8000));
+});
