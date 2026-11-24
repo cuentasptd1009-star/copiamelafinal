@@ -100,7 +100,10 @@ export async function isLiveChannelEnabled(channelId: string | number, token: st
   const timeout = setTimeout(() => controller?.abort(), 5000);
   entry.request = fetch(`${apiBase}/api/live/channels/${channelId}/status?token=${encodeURIComponent(token)}`, {
     signal: controller?.signal,
-  }).then(async response => response.ok && !!(await response.json()).enabled).catch(() => false)
+  }).then(async response => {
+    if (!response.ok) throw new Error('Live channel status unavailable');
+    return !!(await response.json()).enabled;
+  }).catch(() => true)
     .then(enabled => { entry.enabled = enabled; entry.request = undefined; clearTimeout(timeout); return enabled; });
   if (capabilities.size >= 256) capabilities.delete(capabilities.keys().next().value!);
   capabilities.set(key, entry);

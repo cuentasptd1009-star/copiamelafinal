@@ -4,8 +4,7 @@ import { useLocation } from 'wouter';
 import { Maximize2, ChevronLeft, ChevronRight, Tv2 } from 'lucide-react';
 import { getMiniPlayerState, setMiniPlayerState, subscribeMiniPlayer, updateMiniPlayerState } from '@/lib/mini-player-state';
 import { getToken } from '@/lib/auth';
-import { apiBase } from '@/lib/api';
-import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, forgetLiveCapability, attachLiveQualityRecovery } from '@/lib/live-playback';
+import { liveBufferConfig, liveMasterUrl, channelHlsUrl, isLiveChannelEnabled, attachLiveQualityRecovery } from '@/lib/live-playback';
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 
 export function MiniPlayer() {
@@ -15,8 +14,6 @@ export function MiniPlayer() {
   const cleanupRef = useRef<(() => void) | null>(null);
   const [showOsd, setShowOsd] = useState(false);
   const loadGenerationRef = useRef(0);
-  const fallbackRef = useRef(false);
-  const activeChannelRef = useRef<number | null>(null);
   const osdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionsRef = useRef<{ flashOsd: () => void; handleMaximize: () => void; handleClose: () => void }>({
     flashOsd: () => {},
@@ -42,12 +39,10 @@ export function MiniPlayer() {
       };
     }, []);
 
-  const loadStream = useCallback(async (url: string) => {
+  const loadStream = useCallback(async (url: string): Promise<void> => {
     const video = videoRef.current;
     if (!video) return;
     const generation = ++loadGenerationRef.current;
-    const activeChannel = getMiniPlayerState()?.channelId ?? null;
-    if (activeChannel !== activeChannelRef.current) { activeChannelRef.current = activeChannel; fallbackRef.current = false; }
     if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
     video.removeAttribute('src');
     video.load();
@@ -61,7 +56,14 @@ export function MiniPlayer() {
         const token = getToken('user') || getToken('admin') || '';
         const enhanced = current?.channelId ? await isLiveChannelEnabled(current.channelId, token) : false;
         if (loadGenerationRef.current !== generation) return;
-        if (enhanced && current?.channelId && !fallbackRef.current) url = liveMasterUrl(current.channelId, token);
+        if (enhanced && current?.channelId) url = liveMasterUrl(current.channelId, token);
+        const protectedPlayback = !!current?.channelId && url === liveMasterUrl(current.channelId, token);
+        let retryTimer: ReturnType<typeof setTimeout> | undefined;
+        const retry = () => {
+          if (!protectedPlayback || loadGenerationRef.current !== generation || retryTimer !== undefined) return;
+          retryTimer = setTimeout(() => { void loadStream(url); }, 3000);
+        };
+        const cancelRetry = () => { clearTimeout(retryTimer); retryTimer = undefined; };
         const Hls = (await import('hls.js')).default;
         if (loadGenerationRef.current !== generation) return;
         if (Hls.isSupported()) {
@@ -96,24 +98,24 @@ export function MiniPlayer() {
             video.play().catch(() => {});
           });
           hls.on(Hls.Events.ERROR, (_: unknown, data: { fatal?: boolean; type?: string }) => {
-            const active = getMiniPlayerState();
-            if (loadGenerationRef.current !== generation) return;
-            if (data.fatal && data.type === 'mediaError') { mediaRecovery.recover(); return; }
-            if (data.fatal && data.type === 'networkError' && active?.channelId) {
-              if (!url.includes('/api/live/')) { hls.startLoad(); return; }
-              const t = getToken('user') || getToken('admin') || '';
-              fallbackRef.current = true;
-              stopRecovery();
-              mediaRecovery.destroy();
-              forgetLiveCapability(active.channelId, t);
-              hls.destroy();
-              cleanupRef.current = null;
-              const proxyUrl = `${apiBase}/api/channels/${active.channelId}/hls-proxy?token=${encodeURIComponent(t)}`;
-              updateMiniPlayerState({ url: proxyUrl, streamFormat: 'hls' });
-            }
+            if (loadGenerationRef.current !== generation || !data.fatal) return;
+            if (protectedPlayback) { retry(); return; }
+            if (data.type === 'mediaError') mediaRecovery.recover();
+            if (data.type === 'networkError') hls.startLoad();
           });
-          cleanupRef.current = () => { stopRecovery(); mediaRecovery.destroy(); hls.destroy(); };
+          video.addEventListener('playing', cancelRetry);
+          cleanupRef.current = () => {
+            cancelRetry();
+            video.removeEventListener('playing', cancelRetry);
+            stopRecovery();
+            mediaRecovery.destroy();
+            hls.destroy();
+          };
           return;
+        }
+        if (protectedPlayback) {
+          video.addEventListener('error', retry);
+          cleanupRef.current = () => { cancelRetry(); video.removeEventListener('error', retry); };
         }
       } catch {}
     }

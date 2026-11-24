@@ -117,7 +117,6 @@ export default function PlayerPage() {
   const hlsRef = useRef<InstanceType<typeof import('hls.js')['default']> | null>(null);
   const desiredQualityRef = useRef<QualityChoice>(miniState?.qualityPreference ?? (miniState?.preferOriginal ? 'original' : 'auto'));
   const processedQualitiesRef = useRef<number[]>([]);
-  const processingFallbackRef = useRef(false);
   const [qualityChoice, setQualityChoice] = useState<QualityChoice>(miniState?.qualityPreference ?? (miniState?.preferOriginal ? 'original' : 'auto'));
   const [qualityOptions, setQualityOptions] = useState<number[]>([]);
   const [canChooseOriginal, setCanChooseOriginal] = useState(false);
@@ -479,6 +478,31 @@ export default function PlayerPage() {
     setFormatLabel(fmt.toUpperCase());
 
     let destroyed = false;
+    let protectedPlayback = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+    const retryProtected = () => {
+      if (destroyed || !protectedPlayback || retryTimer !== undefined) return;
+      setError(null);
+      setIsBuffering(true);
+      retryTimer = setTimeout(() => setRetryNonce(n => n + 1), 3000);
+    };
+    const onProtectedWaiting = () => {
+      if (!protectedPlayback || stallTimer !== undefined) return;
+      stallTimer = setTimeout(() => {
+        stallTimer = undefined;
+        retryProtected();
+      }, 12000);
+    };
+    const onProtectedPlaying = () => {
+      clearTimeout(stallTimer);
+      clearTimeout(retryTimer);
+      stallTimer = undefined;
+      retryTimer = undefined;
+    };
+    video.addEventListener('waiting', onProtectedWaiting);
+    video.addEventListener('playing', onProtectedPlaying);
+    video.addEventListener('error', retryProtected);
 
     const init = async () => {
       // React's `muted` JSX prop doesn't apply to the DOM ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ set imperatively so
@@ -488,8 +512,10 @@ export default function PlayerPage() {
         if (fmt === 'hls') {
           const enhanced = type === 'channel' && channelId ? await isLiveChannelEnabled(channelId, authToken) : false;
           if (destroyed) return;
-          if (enhanced && !processingFallbackRef.current && currentUrl !== liveMasterUrl(channelId, authToken)) {
-            setCurrentUrl(liveMasterUrl(channelId, authToken)); return;
+          const protectedUrl = channelId ? liveMasterUrl(channelId, authToken) : '';
+          protectedPlayback = enhanced || currentUrl === protectedUrl;
+          if (enhanced && currentUrl !== protectedUrl) {
+            setCurrentUrl(protectedUrl); return;
           }
           // iOS Safari: use native HLS directly ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ hls.js uses MediaSource API
           // which AirPlay cannot stream. Native HLS on iOS supports AirPlay natively.
@@ -565,13 +591,13 @@ export default function PlayerPage() {
             hls.on(Hls.Events.ERROR, (_, data) => {
               if (destroyed) return;
               if (data.fatal) {
+                if (protectedPlayback) { retryProtected(); return; }
                 if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retryCountRef.current === 0 && type === 'channel' && channelId) {
                   // Direct stream failed (CORS or network) ÃÂÃÂ¢ÃÂÃÂÃÂÃÂ fall back to server proxy
                   const t = getToken('user') || getToken('admin') || '';
                   const originalUrl = `${apiBase}/api/channels/${channelId}/hls-proxy?token=${encodeURIComponent(t)}`;
                   if (currentUrl === originalUrl) { hls.startLoad(); return; }
                   retryCountRef.current = 1;
-                  processingFallbackRef.current = true;
                   forgetLiveCapability(channelId, t);
                   cleanupRef.current = null;
                   if (hlsRef.current === hls) hlsRef.current = null;
@@ -650,6 +676,11 @@ export default function PlayerPage() {
 
     return () => {
       destroyed = true;
+      clearTimeout(retryTimer);
+      clearTimeout(stallTimer);
+      video.removeEventListener('waiting', onProtectedWaiting);
+      video.removeEventListener('playing', onProtectedPlaying);
+      video.removeEventListener('error', retryProtected);
       if (movieNumIdRef.current && video.currentTime > 0) {
         saveProgress(movieNumIdRef.current, video.currentTime, video.duration || 0);
       }
@@ -934,7 +965,7 @@ export default function PlayerPage() {
     if (!ch) return;
     const fmt = ch.streamFormat || detectFormat(ch.streamUrl || '');
     const proxyUrl = buildChannelUrl(ch.id, fmt, fmt === 'youtube' ? ch.streamUrl : undefined);
-    desiredQualityRef.current = 'auto'; processedQualitiesRef.current = []; processingFallbackRef.current = false;
+    desiredQualityRef.current = 'auto'; processedQualitiesRef.current = [];
     setQualityChoice('auto'); setQualityOptions([]); setCanChooseOriginal(false);
     updateMiniPlayerState({ qualityPreference: 'auto', preferOriginal: false, channelId: ch.id, channelIndex: newIdx, url: proxyUrl, title: ch.name, streamFormat: fmt });
     setChannelId(String(ch.id));
