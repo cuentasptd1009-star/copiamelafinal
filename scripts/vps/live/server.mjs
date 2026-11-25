@@ -11,6 +11,9 @@ import { createHlsInput } from './ingest.mjs';
 import { sameSecret, createChannelLookup, createOriginRelay } from './sharing.mjs';
 
 export const DELAY_SECONDS = TOTAL_RESERVE_SECONDS;
+const PREPARE_ALTERNATE_AFTER_MS = 8000;
+const SWITCH_SOURCE_AFTER_MS = 14000;
+const SOURCE_STALL_MS = 35000;
 export const ORIGIN_USER_AGENT = 'Mozilla/5.0 (compatible; SuperTV/1.0)';
 const ENCODED_PROFILES = [
   { name: '360p', width: 640, height: 360, bitrate: '500k', maxrate: '650k', bandwidth: 800000 },
@@ -47,6 +50,21 @@ export async function probeSource(source, { originalOnly = false } = {}) {
   return { width: video.width, height: video.height, fps, profile, level: Number(video.level || 40) / 10,
     codecs, compatibleAac: audio?.codec_name === "aac" && audio.profile === "LC" && Number(audio.sample_rate) === 48000 && audio.channels === 2,
     bandwidth: Math.ceil((Number(video.bit_rate) || video.width * video.height * fps * 0.1) * 1.3 + (Number(audio?.bit_rate) || 128000)) };
+}
+
+function verifyAudioVideo(segment) {
+  return new Promise((resolve, reject) => {
+    execFile(process.env.FFMPEG_PATH || 'ffmpeg', [
+      '-v', 'error', '-xerror', '-i', segment, '-t', '0.5',
+      '-map', '0:v:0', '-map', '0:a:0', '-f', 'streamhash', '-',
+    ], { timeout: 5000 }, (error, output) => {
+      if (error) { reject(error); return; }
+      const empty = createHash('sha256').digest('hex');
+      const streams = [...output.matchAll(/^\d+,([va]),SHA256=([a-f0-9]+)$/gm)];
+      if (['v', 'a'].every(type => streams.some(([, stream, hash]) => stream === type && hash !== empty))) resolve();
+      else reject(new Error('Replacement did not produce audio and video'));
+    });
+  });
 }
 
 export function renditionsFor(profile) {
@@ -120,6 +138,7 @@ export function createLiveServer(options = {}) {
   const maxSelectedChannels = config.keepWarm ? Math.min(5, config.maxChannels) : storedSelectionLimit;
   config.maxChannels = Math.min(maxSelectedChannels, config.maxChannels);
   const jobs = new Map();
+  const candidates = new Map();
   const lastReady = new Map();
   const authorizations = new Map();
   const authorizationRequests = new Map();
@@ -247,18 +266,21 @@ export function createLiveServer(options = {}) {
   function stop(job, reason) {
     if (job.stopping) return;
     job.stopping = true;
-    jobs.delete(job.id);
-    if (!['idle', 'shutdown', 'disabled', 'source-updated'].includes(reason)) {
+    if (jobs.get(job.id) === job) jobs.delete(job.id);
+    if (candidates.get(job.id) === job) candidates.delete(job.id);
+    if (!job.candidate && !['idle', 'shutdown', 'disabled', 'source-updated', 'source-switched'].includes(reason)) {
       if (job.sources && sourcePreferences.get(job.id) === job.sources) {
         const role = job.source === job.sources.backup ? 'backup' : 'primary';
         job.sources.failures[role] = Date.now();
-        if (job.sources.backup) job.sources.useBackup = !job.sources.useBackup;
+        if (job.sources.backup && !job.ready) job.sources.useBackup = !job.sources.useBackup;
       }
       let retryAfter = job.sources?.backup || config.keepWarm ? 5000 : 180000;
       if (job.sources?.backup && job.ready) retryAfter = 500;
       cooldown.set(job.id, Date.now() + retryAfter);
     }
     if (reason === 'disabled') sourcePreferences.delete(job.id);
+    const candidate = candidates.get(job.id);
+    if (!job.candidate && candidate?.parent === job) stop(candidate, 'candidate-cancelled');
     job.input?.close();
     job.child?.kill('SIGTERM');
     const force = setTimeout(() => job.child?.kill('SIGKILL'), 5000); force.unref();
@@ -282,26 +304,33 @@ export function createLiveServer(options = {}) {
     return job.source;
   }
 
-  function start(channel) {
-    const existing = jobs.get(channel.id);
+  function start(channel, parent) {
+    const existing = (parent ? candidates : jobs).get(channel.id);
     if (existing) return existing;
-    if (jobs.size >= config.maxChannels || (cooldown.get(channel.id) || 0) > Date.now()) return null;
+    if (parent ? candidates.size >= 1 :
+      jobs.size >= config.maxChannels || (cooldown.get(channel.id) || 0) > Date.now()) return null;
     let origin;
     try { origin = new URL(channel.streamUrl); } catch { return null; }
     if (!['http:', 'https:'].includes(origin.protocol)) return null;
     const generation = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
     const job = { id: channel.id, generation, directory: path.join(config.directory, String(channel.id), generation),
       lastSeen: Date.now(), started: Date.now(), lastProgress: Date.now(), slowSince: null, child: null, stopping: false, ready: false };
-    jobs.set(channel.id, job);
+    if (parent) {
+      job.candidate = true;
+      job.parent = parent;
+      job.sources = parent.sources;
+      job.source = parent.source === job.sources.primary ? job.sources.backup : job.sources.primary;
+      candidates.set(channel.id, job);
+    } else jobs.set(channel.id, job);
     job.readiness = (async () => {
-      const configured = channel.backupStreamUrl !== undefined ? channel : (await lookupChannel(channel.id).catch(() => null) || channel);
-      const source = applySources(job, configured);
+      const source = parent ? job.source : applySources(job, channel.backupStreamUrl !== undefined
+        ? channel : (await lookupChannel(channel.id).catch(() => null) || channel));
       if (job.stopping) throw new Error('Stopped');
       let sample;
       try {
         job.input = await createHlsInput(source, {
           userAgent: ORIGIN_USER_AGENT,
-          shouldFailFast: () => !!job.sources?.backup,
+          failureTimeoutMs: job.sources?.backup ? SOURCE_STALL_MS + 5000 : 20000,
           reserve: job.sources?.backup && lastReady.has(job.id) ? DELAY_SECONDS + 4 : 0,
         });
         sample = await job.input.peek();
@@ -360,7 +389,8 @@ export function createLiveServer(options = {}) {
           const lists = await Promise.all(job.renditions.map(r => readFile(path.join(job.directory, r.name, 'index.m3u8'), 'utf8')));
           observePublishedMedia(job, lists[job.renditions.findIndex(r => r.name === 'original')]);
           // Use actual published media, not FFmpeg's timestamp-offset-dependent average speed.
-          if (job.recentSpeed >= 0.98 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2)) {
+          const freshCandidate = job.candidate && job.input?.stats.sourceSeconds >= 2;
+          if ((job.recentSpeed >= 0.98 || freshCandidate) && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2)) {
             const playable = await Promise.all(lists.map((text, i) =>
               playablePlaylist(text, path.join(job.directory, job.renditions[i].name))));
             if (!playable.every(text => playlistDuration(text) >= CLIENT_RESERVE_SECONDS + 2)) {
@@ -384,8 +414,18 @@ export function createLiveServer(options = {}) {
               } catch { /* A rolling segment may expire while measuring; retain the conservative estimate. */ }
             }));
             if (job.stopping) throw new Error('Stopped');
-            if (job.sources) delete job.sources.failures[job.source === job.sources.backup ? 'backup' : 'primary'];
-            lastReady.set(job.id, { generation: job.generation, directory: job.directory, renditions: job.renditions });
+            if (job.candidate || (job.sources?.backup && job.sources.useBackup)) {
+              const original = job.renditions.findIndex(r => r.name === 'original');
+              const segment = [...playable[original].matchAll(/^seg_\d+\.ts$/gm)].at(-1)?.[0];
+              try {
+                await verifyAudioVideo(path.join(job.directory, 'original', segment));
+              } catch {
+                await delay(1000);
+                continue;
+              }
+            }
+            if (job.stopping) throw new Error('Stopped');
+            if (!job.candidate) publishJob(job);
             job.ready = true; job.lastSeen = Date.now(); return;
           }
         } catch { /* The encoder has not published its first playlist yet. */ }
@@ -409,7 +449,7 @@ export function createLiveServer(options = {}) {
         for (const generation of await readdir(channelPath, { withFileTypes: true })) {
           if (!generation.isDirectory() || !/^[a-z0-9]+-[a-f0-9]+$/.test(generation.name)) continue;
           const id = Number(channel.name);
-          if (jobs.get(id)?.generation === generation.name || lastReady.get(id)?.generation === generation.name) continue;
+          if (jobs.get(id)?.generation === generation.name || candidates.get(id)?.generation === generation.name || lastReady.get(id)?.generation === generation.name) continue;
           const directory = path.join(channelPath, generation.name);
           const info = await stat(path.join(directory, 'original', 'index.m3u8')).catch(() => stat(directory));
           if (Date.now() - info.mtimeMs > 60000) await rm(directory, { recursive: true, force: true });
@@ -453,17 +493,56 @@ export function createLiveServer(options = {}) {
   }
   void warmSelectedChannels();
 
+  function publishJob(job) {
+    if (job.sources) delete job.sources.failures[job.source === job.sources.backup ? 'backup' : 'primary'];
+    lastReady.set(job.id, { generation: job.generation, directory: job.directory, renditions: job.renditions });
+  }
+
+  function handleSourceStall(job, now) {
+    if (!job.ready || !job.sources?.backup) return;
+    const lastMedia = Math.max(job.lastPublished || job.started, job.input?.stats.lastFedAt || 0);
+    const stalledFor = now - lastMedia;
+    const alternate = candidates.get(job.id);
+    if (stalledFor < PREPARE_ALTERNATE_AFTER_MS) {
+      if (alternate) stop(alternate, 'active-source-recovered');
+      return;
+    }
+    if (!alternate) {
+      if (now >= (job.nextCandidateAt || 0)) {
+        const started = start({ id: job.id, streamUrl: job.sources.primary }, job);
+        if (started) job.nextCandidateAt = now + SWITCH_SOURCE_AFTER_MS;
+      }
+      return;
+    }
+    if (!alternate.ready || stalledFor < SWITCH_SOURCE_AFTER_MS ||
+      now - (alternate.lastPublished || alternate.started) >= PREPARE_ALTERNATE_AFTER_MS) return;
+
+    job.sources.failures[job.source === job.sources.backup ? 'backup' : 'primary'] = now;
+    job.sources.useBackup = alternate.source === job.sources.backup;
+    candidates.delete(job.id);
+    stop(job, 'source-switched');
+    alternate.candidate = false;
+    alternate.parent = null;
+    jobs.set(job.id, alternate);
+    publishJob(alternate);
+    console.log(JSON.stringify({ event: 'live-source-switch', channel: job.id, stalledFor }));
+  }
+
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const [token, entry] of authorizations) if (entry.expires < now) authorizations.delete(token);
     for (const [id, until] of cooldown) if (until < now) cooldown.delete(id);
-    for (const job of jobs.values()) {
+    for (const job of [...jobs.values(), ...candidates.values()]) {
       if (!job.observing && job.profile) {
         job.observing = true;
         readFile(path.join(job.directory, 'original', 'index.m3u8'), 'utf8').then(text => observePublishedMedia(job, text)).catch(() => {}).finally(() => { job.observing = false; });
       }
       if (!config.keepWarm && job.ready && now - job.lastSeen > config.idleMs) stop(job, 'idle');
-      else if (now - job.lastProgress > 35000) stop(job, 'source-stalled');
+      else {
+        if (!job.candidate) handleSourceStall(job, now);
+        if (now - job.lastProgress > SOURCE_STALL_MS &&
+          (!candidates.has(job.id) || job.candidate || now - job.lastProgress > config.warmupMs + SOURCE_STALL_MS)) stop(job, 'source-stalled');
+      }
       // A temporary origin slowdown must not destroy the URLs existing viewers are using.
     }
     void warmSelectedChannels();

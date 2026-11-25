@@ -36,7 +36,7 @@ export function parseMediaPlaylist(text, base) {
   return { first, target, segments, ended: text.includes('#EXT-X-ENDLIST') };
 }
 
-export async function createHlsInput(source, { userAgent = USER_AGENT, fetcher = fetch, shouldFailFast = () => false, reserve = 0 } = {}) {
+export async function createHlsInput(source, { userAgent = USER_AGENT, fetcher = fetch, failureTimeoutMs = 20000, reserve = 0 } = {}) {
   const controller = new AbortController();
   const signal = controller.signal;
   const stats = { playlists: 0, downloads: 0, bytes: 0, queuedBytes: 0, maxDownloadMs: 0, resets: 0, sourceSeconds: 0, fedSeconds: 0 };
@@ -131,14 +131,12 @@ export async function createHlsInput(source, { userAgent = USER_AGENT, fetcher =
   try { accept(await loadPlaylist()); } catch (error) { close(); throw error; }
   async function poll() {
     let lastGood = Date.now();
-    let missing = 0;
     while (!closed) {
       await pause(Math.max(400, Math.min(1000, playlist.target * 150)));
       if (closed) break;
-      try { accept(await loadPlaylist()); lastGood = Date.now(); missing = 0; }
+      try { accept(await loadPlaylist()); lastGood = Date.now(); }
       catch (error) {
-        missing = error.status === 404 || error.status === 410 ? missing + 1 : 0;
-        if (!closed && ((shouldFailFast() && missing >= 2) || Date.now()-lastGood > 20000)) throw error;
+        if (!closed && Date.now() - lastGood > failureTimeoutMs) throw error;
       }
     }
   }
@@ -146,12 +144,25 @@ export async function createHlsInput(source, { userAgent = USER_AGENT, fetcher =
     while (!closed) {
       const key = `${epoch}:${next}`; const item = queue.get(key);
       if (!item) { await new Promise(resolve => { listeners.add(resolve); if (closed) wake(); }); continue; }
-      const buffer = await item.promise;
+      let buffer;
+      try {
+        buffer = await item.promise;
+      } catch (error) {
+        if (closed) break;
+        if (item.epoch !== epoch) continue;
+        queue.delete(key);
+        // Retry the same position while it remains in the upstream window.
+        // A missing segment must not tear down the encoder on a brief outage.
+        if (playlist.first > next) next = playlist.first;
+        await pause(500);
+        schedule();
+        continue;
+      }
       if (closed) break;
       if (item.epoch !== epoch) continue;
       if (!writable.write(buffer)) await once(writable, 'drain', { signal });
       if (item.epoch !== epoch) continue;
-      stats.queuedBytes = Math.max(0,stats.queuedBytes-buffer.length); stats.fedSeconds += item.duration;
+      stats.queuedBytes = Math.max(0,stats.queuedBytes-buffer.length); stats.fedSeconds += item.duration; stats.lastFedAt = Date.now();
       queue.delete(key); next++; schedule();
     }
   }
