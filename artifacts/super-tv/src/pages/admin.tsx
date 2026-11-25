@@ -1397,7 +1397,8 @@ interface LiveAdminConfig {
   originalOnly?: boolean;
   maxConcurrentChannels: number;
   externalChannelIds?: number[];
-  activeChannels: { id: number; ready: boolean }[];
+  activeChannels: { id: number; ready: boolean; sourceRole?: 'primary' | 'backup' | null }[];
+  sourceFailures?: { id: number; primary?: number; backup?: number }[];
 }
 async function liveAdminRequest(path: string, enabled?: boolean): Promise<LiveAdminConfig> {
   const response = await fetch(`${apiBase}/api/live/admin/${path}`, {
@@ -1455,9 +1456,13 @@ function ChannelsManager() {
     } catch (error) { toast({ title: 'No se pudo crear el enlace', description: (error as Error).message, variant: 'destructive' }); }
     finally { setLinkBusy(null); }
   };
-  const renderLiveControl = (ch: { id: number; name: string; streamUrl: string; streamFormat?: string | null }) => {
+  const editChannel = (ch: { id: number; name: string; streamUrl: string; backupStreamUrl?: string | null; category?: string | null; logo?: string | null }) => {
+    setEditCh({ id: ch.id, name: ch.name, streamUrl: ch.streamUrl, backupStreamUrl: ch.backupStreamUrl || '', category: ch.category || '', logo: ch.logo || '' });
+  };
+  const renderLiveControl = (ch: Parameters<typeof editChannel>[0] & { streamFormat?: string | null }) => {
     const enabled = !!liveConfig.data?.enabledChannelIds.includes(ch.id);
     const active = liveConfig.data?.activeChannels.find(item => item.id === ch.id);
+    const failures = liveConfig.data?.sourceFailures?.find(item => item.id === ch.id);
     const atLimit = (liveConfig.data?.enabledChannelIds.length || 0) >= (liveConfig.data?.maxSelectedChannels || 5);
     const supported = ch.streamFormat === 'hls' || /\.m3u8(?:[?#]|$)|\/hls\//i.test(ch.streamUrl);
     const capacityBusy = !!liveConfig.data && liveConfig.data.activeChannels.length >= liveConfig.data.maxConcurrentChannels;
@@ -1472,6 +1477,23 @@ function ChannelsManager() {
         <span className="text-[11px] text-muted-foreground">
           {liveMutation.isPending && liveMutation.variables.id === ch.id ? 'Guardando…' : !liveConfig.data ? 'Sin conexión' : !enabled ? 'Original' : active?.ready ? (liveConfig.data.originalOnly ? 'Original protegida · 10 s' : 'Calidad Auto · 10 s') : active ? 'Preparando…' : capacityBusy ? 'En espera de capacidad' : 'Activado · 10 s'}
         </span></div>
+        {enabled && !sortMode && <div className="flex flex-wrap gap-1">
+          {(['primary', 'backup'] as const).map(role => {
+            const current = active?.sourceRole === role;
+            const airing = current && active?.ready;
+            const failedAt = failures?.[role];
+            const label = role === 'primary' ? 'Principal' : 'Respaldo';
+            const status = airing ? 'En emisión' : current ? 'Preparando' : failedAt ? 'Falló' : role === 'backup' && !ch.backupStreamUrl ? 'Sin enlace' : 'En espera';
+            return (
+              <Button key={role} size="sm" variant="outline"
+                className={`h-7 text-[11px] ${airing ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300' : failedAt && !current ? 'border-amber-500/60 text-amber-300' : ''}`}
+                title={failedAt ? `Último fallo: ${new Date(failedAt).toLocaleString('es-CO')}` : undefined}
+                aria-label={`Editar fuente ${label.toLowerCase()} de ${ch.name.trim()}. ${status}`}
+                onClick={() => editChannel(ch)}
+              >{label} · {status}</Button>
+            );
+          })}
+        </div>}
         {!sortMode && <div className="flex gap-1 flex-wrap">
           <Button size="sm" variant="outline" className="h-7 text-[11px]" aria-label={`Copiar enlace externo de ${ch.name.trim()}`} disabled={!liveConfig.data || !supported || linkBusy !== null} onClick={() => handleExternalLink(ch, 'copy')}>Copiar enlace</Button>
           {liveConfig.data?.externalChannelIds?.includes(ch.id) && <>
@@ -2210,7 +2232,7 @@ function ChannelsManager() {
                     testing={!!testing[ch.id]}
                     testResult={testResults[ch.id]}
                     onTest={() => handleTest(ch.id)}
-                    onEdit={() => setEditCh({ id: ch.id, name: ch.name, streamUrl: ch.streamUrl, backupStreamUrl: ch.backupStreamUrl || '', category: ch.category || '', logo: ch.logo || '' })}
+                    onEdit={() => editChannel(ch)}
                     onDelete={() => handleDelete(ch.id)}
                     selected={selectedIds.has(ch.id)}
                     onSelect={toggleSelect}

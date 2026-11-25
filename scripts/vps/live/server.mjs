@@ -148,7 +148,9 @@ export function createLiveServer(options = {}) {
     maxConcurrentChannels: config.maxChannels, delaySeconds: DELAY_SECONDS, serverBufferSeconds: SERVER_RESERVE_SECONDS, clientBufferSeconds: CLIENT_RESERVE_SECONDS,
     externalChannelIds: Object.keys(emissionKeys).map(Number),
     authorizationTiming: { ...authorizationTiming },
-    activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, source: j.profile ? { width: j.profile.width, height: j.profile.height, fps: j.profile.fps } : null, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
+    sourceFailures: [...sourcePreferences].filter(([id]) => config.allowed.has(id))
+      .map(([id, preference]) => ({ id, ...preference.failures })),
+    activeChannels: [...jobs.values()].map(j => ({ id: j.id, ready: j.ready, sourceRole: j.source ? (j.source === j.sources?.backup ? 'backup' : 'primary') : null, source: j.profile ? { width: j.profile.width, height: j.profile.height, fps: j.profile.fps } : null, speed: j.speed || null, recentSpeed: j.recentSpeed ?? null,
       lastProgressMs: Date.now() - j.lastProgress, maxProgressGapMs: j.maxProgressGapMs || 0, maxPublishGapMs: j.maxPublishGapMs || 0, inputMode: j.input ? 'prefetched-ts' : 'direct-hls', inputNotice: j.ingestFallback || null, ingest: j.input ? { ...j.input.stats } : null })) });
   async function requireAdmin(token) {
     const response = await fetch(`${config.apiBase}/api/auth/me`, {
@@ -182,6 +184,7 @@ export function createLiveServer(options = {}) {
       await persist(next, emissionKeys);
       config.allowed = next;
       for (const retainedId of lastReady.keys()) if (!next.has(retainedId)) lastReady.delete(retainedId);
+      for (const savedId of sourcePreferences.keys()) if (!next.has(savedId)) sourcePreferences.delete(savedId);
       for (const job of [...jobs.values()]) if (!next.has(job.id)) stop(job, 'disabled');
       if (enabled) {
         cooldown.delete(id);
@@ -247,7 +250,11 @@ export function createLiveServer(options = {}) {
     job.stopping = true;
     jobs.delete(job.id);
     if (!['idle', 'shutdown', 'disabled', 'source-updated'].includes(reason)) {
-      if (job.sources?.backup && sourcePreferences.get(job.id) === job.sources) job.sources.useBackup = !job.sources.useBackup;
+      if (job.sources && sourcePreferences.get(job.id) === job.sources) {
+        const role = job.source === job.sources.backup ? 'backup' : 'primary';
+        job.sources.failures[role] = Date.now();
+        if (job.sources.backup) job.sources.useBackup = !job.sources.useBackup;
+      }
       let retryAfter = job.sources?.backup || config.keepWarm ? 5000 : 180000;
       if (job.fastFailover && job.ready) retryAfter = 500;
       cooldown.set(job.id, Date.now() + retryAfter);
@@ -262,16 +269,13 @@ export function createLiveServer(options = {}) {
 
   function applySources(job, channel) {
     const primary = channel.streamUrl;
-    const backup = channel.backupStreamUrl;
-    if (!backup || backup === primary) {
-      sourcePreferences.delete(job.id);
-      job.sources = undefined;
-      job.source = primary;
-      return primary;
-    }
+    const backup = channel.backupStreamUrl && channel.backupStreamUrl !== primary ? channel.backupStreamUrl : null;
     let preferred = sourcePreferences.get(job.id);
     if (preferred?.primary !== primary || preferred?.backup !== backup) {
-      preferred = { primary, backup, useBackup: job.source === backup };
+      const failures = {};
+      if (preferred?.primary === primary && preferred.failures.primary) failures.primary = preferred.failures.primary;
+      if (preferred?.backup === backup && preferred.failures.backup) failures.backup = preferred.failures.backup;
+      preferred = { primary, backup, useBackup: !!backup && job.source === backup, failures };
       sourcePreferences.set(job.id, preferred);
     }
     job.sources = preferred;
@@ -376,6 +380,7 @@ export function createLiveServer(options = {}) {
               } catch { /* A rolling segment may expire while measuring; retain the conservative estimate. */ }
             }));
             if (job.stopping) throw new Error('Stopped');
+            if (job.sources) delete job.sources.failures[job.source === job.sources.backup ? 'backup' : 'primary'];
             lastReady.set(job.id, { generation: job.generation, directory: job.directory, renditions: job.renditions });
             job.ready = true; job.lastSeen = Date.now(); return;
           }
