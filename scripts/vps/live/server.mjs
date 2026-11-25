@@ -109,7 +109,6 @@ export function createLiveServer(options = {}) {
     allowed: new Set((process.env.LIVE_CHANNEL_IDS || '').split(',').map(Number).filter(id => Number.isSafeInteger(id) && id > 0)),
     originalOnly: process.env.LIVE_ORIGINAL_ONLY === '1',
     keepWarm: process.env.LIVE_KEEP_WARM === '1',
-    fastFailoverChannels: new Set((process.env.LIVE_FAST_FAILOVER_CHANNEL_IDS || '').split(',').map(Number).filter(id => Number.isSafeInteger(id) && id > 0)),
     maxChannels: Math.max(1, Number(process.env.LIVE_MAX_CHANNELS) || 1),
     stateFile: process.env.LIVE_CONFIG_FILE || null,
     publicBase: process.env.LIVE_PUBLIC_BASE || 'https://167-233-103-143.sslip.io',
@@ -256,7 +255,7 @@ export function createLiveServer(options = {}) {
         if (job.sources.backup) job.sources.useBackup = !job.sources.useBackup;
       }
       let retryAfter = job.sources?.backup || config.keepWarm ? 5000 : 180000;
-      if (job.fastFailover && job.ready) retryAfter = 500;
+      if (job.sources?.backup && job.ready) retryAfter = 500;
       cooldown.set(job.id, Date.now() + retryAfter);
     }
     if (reason === 'disabled') sourcePreferences.delete(job.id);
@@ -298,19 +297,18 @@ export function createLiveServer(options = {}) {
       const configured = channel.backupStreamUrl !== undefined ? channel : (await lookupChannel(channel.id).catch(() => null) || channel);
       const source = applySources(job, configured);
       if (job.stopping) throw new Error('Stopped');
-      job.fastFailover = !!job.sources?.backup && config.fastFailoverChannels.has(job.id);
       let sample;
       try {
         job.input = await createHlsInput(source, {
           userAgent: ORIGIN_USER_AGENT,
-          shouldFailFast: () => job.fastFailover,
-          reserve: job.fastFailover && lastReady.has(job.id) ? DELAY_SECONDS + 4 : 0,
+          shouldFailFast: () => !!job.sources?.backup,
+          reserve: job.sources?.backup && lastReady.has(job.id) ? DELAY_SECONDS + 4 : 0,
         });
         sample = await job.input.peek();
       } catch (error) {
         job.input?.close();
         job.input = null;
-        if (job.fastFailover && [404, 410].includes(error.status)) throw error;
+        if (job.sources?.backup && [404, 410].includes(error.status)) throw error;
         job.ingestFallback = cleanError(error.message);
       }
       job.profile = await probeSource(sample || source, { originalOnly: config.originalOnly }); sample = null;
@@ -433,7 +431,6 @@ export function createLiveServer(options = {}) {
             job.lastSourceCheck = Date.now();
             const previous = job.source;
             const updated = applySources(job, channel);
-            job.fastFailover = !!job.sources?.backup && config.fastFailoverChannels.has(id);
             if (updated === previous) return;
             stop(job, 'source-updated');
           }
