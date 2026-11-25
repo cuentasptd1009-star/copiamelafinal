@@ -109,6 +109,7 @@ export function createLiveServer(options = {}) {
     allowed: new Set((process.env.LIVE_CHANNEL_IDS || '').split(',').map(Number).filter(id => Number.isSafeInteger(id) && id > 0)),
     originalOnly: process.env.LIVE_ORIGINAL_ONLY === '1',
     keepWarm: process.env.LIVE_KEEP_WARM === '1',
+    fastFailoverChannels: new Set((process.env.LIVE_FAST_FAILOVER_CHANNEL_IDS || '').split(',').map(Number).filter(id => Number.isSafeInteger(id) && id > 0)),
     maxChannels: Math.max(1, Number(process.env.LIVE_MAX_CHANNELS) || 1),
     stateFile: process.env.LIVE_CONFIG_FILE || null,
     publicBase: process.env.LIVE_PUBLIC_BASE || 'https://167-233-103-143.sslip.io',
@@ -247,7 +248,9 @@ export function createLiveServer(options = {}) {
     jobs.delete(job.id);
     if (!['idle', 'shutdown', 'disabled', 'source-updated'].includes(reason)) {
       if (job.sources?.backup && sourcePreferences.get(job.id) === job.sources) job.sources.useBackup = !job.sources.useBackup;
-      cooldown.set(job.id, Date.now() + (job.sources?.backup || config.keepWarm ? 5000 : 180000));
+      let retryAfter = job.sources?.backup || config.keepWarm ? 5000 : 180000;
+      if (job.fastFailover && job.ready) retryAfter = 500;
+      cooldown.set(job.id, Date.now() + retryAfter);
     }
     if (reason === 'disabled') sourcePreferences.delete(job.id);
     job.input?.close();
@@ -291,9 +294,21 @@ export function createLiveServer(options = {}) {
       const configured = channel.backupStreamUrl !== undefined ? channel : (await lookupChannel(channel.id).catch(() => null) || channel);
       const source = applySources(job, configured);
       if (job.stopping) throw new Error('Stopped');
+      job.fastFailover = !!job.sources?.backup && config.fastFailoverChannels.has(job.id);
       let sample;
-      try { job.input = await createHlsInput(source, { userAgent: ORIGIN_USER_AGENT }); sample = await job.input.peek(); }
-      catch (error) { job.input?.close(); job.input = null; job.ingestFallback = cleanError(error.message); }
+      try {
+        job.input = await createHlsInput(source, {
+          userAgent: ORIGIN_USER_AGENT,
+          shouldFailFast: () => job.fastFailover,
+          reserve: job.fastFailover && lastReady.has(job.id) ? DELAY_SECONDS + 4 : 0,
+        });
+        sample = await job.input.peek();
+      } catch (error) {
+        job.input?.close();
+        job.input = null;
+        if (job.fastFailover && [404, 410].includes(error.status)) throw error;
+        job.ingestFallback = cleanError(error.message);
+      }
       job.profile = await probeSource(sample || source, { originalOnly: config.originalOnly }); sample = null;
       // WIN can retain its compatible AAC packets and bypass the failing audio decoder.
       job.profile.copyAudio = channel.id === 546 && job.profile.compatibleAac;
@@ -412,7 +427,9 @@ export function createLiveServer(options = {}) {
           if (job && jobs.get(id) === job) {
             job.lastSourceCheck = Date.now();
             const previous = job.source;
-            if (applySources(job, channel) === previous) return;
+            const updated = applySources(job, channel);
+            job.fastFailover = !!job.sources?.backup && config.fastFailoverChannels.has(id);
+            if (updated === previous) return;
             stop(job, 'source-updated');
           }
           start(channel);

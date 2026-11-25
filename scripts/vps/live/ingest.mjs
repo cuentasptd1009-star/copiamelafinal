@@ -36,7 +36,7 @@ export function parseMediaPlaylist(text, base) {
   return { first, target, segments, ended: text.includes('#EXT-X-ENDLIST') };
 }
 
-export async function createHlsInput(source, { userAgent = USER_AGENT, fetcher = fetch } = {}) {
+export async function createHlsInput(source, { userAgent = USER_AGENT, fetcher = fetch, shouldFailFast = () => false, reserve = 0 } = {}) {
   const controller = new AbortController();
   const signal = controller.signal;
   const stats = { playlists: 0, downloads: 0, bytes: 0, queuedBytes: 0, maxDownloadMs: 0, resets: 0, sourceSeconds: 0, fedSeconds: 0 };
@@ -109,9 +109,17 @@ export async function createHlsInput(source, { userAgent = USER_AGENT, fetcher =
   function accept(parsed) {
     if (parsed.ended) throw new Error('The source is not a running live playlist');
     const latest = parsed.segments.at(-1).seq;
-    if (next === undefined || latest < sourceEdge) {
+    const initial = next === undefined;
+    if (initial || latest < sourceEdge) {
       if (next !== undefined) { epoch++; stats.resets++; queue.clear(); stats.queuedBytes = 0; }
       next = latest; sourceEdge = latest;
+      if (initial && reserve > 0) {
+        let available = 0;
+        for (let i = parsed.segments.length - 1; i >= 0 && available < reserve; i--) {
+          available += parsed.segments[i].duration;
+          next = parsed.segments[i].seq;
+        }
+      }
     } else {
       for (const entry of parsed.segments) if (entry.seq > sourceEdge) stats.sourceSeconds += entry.duration;
       sourceEdge = latest;
@@ -123,11 +131,15 @@ export async function createHlsInput(source, { userAgent = USER_AGENT, fetcher =
   try { accept(await loadPlaylist()); } catch (error) { close(); throw error; }
   async function poll() {
     let lastGood = Date.now();
+    let missing = 0;
     while (!closed) {
       await pause(Math.max(400, Math.min(1000, playlist.target * 150)));
       if (closed) break;
-      try { accept(await loadPlaylist()); lastGood = Date.now(); }
-      catch (error) { if (!closed && Date.now()-lastGood > 20000) throw error; }
+      try { accept(await loadPlaylist()); lastGood = Date.now(); missing = 0; }
+      catch (error) {
+        missing = error.status === 404 || error.status === 410 ? missing + 1 : 0;
+        if (!closed && ((shouldFailFast() && missing >= 2) || Date.now()-lastGood > 20000)) throw error;
+      }
     }
   }
   async function pump(writable) {
