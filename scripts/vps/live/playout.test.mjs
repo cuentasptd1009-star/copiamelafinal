@@ -27,3 +27,10 @@ test('a playlist clock hours ahead still keeps the actual server reserve', () =>
   assert.doesNotMatch(corrected, /seg_00000052/);
   assert.equal(playoutPlaylist(playlist(), start + 8000, start + 8000), playoutPlaylist(playlist(), start + 8000));
 });
+
+test('a rolling playlist slightly ahead of the reserve uses file publication time', () => {
+  const source = playlist().replace(/T00:00:0([0246])/g, 'T00:00:2$1');
+  assert.doesNotMatch(playoutPlaylist(source, start + 8000), /^seg_/m);
+  const corrected = playoutPlaylist(source, start + 8000, start + 8000);
+  assert.deepEqual(corrected.match(/^seg_.*$/gm), ['seg_00000050.ts', 'seg_00000051.ts']);
+});

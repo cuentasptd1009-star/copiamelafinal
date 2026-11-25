@@ -360,7 +360,13 @@ export function createLiveServer(options = {}) {
           const lists = await Promise.all(job.renditions.map(r => readFile(path.join(job.directory, r.name, 'index.m3u8'), 'utf8')));
           observePublishedMedia(job, lists[job.renditions.findIndex(r => r.name === 'original')]);
           // Use actual published media, not FFmpeg's timestamp-offset-dependent average speed.
-          if (job.recentSpeed >= 0.98 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2 && playlistDuration(playoutPlaylist(text)) >= CLIENT_RESERVE_SECONDS + 2)) {
+          if (job.recentSpeed >= 0.98 && lists.every(text => playlistDuration(text) >= DELAY_SECONDS + 2)) {
+            const playable = await Promise.all(lists.map((text, i) =>
+              playablePlaylist(text, path.join(job.directory, job.renditions[i].name))));
+            if (!playable.every(text => playlistDuration(text) >= CLIENT_RESERVE_SECONDS + 2)) {
+              await delay(250);
+              continue;
+            }
             await Promise.all(job.renditions.map(async (rendition, i) => {
               const durations = [...lists[i].matchAll(/^#EXTINF:([\d.]+)/gm)].map(m => Number(m[1]));
               const files = lists[i].split('\n').filter(line => /^seg_\d+\.ts$/.test(line.trim()));
@@ -462,6 +468,16 @@ export function createLiveServer(options = {}) {
     }
     void warmSelectedChannels();
   }, 2000); sweep.unref();
+
+  async function playablePlaylist(raw, directory, now = Date.now()) {
+    let text = playoutPlaylist(raw, now);
+    if (!text.includes('#EXTINF:')) {
+      const latest = [...raw.matchAll(/^seg_\d+\.ts$/gm)].at(-1)?.[0];
+      const published = latest && await stat(path.join(directory, latest)).catch(() => null);
+      if (published) text = playoutPlaylist(raw, now, published.mtimeMs);
+    }
+    return text;
+  }
 
   const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -587,12 +603,8 @@ export function createLiveServer(options = {}) {
         });
         if (!raw) { reconnecting(); return; }
         const now = Date.now();
-        let text = playoutPlaylist(raw, now);
-        if (!text.includes('#EXTINF:')) {
-          const latest = [...raw.matchAll(/^seg_\d+\.ts$/gm)].at(-1)?.[0];
-          const published = latest && await stat(path.join(path.dirname(file), latest)).catch(() => null);
-          if (published) text = playoutPlaylist(raw, now, published.mtimeMs);
-        }
+        let text = await playablePlaylist(raw, path.dirname(file), now);
+        if (!text.includes('#EXTINF:')) { reconnecting(); return; }
         const prefix = `/api/live/channels/${id}/${generation}/${rendition}/`;
         const discontinuity = Math.floor(parseInt(generation.split('-')[0], 36) / 1000);
         if (Number.isSafeInteger(discontinuity)) {
