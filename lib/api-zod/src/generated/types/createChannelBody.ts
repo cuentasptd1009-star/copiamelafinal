@@ -11,5 +11,6 @@ export interface CreateChannelBody {
   logo?: string | null;
   category?: string | null;
   streamUrl: string;
+  backupStreamUrl?: string | null;
   order?: number;
 }

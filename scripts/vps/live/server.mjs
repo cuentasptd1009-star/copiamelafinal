@@ -124,6 +124,7 @@ export function createLiveServer(options = {}) {
   const authorizationRequests = new Map();
   const authorizationTiming = { requests: 0, slow: 0, lastMs: 0, maxMs: 0 };
   const cooldown = new Map();
+  const sourcePreferences = new Map();
   let emissionKeys = {}; let relaySecret = randomBytes(32).toString('base64url');
   const database = createChannelLookup();
   const lookupChannel = config.lookupChannel || (id => database.get(id));
@@ -242,12 +243,35 @@ export function createLiveServer(options = {}) {
     if (job.stopping) return;
     job.stopping = true;
     jobs.delete(job.id);
-    if (reason !== 'idle' && reason !== 'shutdown' && reason !== 'disabled') cooldown.set(job.id, Date.now() + (config.keepWarm ? 5000 : 180000));
+    if (!['idle', 'shutdown', 'disabled', 'source-updated'].includes(reason)) {
+      if (job.sources?.backup && sourcePreferences.get(job.id) === job.sources) job.sources.useBackup = !job.sources.useBackup;
+      cooldown.set(job.id, Date.now() + (job.sources?.backup || config.keepWarm ? 5000 : 180000));
+    }
+    if (reason === 'disabled') sourcePreferences.delete(job.id);
     job.input?.close();
     job.child?.kill('SIGTERM');
     const force = setTimeout(() => job.child?.kill('SIGKILL'), 5000); force.unref();
     if (!job.child) rm(job.directory, { recursive: true, force: true }).catch(() => {});
     console.log(JSON.stringify({ event: 'live-stop', channel: job.id, reason, publishedRate: job.recentSpeed, detail: job.lastError || undefined }));
+  }
+
+  function applySources(job, channel) {
+    const primary = channel.streamUrl;
+    const backup = channel.backupStreamUrl;
+    if (!backup || backup === primary) {
+      sourcePreferences.delete(job.id);
+      job.sources = undefined;
+      job.source = primary;
+      return primary;
+    }
+    let preferred = sourcePreferences.get(job.id);
+    if (preferred?.primary !== primary || preferred?.backup !== backup) {
+      preferred = { primary, backup, useBackup: job.source === backup };
+      sourcePreferences.set(job.id, preferred);
+    }
+    job.sources = preferred;
+    job.source = preferred.useBackup ? backup : primary;
+    return job.source;
   }
 
   function start(channel) {
@@ -262,16 +286,19 @@ export function createLiveServer(options = {}) {
       lastSeen: Date.now(), started: Date.now(), lastProgress: Date.now(), slowSince: null, child: null, stopping: false, ready: false };
     jobs.set(channel.id, job);
     job.readiness = (async () => {
+      const configured = channel.backupStreamUrl !== undefined ? channel : (await lookupChannel(channel.id).catch(() => null) || channel);
+      const source = applySources(job, configured);
+      if (job.stopping) throw new Error('Stopped');
       let sample;
-      try { job.input = await createHlsInput(channel.streamUrl, { userAgent: ORIGIN_USER_AGENT }); sample = await job.input.peek(); }
+      try { job.input = await createHlsInput(source, { userAgent: ORIGIN_USER_AGENT }); sample = await job.input.peek(); }
       catch (error) { job.input?.close(); job.input = null; job.ingestFallback = cleanError(error.message); }
-      job.profile = await probeSource(sample || channel.streamUrl, { originalOnly: config.originalOnly }); sample = null;
+      job.profile = await probeSource(sample || source, { originalOnly: config.originalOnly }); sample = null;
       // WIN can retain its compatible AAC packets and bypass the failing audio decoder.
       job.profile.copyAudio = channel.id === 546 && job.profile.compatibleAac;
       job.renditions = renditionsFor(job.profile).filter(r => !config.originalOnly || r.name === 'original');
       await Promise.all(job.renditions.map(r => mkdir(path.join(job.directory, r.name), { recursive: true, mode: 0o700 })));
       if (job.stopping) throw new Error('Stopped');
-      const child = spawn('python3', [fileURLToPath(new URL('./ffmpeg-child.py', import.meta.url)), String(process.pid), process.env.FFMPEG_PATH || 'ffmpeg', ...ffmpegArguments(job.input ? 'pipe:0' : channel.streamUrl, job.directory, job.profile, job.renditions)],
+      const child = spawn('python3', [fileURLToPath(new URL('./ffmpeg-child.py', import.meta.url)), String(process.pid), process.env.FFMPEG_PATH || 'ffmpeg', ...ffmpegArguments(job.input ? 'pipe:0' : source, job.directory, job.profile, job.renditions)],
         { stdio: [job.input ? 'pipe' : 'ignore', 'ignore', 'pipe', 'pipe'] });
       job.child = child;
       job.input?.pipeTo(child.stdin).catch(error => { if (!job.stopping) { job.lastError = cleanError(error.message); stop(job, 'source-ingest-failed'); } });
@@ -366,10 +393,19 @@ export function createLiveServer(options = {}) {
     try {
       await ready;
       await Promise.all([...config.allowed].map(async id => {
-        if (jobs.has(id) || (cooldown.get(id) || 0) > Date.now()) return;
+        const job = jobs.get(id);
+        if (job && (!job.ready || Date.now() - (job.lastSourceCheck || job.started) < 10000)) return;
+        if ((cooldown.get(id) || 0) > Date.now()) return;
         try {
           const channel = await lookupChannel(id);
-          if (channel && !closing && config.allowed.has(id)) start(channel);
+          if (!channel || closing || !config.allowed.has(id)) return;
+          if (job && jobs.get(id) === job) {
+            job.lastSourceCheck = Date.now();
+            const previous = job.source;
+            if (applySources(job, channel) === previous) return;
+            stop(job, 'source-updated');
+          }
+          start(channel);
         } catch (error) {
           console.error(JSON.stringify({ event: 'live-channel-lookup-failed', channel: id, detail: cleanError(error.message) }));
         }
@@ -447,7 +483,13 @@ export function createLiveServer(options = {}) {
     const credentialQuery = externalKey ? `key=${encodeURIComponent(externalKey)}` : `token=${encodeURIComponent(token)}`;
     let channel;
     const fallback = async () => { if (!res.destroyed) {
-      if (externalKey) await relay.send(res, channel.streamUrl, id, externalKey, req.method === 'HEAD');
+      if (externalKey) {
+        try { await relay.send(res, channel.streamUrl, id, externalKey, req.method === 'HEAD', !!channel.backupStreamUrl); }
+        catch (error) {
+          if (!channel.backupStreamUrl || res.headersSent || res.destroyed) throw error;
+          await relay.send(res, channel.backupStreamUrl, id, externalKey, req.method === 'HEAD', true);
+        }
+      }
       else { res.writeHead(302, { Location: `/api/channels/${id}/hls-proxy?token=${encodeURIComponent(token)}` }); res.end(); }
     } };
     const reconnecting = () => {

@@ -34,7 +34,7 @@ export function createChannelLookup() {
       if (pending.has(id)) return pending.get(id);
       const request = (async () => {
       await openPool();
-      const result = await pool.query('SELECT id, stream_url AS "streamUrl" FROM channels WHERE id=$1', [id]);
+      const result = await pool.query('SELECT id, stream_url AS "streamUrl", backup_stream_url AS "backupStreamUrl" FROM channels WHERE id=$1', [id]);
       const channel = result.rows[0] || null;
       if (cache.size >= 100) cache.delete(cache.keys().next().value);
       cache.set(id, { channel, expires: Date.now() + 10000 });
@@ -67,7 +67,7 @@ export function createChannelLookup() {
                         WHERE d.value::bigint > EXTRACT(EPOCH FROM now())) < 5)
                 RETURNING u.channel_ids, u.expires_at
               )
-              SELECT c.id, c.stream_url AS "streamUrl", a.expires_at AS "expiresAt"
+              SELECT c.id, c.stream_url AS "streamUrl", c.backup_stream_url AS "backupStreamUrl", a.expires_at AS "expiresAt"
               FROM admitted a JOIN channels c ON c.id = ANY(a.channel_ids)`,
               [key, device, id],
             );
@@ -150,11 +150,24 @@ export function createOriginRelay({ getSecret, allowPrivate = false }) {
     return `/api/live/channels/${id}/relay?s=${opaque}&exp=${expiry}&sig=${signature(id, opaque, expiry)}&key=${encodeURIComponent(key)}`;
   }
   return {
-    async send(res, value, id, key, head = false) {
+    async send(res, value, id, key, head = false, requireManifest = false) {
       const entry = await fetchResource(value);
+      if (requireManifest && !entry.manifest) throw new Error("Source is not an HLS playlist");
       res.setHeader('Cache-Control', 'private, no-store');
       if (entry.manifest) {
-        const text = entry.data.toString().split('\n').map(line => {
+        const lines = entry.data.toString().split('\n');
+        if (id === 430) {
+          const segments = lines.map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+          for (const line of segments.slice(-3)) {
+            if (pending.size >= 3) break;
+            let url;
+            try { url = new URL(line, entry.base); } catch { continue; }
+            if (url.origin === new URL(entry.base).origin && /\.ts$/i.test(url.pathname)) {
+              void fetchResource(url.href).catch(() => {});
+            }
+          }
+        }
+        const text = lines.map(line => {
           if (!line.trim()) return line;
           if (!line.trim().startsWith('#')) return relayUrl(line.trim(), entry.base, id, key);
           return line.replace(/URI="([^"]+)"/g, (_, uri) => `URI="${relayUrl(uri, entry.base, id, key)}"`);

@@ -938,6 +938,9 @@ components:
           nullable: true
         streamUrl:
           type: string
+        backupStreamUrl:
+          type: string
+          nullable: true
         order:
           type: integer
         createdAt:
@@ -957,6 +960,9 @@ components:
           nullable: true
         streamUrl:
           type: string
+        backupStreamUrl:
+          type: string
+          nullable: true
         order:
           type: integer
       required: [name, streamUrl]

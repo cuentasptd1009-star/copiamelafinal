@@ -67,7 +67,7 @@ const SEG_CACHE_TTL_MS = 30_000; // 30 seconds — HLS segments are immutable
 // Deleted channel grace period: keep serving deleted channels for 10 minutes
 // so viewers already watching aren't immediately cut off.
 // ---------------------------------------------------------------------------
-interface GraceEntry { channel: { id: number; name: string; logo: string | null; category: string | null; streamUrl: string; order: number; createdAt: Date }; deletedAt: number; }
+interface GraceEntry { channel: { id: number; name: string; logo: string | null; category: string | null; streamUrl: string; backupStreamUrl: string | null; order: number; createdAt: Date }; deletedAt: number; }
 const deletedGrace = new Map<number, GraceEntry>();
 const GRACE_MS = 10 * 60_000;
 setInterval(() => {
@@ -293,6 +293,7 @@ router.get("/channels", async (req: Request, res: Response) => {
       ...c,
       createdAt: c.createdAt.toISOString(),
       streamUrl: c.streamUrl,
+      backupStreamUrl: isAdmin ? c.backupStreamUrl : undefined,
       streamFormat,
     };
   });
@@ -490,26 +491,31 @@ router.get("/channels/:id/hls-proxy", async (req: Request, res: Response) => {
       return;
     }
 
-    try {
-      const streamUpstream = await fetch(channel.streamUrl, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
-        signal: AbortSignal.timeout(15000),
-        redirect: "follow",
-      });
-      if (!streamUpstream.ok) { res.status(502).send("Upstream error"); return; }
-      const manifestText = await streamUpstream.text();
-      const manifestBaseUrl = new URL(streamUpstream.url || channel.streamUrl);
-      if (channel.id === 430) prefetchEspnSegments(manifestText, manifestBaseUrl);
-      const rewritten = rewriteM3u8(manifestText, manifestBaseUrl, String(channel.id), auth.token!);
-      // Store for 3 s — short enough to pick up playlist updates, long enough to deduplicate bursts
-      cache.set(manifestCacheKey, { text: manifestText, base: manifestBaseUrl.href }, 3_000);
-      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.send(rewritten);
-    } catch {
-      res.status(502).send("Failed to fetch stream");
+    for (const source of [channel.streamUrl, channel.backupStreamUrl].filter((url): url is string => !!url)) {
+      try {
+        const streamUpstream = await fetch(source, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperTV/1.0)", Accept: "*/*" },
+          signal: AbortSignal.timeout(channel.backupStreamUrl ? 8000 : 15000),
+          redirect: "follow",
+        });
+        if (!streamUpstream.ok) {
+          await streamUpstream.body?.cancel();
+          continue;
+        }
+        const manifestText = await streamUpstream.text();
+        if (channel.backupStreamUrl && !manifestText.trimStart().startsWith("#EXTM3U")) continue;
+        const manifestBaseUrl = new URL(streamUpstream.url || source);
+        if (channel.id === 430) prefetchEspnSegments(manifestText, manifestBaseUrl);
+        const rewritten = rewriteM3u8(manifestText, manifestBaseUrl, String(channel.id), auth.token!);
+        cache.set(manifestCacheKey, { text: manifestText, base: manifestBaseUrl.href }, 3_000);
+        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.send(rewritten);
+        return;
+      } catch {}
     }
+    res.status(502).send("Upstream error");
   } else {
     res.redirect(302, channel.streamUrl);
   }
@@ -694,8 +700,18 @@ router.get("/channels/:id", async (req: Request, res: Response) => {
     if (adminSession) isAdmin = true;
   }
 
-  res.json({ ...channel, createdAt: channel.createdAt.toISOString(), streamUrl: isAdmin ? channel.streamUrl : null });
+  res.json({ ...channel, createdAt: channel.createdAt.toISOString(), streamUrl: isAdmin ? channel.streamUrl : null, backupStreamUrl: isAdmin ? channel.backupStreamUrl : undefined });
 });
+
+function validBackupUrl(value: string | null | undefined, primary: string) {
+  if (value == null) return true;
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && url.href !== new URL(primary).href;
+  } catch {
+    return false;
+  }
+}
 
 router.post("/channels", requireAdminAuth, async (req: Request, res: Response) => {
   const parsed = CreateChannelBody.safeParse(req.body);
@@ -704,6 +720,10 @@ router.post("/channels", requireAdminAuth, async (req: Request, res: Response) =
     return;
   }
 
+  if (!validBackupUrl(parsed.data.backupStreamUrl, parsed.data.streamUrl)) {
+    res.status(400).json({ error: "El enlace de respaldo debe ser HTTP o HTTPS y distinto del principal." });
+    return;
+  }
   const maxOrder = await db
     .select({ max: sql<number>`coalesce(max(${channelsTable.order}), 0)` })
     .from(channelsTable);
@@ -724,6 +744,10 @@ router.put("/channels/:id", requireAdminAuth, async (req: Request, res: Response
     res.status(400).json({ error: "Invalid request" });
     return;
   }
+  if (!validBackupUrl(body.data.backupStreamUrl, body.data.streamUrl)) {
+    res.status(400).json({ error: "El enlace de respaldo debe ser HTTP o HTTPS y distinto del principal." });
+    return;
+  }
   const [updated] = await db
     .update(channelsTable)
     .set(body.data)
@@ -734,6 +758,7 @@ router.put("/channels/:id", requireAdminAuth, async (req: Request, res: Response
     return;
   }
   cache.invalidatePrefix("channels:");
+  cache.invalidatePrefix(`hls:source:${updated.id}:`);
   res.json({ ...updated, createdAt: updated.createdAt.toISOString() });
 });
 

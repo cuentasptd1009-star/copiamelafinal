@@ -101,6 +101,7 @@ export const ListChannelsResponseItem = zod.object({
   "logo": zod.string().nullish(),
   "category": zod.string().nullish(),
   "streamUrl": zod.string(),
+  "backupStreamUrl": zod.string().nullish(),
   "order": zod.number(),
   "createdAt": zod.string()
 })
@@ -115,6 +116,7 @@ export const CreateChannelBody = zod.object({
   "logo": zod.string().nullish(),
   "category": zod.string().nullish(),
   "streamUrl": zod.string(),
+  "backupStreamUrl": zod.string().nullish(),
   "order": zod.number().optional()
 })
 
@@ -143,6 +145,7 @@ export const ImportChannelsResponse = zod.object({
   "logo": zod.string().nullish(),
   "category": zod.string().nullish(),
   "streamUrl": zod.string(),
+  "backupStreamUrl": zod.string().nullish(),
   "order": zod.number(),
   "createdAt": zod.string()
 }))
@@ -162,6 +165,7 @@ export const GetChannelResponse = zod.object({
   "logo": zod.string().nullish(),
   "category": zod.string().nullish(),
   "streamUrl": zod.string(),
+  "backupStreamUrl": zod.string().nullish(),
   "order": zod.number(),
   "createdAt": zod.string()
 })
@@ -179,6 +183,7 @@ export const UpdateChannelBody = zod.object({
   "logo": zod.string().nullish(),
   "category": zod.string().nullish(),
   "streamUrl": zod.string(),
+  "backupStreamUrl": zod.string().nullish(),
   "order": zod.number().optional()
 })
 
@@ -188,6 +193,7 @@ export const UpdateChannelResponse = zod.object({
   "logo": zod.string().nullish(),
   "category": zod.string().nullish(),
   "streamUrl": zod.string(),
+  "backupStreamUrl": zod.string().nullish(),
   "order": zod.number(),
   "createdAt": zod.string()
 })

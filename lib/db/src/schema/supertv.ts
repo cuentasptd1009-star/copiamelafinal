@@ -120,6 +120,7 @@ export const channelsTable = pgTable("channels", {
   logo: text("logo"),
   category: text("category"),
   streamUrl: text("stream_url").notNull(),
+  backupStreamUrl: text("backup_stream_url"),
   order: integer("order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [

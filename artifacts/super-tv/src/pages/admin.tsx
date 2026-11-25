@@ -1490,10 +1490,10 @@ function ChannelsManager() {
   const [urlsPrefix, setUrlsPrefix] = useState('Canal');
   const [csvRows, setCsvRows] = useState<CsvChannel[]>([]);
   const [csvFileName, setCsvFileName] = useState('');
-  const [newCh, setNewCh] = useState({ name: '', streamUrl: '', category: '', logo: '' });
+  const [newCh, setNewCh] = useState({ name: '', streamUrl: '', backupStreamUrl: '', category: '', logo: '' });
   const [testResults, setTestResults] = useState<Record<number, StreamTestResult>>({});
   const [testing, setTesting] = useState<Record<number, boolean>>({});
-  const [editCh, setEditCh] = useState<{ id: number; name: string; streamUrl: string; category: string; logo: string } | null>(null);
+  const [editCh, setEditCh] = useState<{ id: number; name: string; streamUrl: string; backupStreamUrl: string; category: string; logo: string } | null>(null);
   const [sortMode, setSortMode] = useState(false);
   const [sortedIds, setSortedIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1601,11 +1601,11 @@ function ChannelsManager() {
 
   const handleCreate = () => {
     if (!newCh.name || !newCh.streamUrl) { toast({ variant: 'destructive', title: 'Nombre y URL son requeridos' }); return; }
-    createMutation.mutate({ data: { name: newCh.name, streamUrl: newCh.streamUrl, category: newCh.category || undefined, logo: newCh.logo || undefined } }, {
+    createMutation.mutate({ data: { name: newCh.name, streamUrl: newCh.streamUrl, backupStreamUrl: newCh.backupStreamUrl.trim() || null, category: newCh.category || undefined, logo: newCh.logo || undefined } }, {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ADMIN_CHANNELS_KEY });
         toast({ title: 'Canal creado' });
-        setNewCh({ name: '', streamUrl: '', category: '', logo: '' }); setShowForm(false);
+        setNewCh({ name: '', streamUrl: '', backupStreamUrl: '', category: '', logo: '' }); setShowForm(false);
       },
       onError: () => toast({ variant: 'destructive', title: 'Error al crear canal' })
     });
@@ -1613,7 +1613,7 @@ function ChannelsManager() {
 
   const handleUpdate = () => {
     if (!editCh || !editCh.name || !editCh.streamUrl) { toast({ variant: 'destructive', title: 'Nombre y URL son requeridos' }); return; }
-    updateMutation.mutate({ id: editCh.id, data: { name: editCh.name, streamUrl: editCh.streamUrl, category: editCh.category || undefined, logo: editCh.logo || undefined } }, {
+    updateMutation.mutate({ id: editCh.id, data: { name: editCh.name, streamUrl: editCh.streamUrl, backupStreamUrl: editCh.backupStreamUrl.trim() || null, category: editCh.category || undefined, logo: editCh.logo || undefined } }, {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ADMIN_CHANNELS_KEY });
         toast({ title: 'Canal actualizado' });
@@ -2166,7 +2166,8 @@ function ChannelsManager() {
         <Card className="bg-background border-border p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input placeholder="Nombre del canal *" value={newCh.name} onChange={e => setNewCh(p => ({ ...p, name: e.target.value }))} />
-            <Input placeholder="URL del stream *" value={newCh.streamUrl} onChange={e => setNewCh(p => ({ ...p, streamUrl: e.target.value }))} />
+            <Input placeholder="URL principal *" value={newCh.streamUrl} onChange={e => setNewCh(p => ({ ...p, streamUrl: e.target.value }))} />
+            <Input placeholder="URL de respaldo (opcional)" value={newCh.backupStreamUrl} onChange={e => setNewCh(p => ({ ...p, backupStreamUrl: e.target.value }))} />
             <Input placeholder="Categoría" value={newCh.category} onChange={e => setNewCh(p => ({ ...p, category: e.target.value }))} />
             <Input placeholder="URL del logo" value={newCh.logo} onChange={e => setNewCh(p => ({ ...p, logo: e.target.value }))} />
           </div>
@@ -2209,7 +2210,7 @@ function ChannelsManager() {
                     testing={!!testing[ch.id]}
                     testResult={testResults[ch.id]}
                     onTest={() => handleTest(ch.id)}
-                    onEdit={() => setEditCh({ id: ch.id, name: ch.name, streamUrl: ch.streamUrl, category: ch.category || '', logo: ch.logo || '' })}
+                    onEdit={() => setEditCh({ id: ch.id, name: ch.name, streamUrl: ch.streamUrl, backupStreamUrl: ch.backupStreamUrl || '', category: ch.category || '', logo: ch.logo || '' })}
                     onDelete={() => handleDelete(ch.id)}
                     selected={selectedIds.has(ch.id)}
                     onSelect={toggleSelect}
@@ -2244,7 +2245,8 @@ function ChannelsManager() {
           {editCh && (
             <div className="space-y-3">
               <Input placeholder="Nombre *" value={editCh.name} onChange={e => setEditCh(p => p ? { ...p, name: e.target.value } : p)} />
-              <Input placeholder="URL del stream *" value={editCh.streamUrl} onChange={e => setEditCh(p => p ? { ...p, streamUrl: e.target.value } : p)} />
+              <Input placeholder="URL principal *" value={editCh.streamUrl} onChange={e => setEditCh(p => p ? { ...p, streamUrl: e.target.value } : p)} />
+              <Input placeholder="URL de respaldo (opcional)" value={editCh.backupStreamUrl} onChange={e => setEditCh(p => p ? { ...p, backupStreamUrl: e.target.value } : p)} />
               <Input placeholder="Categoría" value={editCh.category} onChange={e => setEditCh(p => p ? { ...p, category: e.target.value } : p)} />
               <Input placeholder="URL del logo" value={editCh.logo} onChange={e => setEditCh(p => p ? { ...p, logo: e.target.value } : p)} />
             </div>

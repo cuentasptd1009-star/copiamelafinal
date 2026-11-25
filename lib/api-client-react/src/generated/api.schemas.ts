@@ -112,6 +112,7 @@ export interface Channel {
   logo?: string | null;
   category?: string | null;
   streamUrl: string;
+  backupStreamUrl?: string | null;
   order: number;
   createdAt: string;
 }
@@ -121,6 +122,7 @@ export interface CreateChannelBody {
   logo?: string | null;
   category?: string | null;
   streamUrl: string;
+  backupStreamUrl?: string | null;
   order?: number;
 }
 
