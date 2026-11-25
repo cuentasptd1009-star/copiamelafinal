@@ -120,6 +120,7 @@ export function createLiveServer(options = {}) {
   const maxSelectedChannels = config.keepWarm ? Math.min(5, config.maxChannels) : storedSelectionLimit;
   config.maxChannels = Math.min(maxSelectedChannels, config.maxChannels);
   const jobs = new Map();
+  const lastReady = new Map();
   const authorizations = new Map();
   const authorizationRequests = new Map();
   const authorizationTiming = { requests: 0, slow: 0, lastMs: 0, maxMs: 0 };
@@ -179,6 +180,7 @@ export function createLiveServer(options = {}) {
       if (enabled && next.size > maxSelectedChannels) throw Object.assign(new Error(`Puedes activar hasta ${maxSelectedChannels} canales. Desactiva uno antes de añadir otro.`), { status: 409 });
       await persist(next, emissionKeys);
       config.allowed = next;
+      for (const retainedId of lastReady.keys()) if (!next.has(retainedId)) lastReady.delete(retainedId);
       for (const job of [...jobs.values()]) if (!next.has(job.id)) stop(job, 'disabled');
       if (enabled) {
         cooldown.delete(id);
@@ -328,7 +330,12 @@ export function createLiveServer(options = {}) {
           console.error(JSON.stringify({ event: 'live-exit', channel: job.id, code, detail: job.lastError || '' }));
           stop(job, 'ffmpeg-exit');
         }
-        const cleanup = setTimeout(() => rm(job.directory, { recursive: true, force: true }).catch(() => {}), 60000); cleanup.unref();
+        const cleanup = setTimeout(() => {
+          if (lastReady.get(job.id)?.generation !== job.generation) {
+            rm(job.directory, { recursive: true, force: true }).catch(() => {});
+          }
+        }, 60000);
+        cleanup.unref();
       });
       console.log(JSON.stringify({ event: 'live-start', channel: job.id, pid: child.pid }));
       while (!job.stopping && Date.now() - job.started < config.warmupMs) {
@@ -353,6 +360,8 @@ export function createLiveServer(options = {}) {
                   : measured.averageBandwidth;
               } catch { /* A rolling segment may expire while measuring; retain the conservative estimate. */ }
             }));
+            if (job.stopping) throw new Error('Stopped');
+            lastReady.set(job.id, { generation: job.generation, directory: job.directory, renditions: job.renditions });
             job.ready = true; job.lastSeen = Date.now(); return;
           }
         } catch { /* The encoder has not published its first playlist yet. */ }
@@ -375,7 +384,8 @@ export function createLiveServer(options = {}) {
         const channelPath = path.join(config.directory, channel.name);
         for (const generation of await readdir(channelPath, { withFileTypes: true })) {
           if (!generation.isDirectory() || !/^[a-z0-9]+-[a-f0-9]+$/.test(generation.name)) continue;
-          if (jobs.get(Number(channel.name))?.generation === generation.name) continue;
+          const id = Number(channel.name);
+          if (jobs.get(id)?.generation === generation.name || lastReady.get(id)?.generation === generation.name) continue;
           const directory = path.join(channelPath, generation.name);
           const info = await stat(path.join(directory, 'original', 'index.m3u8')).catch(() => stat(directory));
           if (Date.now() - info.mtimeMs > 60000) await rm(directory, { recursive: true, force: true });
@@ -544,12 +554,13 @@ export function createLiveServer(options = {}) {
       if (isPlaylist && !config.allowed.has(id)) { await fallback(); return; }
       const job = isPlaylist ? start(channel) : jobs.get(id);
       const active = job && job.generation === match[3] && job.ready;
-      const current = isPlaylist && job?.ready && job.renditions.some(r => r.name === match[4]) ? job : null;
+      const latest = isPlaylist ? lastReady.get(id) : null;
+      const rendition = latest?.renditions.some(r => r.name === match[4]) ? match[4] : (latest ? 'original' : match[4]);
       if (job && (active || isPlaylist)) job.lastSeen = Date.now();
-      // Keep previously issued variant URLs usable across encoder restarts.
-      const generation = current?.generation ?? match[3];
-      const directory = current?.directory ?? path.join(config.directory, String(id), generation);
-      const file = path.join(directory, match[4], match[5]);
+      // Keep polling the most recently playable generation while its replacement warms up.
+      const generation = latest?.generation ?? match[3];
+      const directory = latest?.directory ?? path.join(config.directory, String(id), generation);
+      const file = path.join(directory, rendition, match[5]);
       if (isPlaylist) {
         const raw = await readFile(file, 'utf8').catch(error => {
           if (error.code !== 'ENOENT') throw error;
@@ -563,7 +574,7 @@ export function createLiveServer(options = {}) {
           const published = latest && await stat(path.join(path.dirname(file), latest)).catch(() => null);
           if (published) text = playoutPlaylist(raw, now, published.mtimeMs);
         }
-        const prefix = `/api/live/channels/${id}/${generation}/${match[4]}/`;
+        const prefix = `/api/live/channels/${id}/${generation}/${rendition}/`;
         const discontinuity = Math.floor(parseInt(generation.split('-')[0], 36) / 1000);
         if (Number.isSafeInteger(discontinuity)) {
           text = text.replace('#EXTM3U', `#EXTM3U\n#EXT-X-DISCONTINUITY-SEQUENCE:${discontinuity}`);
