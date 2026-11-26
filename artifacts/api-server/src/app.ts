@@ -23,7 +23,7 @@ app.use(
         return {
           id: req.id,
           method: req.method,
-          url: /\/live\/[^/]+\/[^/]+\//.test(req.url ?? "") ? "/live/[credentials]/[stream]" : req.url?.split("?")[0],
+          url: /\/(?:live|movie|series)\/[^/]+\/[^/]+\//.test(req.url ?? "") ? "/iptv/[credentials]/[stream]" : req.url?.split("?")[0],
         };
       },
       res(res) {
@@ -40,7 +40,7 @@ app.use(express.urlencoded({ extended: false, limit: "2mb" }));
 
 app.use("/api", router);
 app.use((req, res, next) => {
-  if (!/^\/(?:player_api\.php|get\.php|live\/[^/]+\/[^/]+\/[^/]+)$/.test(req.path)) { next(); return; }
+  if (!/^\/(?:player_api\.php|get\.php|(?:live|movie|series)\/[^/]+\/[^/]+\/[^/]+)$/.test(req.path)) { next(); return; }
   req.url = "/iptv" + req.url;
   router(req, res, next);
 });

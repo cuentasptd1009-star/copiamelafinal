@@ -2,10 +2,10 @@ import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { Router, type Request, type Response } from "express";
 import { asc, eq, inArray, sql } from "drizzle-orm";
-import { channelsTable, db, iptvUsersTable, type IptvImportedChannel } from "@workspace/db";
+import { channelsTable, db, iptvUsersTable, type IptvImportedChannel, type IptvProvider } from "@workspace/db";
 import { requireAdminAuth } from "../lib/auth.js";
 
-import { decryptResource, encryptResource, importChannels, relayImported } from "../lib/iptv-import.js";
+import { decryptResource, encryptResource, importChannels, providerCatalog, providerFromChannel, providerMedia, relayImported } from "../lib/iptv-import.js";
 
 const router = Router();
 const importedId = 1_000_000_000;
@@ -136,8 +136,9 @@ async function createUser(req: Request, res: Response, merged: boolean) {
     return;
   }
   let importedChannels: IptvImportedChannel[] = [];
+  let provider: IptvProvider | null = null;
   try {
-    if (merged) importedChannels = await importChannels(req.body);
+    if (merged) ({ channels: importedChannels, provider } = await importChannels(req.body));
   } catch {
     res.status(422).json({ error: "No se pudieron unir las listas. Comprueba los datos del proveedor y que tu M3U contenga canales válidos." });
     return;
@@ -145,7 +146,7 @@ async function createUser(req: Request, res: Response, merged: boolean) {
   const passwordHash = await passwordHashFor(password);
   const expiresAt = new Date(Date.now() + days * 86400000);
   const playlistKey = "iptv_" + randomBytes(32).toString("base64url");
-  const [created] = await db.insert(iptvUsersTable).values({ username, passwordHash, playlistKey, channelIds: ids, expiresAt, importedChannels })
+  const [created] = await db.insert(iptvUsersTable).values({ username, passwordHash, playlistKey, channelIds: ids, expiresAt, importedChannels, provider })
     .onConflictDoNothing({ target: iptvUsersTable.username }).returning(userFields);
   if (!created) { res.status(409).json({ error: "Ese usuario IPTV ya existe." }); return; }
   protectResponse(res);
@@ -226,6 +227,15 @@ router.get("/iptv/get.php", async (req, res) => {
   await sendPlaylist(res, user);
 });
 
+const catalogActions = new Map([
+  ["get_vod_categories", ""], ["get_vod_streams", "category_id"], ["get_vod_info", "vod_id"],
+  ["get_series_categories", ""], ["get_series", "category_id"], ["get_series_info", "series_id"],
+]);
+
+function accountProvider(user: Pick<Account, "provider" | "importedChannels">) {
+  return user.provider ?? providerFromChannel(user.importedChannels.at(-1));
+}
+
 router.get("/iptv/player_api.php", async (req, res) => {
   protectResponse(res);
   const user = await authenticate(req.query.username, req.query.password);
@@ -241,6 +251,19 @@ router.get("/iptv/player_api.php", async (req, res) => {
         port: url.port || (url.protocol === "https:" ? "443" : "80"),
         https_port: url.port || "443", timezone: "UTC", timestamp_now: Math.floor(Date.now() / 1000) },
     });
+    return;
+  }
+  if (typeof action === "string" && catalogActions.has(action)) {
+    const provider = accountProvider(user);
+    if (!provider) { res.json([]); return; }
+    const param = catalogActions.get(action);
+    const value = param && req.query[param];
+    if ((value !== undefined && value !== "" && (typeof value !== "string" || !/^\d{1,15}$/.test(value))) ||
+      (action.endsWith("_info") && !value)) { res.sendStatus(400); return; }
+    const params = new URLSearchParams();
+    if (param && typeof value === "string" && value !== "0") params.set(param, value);
+    try { res.type("application/json").send(await providerCatalog(provider, action, params)); }
+    catch { res.status(502).json({ error: "El catálogo del proveedor no está disponible." }); }
     return;
   }
   if (action !== "get_live_categories" && action !== "get_live_streams") { res.json([]); return; }
@@ -293,6 +316,51 @@ router.get("/iptv/imported/:id", async (req, res) => {
   }).from(iptvUsersTable).where(eq(iptvUsersTable.playlistKey, key));
   const channel = user?.channel;
   if (!active(user) || !channel) { res.sendStatus(404); return; }
+  const logo = req.query.logo === "1";
+  if (logo && !/^https?:\/\//i.test(channel.logo)) { res.sendStatus(404); return; }
+  try {
+    const resource = req.query.resource;
+    const origin = logo ? channel.logo : typeof resource === "string" ? decryptResource(resource, user.passwordHash) : channel.url;
+    await deliverMedia(req, res, user, origin, url => importedUrl(user, index, url), logo);
+  } catch { if (!res.headersSent && !res.destroyed) res.sendStatus(502); }
+});
+
+function vodResourceUrl(user: Pick<Account, "playlistKey" | "passwordHash">, resource: string) {
+  const url = new URL("/api/iptv/vod-resource", publicBase);
+  url.searchParams.set("key", user.playlistKey);
+  url.searchParams.set("resource", encryptResource(resource, user.passwordHash));
+  return url.href;
+}
+
+router.get(["/iptv/movie/:username/:password/:stream", "/iptv/series/:username/:password/:stream"], async (req, res) => {
+  protectResponse(res);
+  const user = await authenticate(req.params.username, req.params.password);
+  if (!user) { res.sendStatus(401); return; }
+  const provider = accountProvider(user);
+  const kind = req.path.startsWith("/iptv/movie/") ? "movie" : "series";
+  const { stream } = req.params;
+  if (!provider || typeof kind !== "string" || typeof stream !== "string" ||
+      !/^\d{1,15}(?:\.[a-z0-9]{1,8})?$/i.test(stream)) { res.sendStatus(404); return; }
+  await deliverMedia(req, res, user, providerMedia(provider, kind, stream), url => vodResourceUrl(user, url));
+});
+
+router.get("/iptv/vod-resource", async (req, res) => {
+  protectResponse(res);
+  const { key, resource } = req.query;
+  if (typeof key !== "string" || !keyPattern.test(key) || typeof resource !== "string") { res.sendStatus(401); return; }
+  const [user] = await db.select({
+    id: iptvUsersTable.id, enabled: iptvUsersTable.enabled, expiresAt: iptvUsersTable.expiresAt,
+    playlistKey: iptvUsersTable.playlistKey, passwordHash: iptvUsersTable.passwordHash,
+  }).from(iptvUsersTable).where(eq(iptvUsersTable.playlistKey, key));
+  if (!active(user)) { res.sendStatus(401); return; }
+  try {
+    await deliverMedia(req, res, user, decryptResource(resource, user.passwordHash), url => vodResourceUrl(user, url));
+  } catch { if (!res.headersSent && !res.destroyed) res.sendStatus(502); }
+});
+
+async function deliverMedia(req: Request, res: Response, user: Pick<Account, "id" | "playlistKey">, origin: string,
+  childUrl: (url: string) => string, logo = false) {
+  const key = user.playlistKey;
   const socketAddress = req.socket.remoteAddress || "";
   const proxyAddress = req.get("x-real-ip");
   const address = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(socketAddress) && proxyAddress && isIP(proxyAddress)
@@ -309,22 +377,18 @@ router.get("/iptv/imported/:id", async (req, res) => {
       AND (coalesce((${iptvUsersTable.deviceLeases} ->> ${device}::text)::bigint, 0) > extract(epoch FROM now())
         OR (SELECT count(*) FROM jsonb_each_text(${iptvUsersTable.deviceLeases}) d
             WHERE d.value::bigint > extract(epoch FROM now())) < 5)`).returning({ id: iptvUsersTable.id })).length > 0;
-  const logo = req.query.logo === "1";
-  if (logo && !/^https?:\/\//i.test(channel.logo)) { res.sendStatus(404); return; }
   if (!logo && !(await renewLease())) { res.sendStatus(403); return; }
   const renewal = logo ? undefined : setInterval(() => {
     void renewLease().then(ok => { if (!ok) res.destroy(); }).catch(() => res.destroy());
   }, 25000);
   try {
-    const resource = req.query.resource;
-    const origin = logo ? channel.logo : typeof resource === "string" ? decryptResource(resource, user.passwordHash) : channel.url;
-    await relayImported(res, origin, url => importedUrl(user, index, url), req.get("range"), logo);
+    await relayImported(res, origin, childUrl, req.get("range"), logo);
   } catch {
     if (!res.headersSent && !res.destroyed) res.sendStatus(502);
     else if (!res.writableEnded) res.destroy();
   } finally {
     clearInterval(renewal);
   }
-});
+}
 
 export default router;

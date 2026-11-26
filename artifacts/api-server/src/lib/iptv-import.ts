@@ -4,7 +4,7 @@ import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { pipeline } from "node:stream/promises";
 import type { Response } from "express";
-import type { IptvImportedChannel } from "@workspace/db";
+import type { IptvImportedChannel, IptvProvider } from "@workspace/db";
 
 const maxPlaylistBytes = 4 * 1024 * 1024;
 const maxChannels = 10000;
@@ -53,12 +53,12 @@ async function open(url: URL, signal: AbortSignal, range?: string, redirects = 0
   return { response, url };
 }
 
-async function playlistText(response: IncomingMessage, prefix = Buffer.alloc(0), reader = response.iterator()) {
+async function playlistText(response: IncomingMessage, prefix = Buffer.alloc(0), reader = response.iterator(), limit = maxPlaylistBytes) {
   const blocks = [prefix];
   let size = prefix.length;
   for await (const chunk of reader) {
     size += chunk.length;
-    if (size > maxPlaylistBytes) { response.destroy(); throw new Error("La lista IPTV supera 4 MB."); }
+    if (size > limit) { response.destroy(); throw new Error("La respuesta supera el tamaño permitido."); }
     blocks.push(chunk);
   }
   return Buffer.concat(blocks).toString("utf8");
@@ -153,7 +153,88 @@ export async function importChannels(body: Record<string, unknown>) {
     }).toString();
     supplied = await downloadPlaylist(download);
   }
-  return [...own, ...supplied];
+  return { channels: [...own, ...supplied], provider: { server: provider.href, username: providerUsername, password: providerPassword } };
+}
+
+export function providerFromChannel(channel?: IptvImportedChannel): IptvProvider | null {
+  if (!channel) return null;
+  try {
+    const url = webUrl(channel.url);
+    const match = /^(.*)\/live\/([^/]+)\/([^/]+)\/\d+\.m3u8$/.exec(url.pathname);
+    if (!match) return null;
+    url.pathname = match[1] || "/";
+    url.search = "";
+    url.hash = "";
+    return { server: url.href, username: decodeURIComponent(match[2]), password: decodeURIComponent(match[3]) };
+  } catch { return null; }
+}
+
+export function providerMedia(provider: IptvProvider, kind: string, stream: string) {
+  const url = webUrl(provider.server);
+  url.pathname = url.pathname.replace(/\/+$/, "") +
+    `/${kind}/${encodeURIComponent(provider.username)}/${encodeURIComponent(provider.password)}/${stream}`;
+  return url.href;
+}
+
+const catalogCache = new Map<string, { data: string; expires: number }>();
+let catalogBytes = 0;
+const pendingCatalogs = new Map<string, Promise<string>>();
+const metadataKeys = new Set([
+  "num", "name", "stream_type", "stream_id", "stream_icon", "cover", "cover_big", "plot", "cast",
+  "director", "genre", "releaseDate", "release_date", "releasedate", "last_modified", "rating",
+  "rating_5based", "backdrop_path", "youtube_trailer", "episode_run_time", "category_id", "category_ids",
+  "category_name", "parent_id", "series_id", "added", "container_extension", "title", "id", "episode_num",
+  "season", "season_number", "air_date", "episode_count", "overview", "duration", "duration_secs",
+  "movie_image", "tmdb_id", "year", "info", "movie_data", "seasons", "episodes",
+]);
+
+function publicMetadata(value: unknown, provider: IptvProvider, episodeMap = false): unknown {
+  if (Array.isArray(value)) return value.map(entry => publicMetadata(entry, provider));
+  if (typeof value === "string") {
+    const user = encodeURIComponent(provider.username);
+    const password = encodeURIComponent(provider.password);
+    return value.includes(`/${user}/${password}/`) || /(?:[?&](?:username|password)=|^data:)/i.test(value) ? "" : value;
+  }
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).filter(([key]) =>
+    metadataKeys.has(key) || (episodeMap && /^\d+$/.test(key)))
+    .map(([key, item]) => [key, publicMetadata(item, provider, key === "episodes")]));
+}
+
+export function providerCatalog(provider: IptvProvider, action: string, params: URLSearchParams) {
+  const target = webUrl(provider.server);
+  target.pathname = target.pathname.replace(/\/+$/, "") + "/player_api.php";
+  target.search = new URLSearchParams({ username: provider.username, password: provider.password, action,
+    ...Object.fromEntries(params) }).toString();
+  const key = createHash("sha256").update(target.href).digest("hex");
+  const cached = catalogCache.get(key);
+  if (cached && cached.expires > Date.now()) return Promise.resolve(cached.data);
+  const pending = pendingCatalogs.get(key);
+  if (pending) return pending;
+  if (pendingCatalogs.size >= 1) return Promise.reject(new Error("Catálogo ocupado."));
+  const request = (async () => {
+    const { response } = await open(target, AbortSignal.timeout(28000));
+    const limit = action === "get_vod_streams" ? 32 * 1024 * 1024 : 8 * 1024 * 1024;
+    const payload: unknown = JSON.parse(await playlistText(response, Buffer.alloc(0), response.iterator(), limit));
+    if (!payload || typeof payload !== "object") throw new Error("Catálogo inválido.");
+    const data = JSON.stringify(publicMetadata(payload, provider));
+    const size = Buffer.byteLength(data);
+    const prior = catalogCache.get(key);
+    if (prior) { catalogBytes -= Buffer.byteLength(prior.data); catalogCache.delete(key); }
+    const budget = 16 * 1024 * 1024;
+    while ((catalogBytes + size > budget || catalogCache.size >= 100) && catalogCache.size) {
+      const first = catalogCache.keys().next().value!;
+      catalogBytes -= Buffer.byteLength(catalogCache.get(first)!.data);
+      catalogCache.delete(first);
+    }
+    if (size <= budget) {
+      catalogCache.set(key, { data, expires: Date.now() + 180000 });
+      catalogBytes += size;
+    }
+    return data;
+  })().finally(() => pendingCatalogs.delete(key));
+  pendingCatalogs.set(key, request);
+  return request;
 }
 
 function encryptionKey(secret: string) {
