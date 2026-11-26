@@ -94,6 +94,42 @@ async function downloadPlaylist(url: URL) {
   return parsePlaylist(await playlistText(result.response), result.url.href);
 }
 
+async function downloadLiveJson(base: URL, credentials: URLSearchParams, action: string) {
+  const url = new URL(base);
+  url.pathname = url.pathname.replace(/\/+$/, "") + "/player_api.php";
+  url.search = new URLSearchParams({ ...Object.fromEntries(credentials), action }).toString();
+  const { response } = await open(url, AbortSignal.timeout(20000));
+  const data: unknown = JSON.parse(await playlistText(response));
+  if (!Array.isArray(data)) throw new Error("El proveedor no devolvió un catálogo en vivo.");
+  return data;
+}
+
+async function providerChannels(base: URL, username: string, password: string): Promise<IptvImportedChannel[]> {
+  const credentials = new URLSearchParams({ username, password });
+  const [streams, categories] = await Promise.all([
+    downloadLiveJson(base, credentials, "get_live_streams"),
+    downloadLiveJson(base, credentials, "get_live_categories").catch(() => []),
+  ]);
+  const names = new Map(categories.flatMap(entry =>
+    entry && typeof entry.category_name === "string" ? [[String(entry.category_id), entry.category_name.slice(0, 150)]] : []));
+  const channels: IptvImportedChannel[] = [];
+  for (const entry of streams) {
+    if (!entry || !/^\d{1,15}$/.test(String(entry.stream_id)) || typeof entry.name !== "string") continue;
+    const stream = new URL(base);
+    stream.pathname = stream.pathname.replace(/\/+$/, "") +
+      `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${entry.stream_id}.m3u8`;
+    channels.push({
+      name: entry.name.slice(0, 200), category: names.get(String(entry.category_id)) || "En vivo",
+      logo: typeof entry.stream_icon === "string" ? entry.stream_icon.slice(0, 1000) : "",
+      epg: typeof entry.epg_channel_id === "string" ? entry.epg_channel_id.slice(0, 150) : "",
+      url: stream.href,
+    });
+    if (channels.length > maxChannels) throw new Error("La lista supera 10.000 canales.");
+  }
+  if (!channels.length) throw new Error("El proveedor no devolvió canales en vivo.");
+  return channels;
+}
+
 export async function importChannels(body: Record<string, unknown>) {
   const { providerServer, providerUsername, providerPassword, m3uText, m3uUrl } = body;
   if (typeof providerServer !== "string" || typeof providerUsername !== "string" || typeof providerPassword !== "string" ||
@@ -101,13 +137,22 @@ export async function importChannels(body: Record<string, unknown>) {
     throw new Error("Completa los datos del proveedor y elige un archivo M3U o un enlace.");
   }
   const provider = webUrl(providerServer);
-  provider.pathname = provider.pathname.replace(/\/+$/, "") + "/get.php";
   provider.hash = "";
-  provider.search = new URLSearchParams({ username: providerUsername, password: providerPassword, type: "m3u_plus", output: "m3u8" }).toString();
+  provider.search = "";
   const own = typeof m3uText === "string" && m3uText ? parsePlaylist(m3uText) :
     typeof m3uUrl === "string" && m3uUrl ? await downloadPlaylist(webUrl(m3uUrl)) : [];
   if (!own.length) throw new Error("Añade tu lista M3U.");
-  const supplied = await downloadPlaylist(provider);
+  let supplied;
+  try {
+    supplied = await providerChannels(provider, providerUsername, providerPassword);
+  } catch {
+    const download = new URL(provider);
+    download.pathname = download.pathname.replace(/\/+$/, "") + "/get.php";
+    download.search = new URLSearchParams({
+      username: providerUsername, password: providerPassword, type: "m3u_plus", output: "m3u8",
+    }).toString();
+    supplied = await downloadPlaylist(download);
+  }
   return [...own, ...supplied];
 }
 
