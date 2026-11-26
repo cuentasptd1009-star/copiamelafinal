@@ -179,6 +179,7 @@ export function providerMedia(provider: IptvProvider, kind: string, stream: stri
 const catalogCache = new Map<string, { data: string; expires: number }>();
 let catalogBytes = 0;
 const pendingCatalogs = new Map<string, Promise<string>>();
+let movieCatalogQueue = Promise.resolve();
 const metadataKeys = new Set([
   "num", "name", "stream_type", "stream_id", "stream_icon", "cover", "cover_big", "plot", "cast",
   "director", "genre", "releaseDate", "release_date", "releasedate", "last_modified", "rating",
@@ -211,8 +212,8 @@ export function providerCatalog(provider: IptvProvider, action: string, params: 
   if (cached && cached.expires > Date.now()) return Promise.resolve(cached.data);
   const pending = pendingCatalogs.get(key);
   if (pending) return pending;
-  if (pendingCatalogs.size >= 1) return Promise.reject(new Error("Catálogo ocupado."));
-  const request = (async () => {
+  if (pendingCatalogs.size >= 8) return Promise.reject(new Error("Catálogo ocupado."));
+  const download = async () => {
     const { response } = await open(target, AbortSignal.timeout(28000));
     const limit = action === "get_vod_streams" ? 32 * 1024 * 1024 : 8 * 1024 * 1024;
     const payload: unknown = JSON.parse(await playlistText(response, Buffer.alloc(0), response.iterator(), limit));
@@ -232,7 +233,10 @@ export function providerCatalog(provider: IptvProvider, action: string, params: 
       catalogBytes += size;
     }
     return data;
-  })().finally(() => pendingCatalogs.delete(key));
+  };
+  const response = action === "get_vod_streams" ? movieCatalogQueue.then(download) : download();
+  if (action === "get_vod_streams") movieCatalogQueue = response.then(() => {}, () => {});
+  const request = response.finally(() => pendingCatalogs.delete(key));
   pendingCatalogs.set(key, request);
   return request;
 }
