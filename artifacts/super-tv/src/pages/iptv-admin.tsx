@@ -42,12 +42,6 @@ async function request(path: string, options: RequestInit = {}) {
 export function IptvAdmin() {
   const { toast } = useToast();
   const client = useQueryClient();
-  const [merge, setMerge] = useState(false);
-  const [providerServer, setProviderServer] = useState('');
-  const [providerUsername, setProviderUsername] = useState('');
-  const [providerPassword, setProviderPassword] = useState('');
-  const [m3uUrl, setM3uUrl] = useState('');
-  const [m3uFile, setM3uFile] = useState<File | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [search, setSearch] = useState('');
@@ -70,19 +64,10 @@ export function IptvAdmin() {
 
   const create = useMutation({
     mutationFn: async () => {
-      const duration = { amount: Number(amount), unit };
-      if (merge && m3uFile && m3uFile.size > 1536 * 1024) {
-        throw new Error('El archivo supera 1,5 MB. Usa un enlace M3U.');
-      }
-      const source = merge ? {
-        providerServer, providerUsername, providerPassword,
-        ...(m3uFile ? { m3uText: await m3uFile.text() } : { m3uUrl }),
-      } : { channelIds: assigned.map(channel => channel.id) };
-      const body = JSON.stringify({ username, password, duration, ...source });
-      if (merge && new Blob([body]).size >= 2 * 1024 * 1024) {
-        throw new Error('El archivo es demasiado grande. Usa un enlace M3U.');
-      }
-      const response = await request(merge ? '/merge' : '/users', { method: 'POST', body });
+      const response = await request('/users', {
+        method: 'POST',
+        body: JSON.stringify({ username, password, channelIds: assigned.map(channel => channel.id), duration: { amount: Number(amount), unit } }),
+      });
       const account: Account & { accessUrl: string } = await response.json();
       return { url: account.accessUrl, username: account.username, password };
     },
@@ -91,7 +76,6 @@ export function IptvAdmin() {
       setXtream({ username: account.username, password: account.password });
       setAmount('30');
       setUnit('days');
-      setProviderPassword('');
       setUsername('');
       setPassword('');
       setSelected(null);
@@ -159,47 +143,12 @@ export function IptvAdmin() {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <form onSubmit={submit} className="space-y-3 rounded-lg border border-border p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold">{merge ? 'Unir IPTV' : 'Crear usuario IPTV'}</h3>
-          <Button type="button" variant="outline" size="sm" disabled={create.isPending} onClick={() => {
-            setMerge(!merge); setAccessUrl(''); setXtream(null); setCopyValue('');
-            setUsername(''); setPassword(''); setProviderPassword(''); setM3uFile(null);
-          }}>{merge ? 'Volver a usuarios IPTV' : 'Unir IPTV'}</Button>
-        </div>
-        {merge && <fieldset disabled={create.isPending} className="grid gap-3 xl:grid-cols-2">
-          <div className="space-y-2 rounded-md border border-border p-3">
-            <h4 className="text-sm font-medium">Cuenta del proveedor</h4>
-            <label className="block text-sm">URL del servidor
-              <Input type="url" value={providerServer} onChange={event => setProviderServer(event.target.value)} required />
-            </label>
-            <label className="block text-sm">Usuario del proveedor
-              <Input value={providerUsername} onChange={event => setProviderUsername(event.target.value)} autoComplete="off" required />
-            </label>
-            <label className="block text-sm">Contraseña del proveedor
-              <Input type="password" value={providerPassword} onChange={event => setProviderPassword(event.target.value)} autoComplete="off" required />
-            </label>
-          </div>
-          <div className="space-y-2 rounded-md border border-border p-3">
-            <h4 className="text-sm font-medium">Mi lista de canales</h4>
-            <label className="block text-sm">Enlace M3U
-              <Input type="url" value={m3uUrl} disabled={!!m3uFile} onChange={event => setM3uUrl(event.target.value)} required={!m3uFile} />
-            </label>
-            <label className="block text-sm">O sube un archivo M3U
-              <Input type="file" accept=".m3u,.m3u8" onChange={event => setM3uFile(event.target.files?.[0] ?? null)} />
-            </label>
-            {m3uFile && <Button type="button" variant="ghost" size="sm" onClick={event => {
-              const field = event.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type=file]');
-              if (field) field.value = '';
-              setM3uFile(null);
-            }}>Quitar archivo</Button>}
-            <p className="text-xs text-muted-foreground">Los canales de esta lista irán primero.</p>
-          </div>
-        </fieldset>}
-        <label className="block text-sm">{merge ? 'Usuario del acceso único' : 'Usuario'}
+        <h3 className="font-semibold">Crear usuario IPTV</h3>
+        <label className="block text-sm">Usuario
           <Input value={username} onChange={event => setUsername(event.target.value)} autoComplete="off"
             required minLength={3} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._\x2D]{2,31}" disabled={create.isPending} />
         </label>
-        <label className="block text-sm">{merge ? 'Contraseña del acceso único' : 'Contraseña'}
+        <label className="block text-sm">Contraseña
           <Input type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)}
             required minLength={8} maxLength={128} disabled={create.isPending} />
         </label>
@@ -207,7 +156,7 @@ export function IptvAdmin() {
           <p className="text-sm">Duración del servicio</p>
           <DurationFields amount={amount} unit={unit} setAmount={setAmount} setUnit={setUnit} />
         </div>
-        {!merge && <fieldset disabled={create.isPending} className="space-y-2">
+        <fieldset disabled={create.isPending} className="space-y-2">
           <legend className="text-sm">Canales asignados ({assigned.length})</legend>
           <Button type="button" size="sm" variant={allAssigned ? 'default' : 'outline'} aria-pressed={allAssigned}
             disabled={!available.length} onClick={() => setSelected(allAssigned ? new Set() : null)}>
@@ -234,9 +183,9 @@ export function IptvAdmin() {
               </label>
             ))}
           </div>
-        </fieldset>}
-        <Button type="submit" disabled={create.isPending || (!merge && !assigned.length)}>
-          {create.isPending ? 'Creando…' : merge ? 'Crear acceso único' : 'Crear usuario IPTV'}
+        </fieldset>
+        <Button type="submit" disabled={create.isPending || !assigned.length}>
+          {create.isPending ? 'Creando…' : 'Crear usuario IPTV'}
         </Button>
         {accessUrl && (
           <div className="flex flex-wrap items-center gap-2 rounded border border-border p-2">
